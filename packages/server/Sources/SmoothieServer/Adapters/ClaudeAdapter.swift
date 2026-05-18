@@ -1,24 +1,26 @@
 import Foundation
 
-/// Adapter for Anthropic's `claude` CLI. Drives Claude in programmatic stream-json
-/// mode through a PTY so it always sees a TTY. Input is JSONL on stdin; output is
-/// JSONL on stdout (possibly interleaved with ANSI from the terminal layer, which
-/// we strip before parsing).
+/// Adapter for Anthropic's `claude` CLI. Drives Claude in `-p --output-format
+/// stream-json --input-format stream-json` mode, which is designed for
+/// non-interactive use — we drive it via plain pipes (stdin/stdout/stderr)
+/// rather than a PTY. PTY would enable echo/canonical mode by default and
+/// reflect our JSONL stdin writes back as stdout, breaking the parser.
 final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
     let cli: CLIType = .claude
     let events: AsyncStream<SmoothieEvent>
 
-    private let pty: PTYProcess
+    private let process: PipedProcess
     private let eventContinuation: AsyncStream<SmoothieEvent>.Continuation
 
     private let stateLock = NSLock()
     private var _state: SessionState = .starting
     private var _terminated = false
     private var recentNonJSONLines: [String] = []
-    private let recentNonJSONCap = 20
+    private var recentStderr: [String] = []
+    private let recentLineCap = 30
 
-    private init(pty: PTYProcess) {
-        self.pty = pty
+    private init(process: PipedProcess) {
+        self.process = process
         let (s, c) = AsyncStream<SmoothieEvent>.makeStream(bufferingPolicy: .unbounded)
         self.events = s
         self.eventContinuation = c
@@ -40,17 +42,16 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
 
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
-        env["COLUMNS"] = "200"
-        env["LINES"] = "40"
+        env["NO_COLOR"] = "1"
 
-        let pty = try PTYProcess(
+        let process = try PipedProcess(
             executable: executable,
             args: args,
             cwd: config.projectPath,
             env: env
         )
-        let adapter = ClaudeAdapter(pty: pty)
-        adapter.startReader()
+        let adapter = ClaudeAdapter(process: process)
+        adapter.startReaders()
         return adapter
     }
 
@@ -72,14 +73,14 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
         ]
         var data = try JSONSerialization.data(withJSONObject: payload, options: [.withoutEscapingSlashes])
         data.append(0x0A) // \n
-        try pty.write(data)
+        try process.write(data)
         setState(.thinking)
     }
 
     func terminate() async {
         let already = beginTerminate()
         guard !already else { return }
-        pty.terminate()
+        process.terminate()
         setState(.done)
         eventContinuation.finish()
     }
@@ -92,17 +93,16 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
         return false
     }
 
-    // MARK: - Reader
+    // MARK: - Readers
 
-    private func startReader() {
-        let stream = pty.read()
-        let cont = self.eventContinuation
+    private func startReaders() {
+        // stdout: structured JSONL frames
+        let stdoutStream = process.read()
         Task.detached { [weak self] in
             var buffer = ""
-            for await chunk in stream {
+            for await chunk in stdoutStream {
                 guard let self else { break }
-                let text = AdapterUtils.stripANSI(String(decoding: chunk, as: UTF8.self))
-                buffer.append(text)
+                buffer.append(String(decoding: chunk, as: UTF8.self))
                 while let nl = buffer.firstIndex(of: "\n") {
                     let line = String(buffer[buffer.startIndex..<nl])
                     buffer.removeSubrange(buffer.startIndex...nl)
@@ -111,55 +111,58 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
                     self.handleLine(trimmed)
                 }
             }
-            // PTY closed
+            // stdout closed
             if let self, !self.isTerminated() {
                 self.setState(.done)
-                cont.yield(SmoothieEvent(type: .done, content: "session ended"))
-                cont.finish()
+                self.eventContinuation.yield(SmoothieEvent(type: .done, content: "session ended"))
+                self.eventContinuation.finish()
             }
         }
 
-        // Also monitor exit code
-        let exitStream = pty.exitStream
+        // stderr: ambient diagnostics (auth errors, panics)
+        let stderrStream = process.readStderr()
+        Task.detached { [weak self] in
+            var buffer = ""
+            for await chunk in stderrStream {
+                guard let self else { break }
+                buffer.append(String(decoding: chunk, as: UTF8.self))
+                while let nl = buffer.firstIndex(of: "\n") {
+                    let line = String(buffer[buffer.startIndex..<nl])
+                    buffer.removeSubrange(buffer.startIndex...nl)
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty { continue }
+                    self.recordStderrLine(trimmed)
+                }
+            }
+        }
+
+        // exit code monitor
+        let exitStream = process.exitStream
         Task.detached { [weak self] in
             for await code in exitStream {
-                if code != 0, let self, !self.isTerminated() {
-                    let exitCode = Self.decodeWaitStatus(code)
+                guard let self else { break }
+                if code != 0, !self.isTerminated() {
                     self.setState(.error)
-                    let tail = self.takeRecentNonJSONLines()
-                    let detail = tail.isEmpty ? "" : "\nLast output:\n\(tail.joined(separator: "\n"))"
+                    let tail = self.takeRecentDiagnostics()
+                    let detail = tail.isEmpty ? "" : "\n\(tail)"
                     self.eventContinuation.yield(SmoothieEvent(
                         type: .error,
-                        content: "claude exited with code \(exitCode)\(detail)"
+                        content: "claude exited with code \(code)\(detail)"
                     ))
                 }
             }
         }
     }
 
-    /// `waitpid` returns status with the exit code in the high byte. Decode it.
-    private static func decodeWaitStatus(_ status: Int32) -> Int32 {
-        if status & 0x7F == 0 { return (status >> 8) & 0xFF }   // normal exit
-        if status & 0x7F != 0 && (status & 0x80) == 0 { return -((status & 0x7F)) } // signal
-        return status
-    }
-
-    private func takeRecentNonJSONLines() -> [String] {
-        stateLock.lock(); defer { stateLock.unlock() }
-        let lines = recentNonJSONLines
-        recentNonJSONLines.removeAll()
-        return lines
-    }
-
     private func handleLine(_ line: String) {
         guard let data = line.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = obj["type"] as? String else {
-            // Not JSON — remember for surfacing if process crashes early.
+            // Not JSON — remember for surfacing if claude crashes early.
             stateLock.lock()
             recentNonJSONLines.append(line)
-            if recentNonJSONLines.count > recentNonJSONCap {
-                recentNonJSONLines.removeFirst(recentNonJSONLines.count - recentNonJSONCap)
+            if recentNonJSONLines.count > recentLineCap {
+                recentNonJSONLines.removeFirst(recentNonJSONLines.count - recentLineCap)
             }
             stateLock.unlock()
             return
@@ -202,7 +205,6 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
                 }
             }
         case "user":
-            // echo of the user message — ignore
             break
         case "result":
             let subtype = (obj["subtype"] as? String) ?? "unknown"
@@ -215,11 +217,32 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
                 yield(.error, content: err)
             }
         case "stream_event":
-            // partial message chunks — skip for MVP (we already get whole messages)
             break
         default:
             break
         }
+    }
+
+    private func recordStderrLine(_ line: String) {
+        stateLock.lock(); defer { stateLock.unlock() }
+        recentStderr.append(line)
+        if recentStderr.count > recentLineCap {
+            recentStderr.removeFirst(recentStderr.count - recentLineCap)
+        }
+    }
+
+    private func takeRecentDiagnostics() -> String {
+        stateLock.lock(); defer { stateLock.unlock() }
+        var parts: [String] = []
+        if !recentStderr.isEmpty {
+            parts.append("stderr:\n" + recentStderr.joined(separator: "\n"))
+        }
+        if !recentNonJSONLines.isEmpty {
+            parts.append("stdout:\n" + recentNonJSONLines.joined(separator: "\n"))
+        }
+        recentStderr.removeAll()
+        recentNonJSONLines.removeAll()
+        return parts.joined(separator: "\n\n")
     }
 
     private func yield(_ type: EventType, content: String, metadata: [String: AnyCodable]? = nil) {
