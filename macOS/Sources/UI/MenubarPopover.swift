@@ -4,6 +4,11 @@ struct MenubarPopover: View {
     @Environment(SmoothieHTTPServer.self) private var server
     @Environment(PairingService.self) private var pairing
     @State private var showingFullQR = false
+    @State private var copiedField: CopiedField?
+
+    private enum CopiedField: String {
+        case host, token, url
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -90,27 +95,28 @@ struct MenubarPopover: View {
                         .background(Color.white)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Scan from iPhone")
                         .font(.system(size: 12, weight: .medium))
                     Text("or enter manually:")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    HStack(spacing: 4) {
-                        Text("\(pairing.host):\(pairing.port)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.primary)
-                            .textSelection(.enabled)
-                    }
-                    HStack(spacing: 4) {
-                        Text("token:")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                        Text(maskedToken)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
+                    copyableRow(
+                        label: "host",
+                        value: "\(pairing.host):\(pairing.port)",
+                        field: .host,
+                        action: {
+                            copy("\(pairing.host):\(pairing.port)", as: .host)
+                        }
+                    )
+                    copyableRow(
+                        label: "token",
+                        value: maskedToken,
+                        field: .token,
+                        action: {
+                            copy(pairing.token, as: .token)
+                        }
+                    )
                     Button("Show full QR") { showingFullQR = true }
                         .buttonStyle(.link)
                         .font(.system(size: 11))
@@ -131,32 +137,102 @@ struct MenubarPopover: View {
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button("Copy pairing URL") {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(pairing.qrPayloadURL, forType: .string)
+        VStack(alignment: .leading, spacing: 6) {
+            actionButton(
+                label: copiedField == .token ? "✓ Token copied" : "Copy token",
+                systemImage: "key.fill",
+                tint: copiedField == .token ? .green : .primary
+            ) {
+                copy(pairing.token, as: .token)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
 
-            Button("Re-pair (rotate token)") {
+            actionButton(
+                label: copiedField == .url ? "✓ Pairing URL copied" : "Copy pairing URL",
+                systemImage: "link",
+                tint: copiedField == .url ? .green : .primary
+            ) {
+                copy(pairing.qrPayloadURL, as: .url)
+            }
+
+            actionButton(
+                label: "Re-pair (rotate token)",
+                systemImage: "arrow.triangle.2.circlepath",
+                tint: .orange
+            ) {
                 pairing.rotate()
                 server.restart()
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundStyle(.orange)
 
             Divider().padding(.vertical, 2)
 
-            Button("Quit Smoothie") {
+            actionButton(
+                label: "Quit Smoothie",
+                systemImage: "power",
+                tint: .red
+            ) {
                 NSApplication.shared.terminate(nil)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundStyle(.red)
             .keyboardShortcut("q")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func copyableRow(
+        label: String,
+        value: String,
+        field: CopiedField,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 4) {
+            Text("\(label):")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .textSelection(.enabled)
+            Spacer(minLength: 4)
+            Button(action: action) {
+                Image(systemName: copiedField == field ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(copiedField == field ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Copy \(label)")
+        }
+    }
+
+    private func actionButton(
+        label: String,
+        systemImage: String,
+        tint: Color = .primary,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11))
+                    .frame(width: 14)
+                Text(label)
+                    .font(.system(size: 12))
+                Spacer()
+            }
+            .foregroundStyle(tint)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func copy(_ value: String, as field: CopiedField) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(value, forType: .string)
+        copiedField = field
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if copiedField == field { copiedField = nil }
         }
     }
 }
@@ -164,6 +240,7 @@ struct MenubarPopover: View {
 struct PairingFullView: View {
     @Environment(PairingService.self) private var pairing
     @Binding var showing: Bool
+    @State private var copied: String?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -177,7 +254,7 @@ struct PairingFullView: View {
                     .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text("Scan with the iPhone Smoothie app")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -196,10 +273,17 @@ struct PairingFullView: View {
                     .padding(.horizontal, 12)
             }
             HStack(spacing: 8) {
-                Button("Copy URL") {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(pairing.qrPayloadURL, forType: .string)
+                Button {
+                    copyToPasteboard(pairing.token, label: "token")
+                } label: {
+                    Label(copied == "token" ? "✓ Copied" : "Copy token",
+                          systemImage: "key.fill")
+                }
+                Button {
+                    copyToPasteboard(pairing.qrPayloadURL, label: "url")
+                } label: {
+                    Label(copied == "url" ? "✓ Copied" : "Copy URL",
+                          systemImage: "link")
                 }
                 Button("Done") { showing = false }
                     .keyboardShortcut(.defaultAction)
@@ -207,5 +291,16 @@ struct PairingFullView: View {
         }
         .padding(20)
         .frame(width: 380)
+    }
+
+    private func copyToPasteboard(_ value: String, label: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(value, forType: .string)
+        copied = label
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if copied == label { copied = nil }
+        }
     }
 }
