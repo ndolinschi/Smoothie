@@ -53,13 +53,13 @@ struct SettingsView: View {
                             .foregroundStyle(Theme.error)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .glassSurface(cornerRadius: Theme.Radius.card, tint: Theme.error)
+                            .glassSurface(cornerRadius: Theme.Radius.card, emphasis: .error)
                         }
                         .buttonStyle(.plain)
 
                         Text("Smoothie v0.1.0")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(.white.opacity(0.25))
                             .frame(maxWidth: .infinity)
                             .padding(.top, 8)
                     }
@@ -75,7 +75,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(.white)
                         .fontWeight(.semibold)
                 }
             }
@@ -93,7 +93,7 @@ struct SettingsView: View {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.white.opacity(0.35))
                 .padding(.leading, 6)
             content()
         }
@@ -101,7 +101,7 @@ struct SettingsView: View {
 
     private func row(label: String, value: String) -> some View {
         HStack {
-            Text(label).foregroundStyle(.white.opacity(0.6))
+            Text(label).foregroundStyle(.white.opacity(0.55))
             Spacer()
             Text(value)
                 .font(.system(size: 13, design: .monospaced))
@@ -117,13 +117,13 @@ struct SettingsView: View {
             Circle()
                 .fill(adapterStatusColor(a))
                 .frame(width: 6, height: 6)
-                .shadow(color: adapterStatusColor(a).opacity(0.6), radius: 4)
+                .shadow(color: adapterStatusColor(a).opacity(0.4), radius: 3)
             Text(a.cli.label)
                 .foregroundStyle(.white)
             Spacer()
             Text(adapterStatusText(a))
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.white.opacity(0.45))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -131,8 +131,8 @@ struct SettingsView: View {
 
     private func adapterStatusColor(_ a: AdapterInfo) -> Color {
         if !a.installed { return Theme.error }
-        if !a.supported { return Theme.waiting }
-        return Theme.accent
+        if !a.supported { return .white.opacity(0.4) }
+        return .white
     }
 
     private func adapterStatusText(_ a: AdapterInfo) -> String {

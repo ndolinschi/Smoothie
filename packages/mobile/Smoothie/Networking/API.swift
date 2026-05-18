@@ -85,6 +85,25 @@ struct API: Sendable {
         try await get("/projects")
     }
 
+    func projectFiles(path: String, query: String = "") async throws -> [FileEntry] {
+        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return try await get("/projects/files?path=\(p)&q=\(q)")
+    }
+
+    func fileContent(path: String) async throws -> FileContent {
+        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        return try await get("/projects/file?path=\(p)")
+    }
+
+    func browse(path: String? = nil) async throws -> BrowseResponse {
+        if let path {
+            let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+            return try await get("/browse?path=\(p)")
+        }
+        return try await get("/browse")
+    }
+
     func adapters() async throws -> [AdapterInfo] {
         try await get("/adapters")
     }

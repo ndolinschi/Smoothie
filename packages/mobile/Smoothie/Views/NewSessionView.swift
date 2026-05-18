@@ -23,7 +23,10 @@ struct NewSessionView: View {
                     VStack(alignment: .leading, spacing: 22) {
                         section("Project") {
                             if loading && projects.isEmpty {
-                                ProgressView().controlSize(.small).padding(8)
+                                ProgressView()
+                                    .tint(.white.opacity(0.5))
+                                    .controlSize(.small)
+                                    .padding(8)
                             } else {
                                 VStack(spacing: 8) {
                                     ForEach(projects) { p in projectRow(p) }
@@ -39,14 +42,14 @@ struct NewSessionView: View {
 
                         if let errorText {
                             HStack(spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle.fill")
+                                Image(systemName: "exclamationmark.circle")
                                 Text(errorText)
                                     .font(.system(size: 13))
                             }
                             .foregroundStyle(Theme.error)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassSurface(cornerRadius: Theme.Radius.row, tint: Theme.error)
+                            .glassSurface(cornerRadius: Theme.Radius.row, emphasis: .error)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -61,13 +64,13 @@ struct NewSessionView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.75))
+                        .foregroundStyle(.white.opacity(0.65))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: start) {
                         Text(creating ? "Starting…" : "Start")
                             .fontWeight(.semibold)
-                            .foregroundStyle(canStart ? Theme.accent : .white.opacity(0.3))
+                            .foregroundStyle(canStart ? .white : .white.opacity(0.3))
                     }
                     .disabled(!canStart || creating)
                 }
@@ -86,7 +89,7 @@ struct NewSessionView: View {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.white.opacity(0.35))
                 .padding(.leading, 6)
             content()
         }
@@ -98,9 +101,9 @@ struct NewSessionView: View {
             selectedProject = p
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: p.isGit ? "point.3.connected.trianglepath.dotted" : "folder.fill")
+                Image(systemName: p.isGit ? "circlebadge.2" : "folder")
                     .font(.system(size: 15))
-                    .foregroundStyle(p.isGit ? Theme.accent : .white.opacity(0.5))
+                    .foregroundStyle(.white.opacity(p.isGit ? 0.75 : 0.45))
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(p.name)
@@ -108,18 +111,18 @@ struct NewSessionView: View {
                         .font(.system(size: 15, weight: .medium))
                     Text(p.path)
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(.white.opacity(0.3))
                         .lineLimit(1)
                 }
                 Spacer()
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Theme.accent)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
             }
             .padding(14)
-            .glassSurface(cornerRadius: Theme.Radius.row, tint: isSelected ? Theme.accent : nil)
+            .glassSurface(cornerRadius: Theme.Radius.row, emphasis: isSelected ? .subtle : .none)
         }
         .buttonStyle(.plain)
     }
@@ -133,7 +136,7 @@ struct NewSessionView: View {
             HStack(spacing: 12) {
                 Image(systemName: cliIcon(adapter.cli))
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(available ? Theme.accent : .white.opacity(0.3))
+                    .foregroundStyle(.white.opacity(available ? 0.75 : 0.25))
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(adapter.cli.label)
@@ -141,18 +144,18 @@ struct NewSessionView: View {
                         .font(.system(size: 15, weight: .medium))
                     Text(statusText(for: adapter))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(.white.opacity(0.3))
                 }
                 Spacer()
                 if isSelected, available {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Theme.accent)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
             }
             .padding(14)
-            .glassSurface(cornerRadius: Theme.Radius.row, tint: isSelected && available ? Theme.accent : nil)
-            .opacity(available ? 1 : 0.55)
+            .glassSurface(cornerRadius: Theme.Radius.row, emphasis: isSelected && available ? .subtle : .none)
+            .opacity(available ? 1 : 0.5)
         }
         .buttonStyle(.plain)
         .disabled(!available)
@@ -160,9 +163,9 @@ struct NewSessionView: View {
 
     private func cliIcon(_ cli: CLIType) -> String {
         switch cli {
-        case .opencode: return "terminal.fill"
-        case .claude:   return "sparkles"
-        case .gemini:   return "diamond.fill"
+        case .opencode: return "terminal"
+        case .claude:   return "sparkle"
+        case .gemini:   return "diamond"
         case .codex:    return "chevron.left.forwardslash.chevron.right"
         }
     }

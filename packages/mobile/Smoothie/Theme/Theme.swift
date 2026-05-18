@@ -1,33 +1,35 @@
 import SwiftUI
 
-/// Visual tokens for Smoothie. Dark, near-black palette with green accent. Surfaces
-/// use native materials (`.regularMaterial`, `.ultraThinMaterial`) for the iOS 18+
-/// glassmorphism look, with `.glassEffect()` Liquid Glass on iOS 26+ where available.
+/// Visual tokens for Smoothie. Monochrome palette inspired by Cursor — pure black
+/// backdrop, white at varying opacities for chrome and text, glassmorphism via
+/// native materials. Semantic state still uses minimal chromatic hints (mostly
+/// for the error state) but is otherwise driven by opacity and stroke weight.
 enum Theme {
-    // Backdrop colors — these sit under the materials and give the glass something to refract.
-    static let bg          = Color(red: 0.04, green: 0.04, blue: 0.05)
-    static let bgDeep      = Color(red: 0.015, green: 0.015, blue: 0.02)
+    // Backdrop — near-black with a hint of warmth so glass has something to refract.
+    static let bg          = Color(red: 0.030, green: 0.030, blue: 0.034)
+    static let bgDeep      = Color(red: 0.008, green: 0.008, blue: 0.010)
 
-    // Accent + signal colors
-    static let accent      = Color(red: 0.30, green: 1.00, blue: 0.66)   // mint-green
-    static let accentSoft  = Color(red: 0.30, green: 1.00, blue: 0.66).opacity(0.18)
-    static let waiting     = Color(red: 1.00, green: 0.78, blue: 0.20)   // amber
-    static let waitingSoft = Color(red: 1.00, green: 0.78, blue: 0.20).opacity(0.18)
-    static let error       = Color(red: 1.00, green: 0.38, blue: 0.35)
-    static let errorSoft   = Color(red: 1.00, green: 0.38, blue: 0.35).opacity(0.18)
-    static let thinking    = Color(red: 0.45, green: 0.74, blue: 1.00)
-    static let thinkingSoft = Color(red: 0.45, green: 0.74, blue: 1.00).opacity(0.18)
+    // Primary accent is pure white — used for CTAs (white-on-black).
+    static let accent      = Color.white
+    static let accentSoft  = Color.white.opacity(0.12)
 
-    // Text. Use SwiftUI's `.primary`/`.secondary` for vibrancy over materials when possible —
-    // these explicit colors are for places where vibrancy would lose too much contrast.
+    // Semantic state — desaturated almost-white. Only `error` keeps a faint hue.
+    static let waiting     = Color.white                                  // attention = brightest white
+    static let waitingSoft = Color.white.opacity(0.14)
+    static let thinking    = Color.white.opacity(0.78)
+    static let thinkingSoft = Color.white.opacity(0.10)
+    static let error       = Color(red: 1.00, green: 0.55, blue: 0.55)    // faint warm hint, no full red
+    static let errorSoft   = Color(red: 1.00, green: 0.55, blue: 0.55).opacity(0.14)
+
+    // Text — vibrant primary, then descending opacities for hierarchy
     static let text        = Color.white
     static let textMuted   = Color.white.opacity(0.62)
     static let textDim     = Color.white.opacity(0.36)
     static let textFaint   = Color.white.opacity(0.18)
 
-    // Strokes that catch light along glass edges
-    static let glassStroke      = Color.white.opacity(0.12)
-    static let glassStrokeSoft  = Color.white.opacity(0.06)
+    // Strokes — catch light along glass edges
+    static let glassStroke      = Color.white.opacity(0.10)
+    static let glassStrokeSoft  = Color.white.opacity(0.05)
 
     enum Radius {
         static let pill: CGFloat = 999
@@ -40,29 +42,38 @@ enum Theme {
 
 // MARK: - Backdrop
 
-/// Animated subtle mesh gradient that sits under all glass surfaces. iOS 18+ uses
-/// the new `MeshGradient` for a soft, organic gradient; iOS earlier ones fall back
-/// to a radial gradient (we ship iOS 18 as minimum, but the fallback is safe).
+/// Quiet near-black backdrop with a very subtle vignette. No color tints — pure
+/// monochrome so the glass surfaces above stay neutral.
 struct BackdropView: View {
     var body: some View {
         ZStack {
             Theme.bgDeep.ignoresSafeArea()
+            RadialGradient(
+                colors: [Color.white.opacity(0.04), .clear],
+                center: .center,
+                startRadius: 0,
+                endRadius: 600
+            )
+            .ignoresSafeArea()
+            .blendMode(.plusLighter)
+            // Sublime mesh: pure greys at very low opacities so reflections feel real
+            // without introducing color cast.
             MeshGradient(
                 width: 3,
                 height: 3,
                 points: [
                     .init(0.0, 0.0), .init(0.5, 0.0), .init(1.0, 0.0),
-                    .init(0.0, 0.5), .init(0.55, 0.45), .init(1.0, 0.5),
+                    .init(0.0, 0.5), .init(0.55, 0.5), .init(1.0, 0.5),
                     .init(0.0, 1.0), .init(0.5, 1.0), .init(1.0, 1.0),
                 ],
                 colors: [
-                    Theme.bgDeep,                              Theme.bgDeep,                 Theme.bgDeep,
-                    Theme.accent.opacity(0.10),                Theme.bg,                     Theme.thinking.opacity(0.08),
-                    Theme.bgDeep,                              Theme.bgDeep,                 Theme.bgDeep,
+                    Theme.bgDeep,                       Theme.bgDeep,                  Theme.bgDeep,
+                    Color.white.opacity(0.045),         Theme.bg,                      Color.white.opacity(0.025),
+                    Theme.bgDeep,                       Theme.bgDeep,                  Theme.bgDeep,
                 ]
             )
             .ignoresSafeArea()
-            .blur(radius: 60)
+            .blur(radius: 70)
             .opacity(0.9)
         }
     }
@@ -70,8 +81,8 @@ struct BackdropView: View {
 
 // MARK: - Glass surfaces
 
-/// A card-shaped glass surface. Uses iOS 26 Liquid Glass when available, falls back
-/// to `.regularMaterial` on iOS 18–25.
+/// A card-shaped glass surface. iOS 26 uses Liquid Glass; iOS 18–25 uses
+/// `.regularMaterial`. No colored tints by default — pure neutral glass.
 struct GlassCard<Content: View>: View {
     private let cornerRadius: CGFloat
     private let content: Content
@@ -102,75 +113,102 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-/// Glass background applied as a `.background` modifier — leaves padding to the caller.
+/// Glass background as a modifier — caller controls padding. Optional white-only
+/// tint is layered as a low-opacity overlay to keep the surface monochrome.
 struct GlassSurface: ViewModifier {
     var cornerRadius: CGFloat = Theme.Radius.row
-    var tint: Color? = nil
+    var emphasis: Emphasis = .none
+
+    enum Emphasis {
+        case none      // neutral glass
+        case subtle    // very faint white tint for selected/active state
+        case error     // faint warm tint for error rows
+    }
 
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(
-                    tint.map { .regular.tint($0.opacity(0.30)) } ?? .regular,
-                    in: .rect(cornerRadius: cornerRadius)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(Theme.glassStroke, lineWidth: 0.5)
-                )
+                .glassEffect(tintStyle, in: .rect(cornerRadius: cornerRadius))
+                .overlay(shape.strokeBorder(strokeColor, lineWidth: emphasis == .none ? 0.5 : 0.75))
         } else {
             content
                 .background(
                     ZStack {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(.regularMaterial)
-                        if let tint {
-                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                .fill(tint.opacity(0.18))
+                        shape.fill(.regularMaterial)
+                        if emphasis == .subtle {
+                            shape.fill(Color.white.opacity(0.05))
+                        } else if emphasis == .error {
+                            shape.fill(Theme.error.opacity(0.10))
                         }
                     }
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(Theme.glassStroke, lineWidth: 0.5)
-                )
+                .overlay(shape.strokeBorder(strokeColor, lineWidth: emphasis == .none ? 0.5 : 0.75))
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var tintStyle: Glass {
+        switch emphasis {
+        case .none:    return .regular
+        case .subtle:  return .regular.tint(Color.white.opacity(0.10))
+        case .error:   return .regular.tint(Theme.error.opacity(0.20))
+        }
+    }
+
+    private var strokeColor: Color {
+        switch emphasis {
+        case .none:    return Theme.glassStroke
+        case .subtle:  return Color.white.opacity(0.18)
+        case .error:   return Theme.error.opacity(0.30)
         }
     }
 }
 
 /// Capsule-shaped glass — for chips, badges, pills.
 struct GlassPill: ViewModifier {
-    var tint: Color? = nil
+    var emphasized: Bool = false
 
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(
-                    tint.map { .regular.tint($0.opacity(0.35)) } ?? .regular,
+                    emphasized ? .regular.tint(Color.white.opacity(0.12)) : .regular,
                     in: .capsule
                 )
-                .overlay(Capsule().strokeBorder(Theme.glassStroke, lineWidth: 0.5))
+                .overlay(
+                    Capsule().strokeBorder(
+                        emphasized ? Color.white.opacity(0.22) : Theme.glassStroke,
+                        lineWidth: emphasized ? 0.75 : 0.5
+                    )
+                )
         } else {
             content
                 .background(
                     ZStack {
                         Capsule().fill(.thinMaterial)
-                        if let tint {
-                            Capsule().fill(tint.opacity(0.20))
-                        }
+                        if emphasized { Capsule().fill(Color.white.opacity(0.08)) }
                     }
                 )
-                .overlay(Capsule().strokeBorder(Theme.glassStroke, lineWidth: 0.5))
+                .overlay(
+                    Capsule().strokeBorder(
+                        emphasized ? Color.white.opacity(0.22) : Theme.glassStroke,
+                        lineWidth: emphasized ? 0.75 : 0.5
+                    )
+                )
         }
     }
 }
 
 extension View {
-    func glassSurface(cornerRadius: CGFloat = Theme.Radius.row, tint: Color? = nil) -> some View {
-        modifier(GlassSurface(cornerRadius: cornerRadius, tint: tint))
+    func glassSurface(
+        cornerRadius: CGFloat = Theme.Radius.row,
+        emphasis: GlassSurface.Emphasis = .none
+    ) -> some View {
+        modifier(GlassSurface(cornerRadius: cornerRadius, emphasis: emphasis))
     }
 
-    func glassPill(tint: Color? = nil) -> some View {
-        modifier(GlassPill(tint: tint))
+    func glassPill(emphasized: Bool = false) -> some View {
+        modifier(GlassPill(emphasized: emphasized))
     }
 }

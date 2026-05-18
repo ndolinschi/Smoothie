@@ -9,7 +9,7 @@ struct EventRow: View {
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(color.opacity(0.18))
+                        .fill(Color.white.opacity(0.06))
                         .frame(width: 22, height: 22)
                     Text(prefix)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -44,9 +44,9 @@ struct EventRow: View {
         switch event.type {
         case .message:   return .white
         case .thinking:  return .white.opacity(0.5)
-        case .tool_use:  return Theme.thinking
-        case .file_edit: return Theme.accent
-        case .waiting:   return Theme.waiting
+        case .tool_use:  return .white.opacity(0.85)
+        case .file_edit: return .white.opacity(0.85)
+        case .waiting:   return .white
         case .done:      return .white.opacity(0.5)
         case .error:     return Theme.error
         }
@@ -67,7 +67,7 @@ struct EventRow: View {
                 .foregroundStyle(color)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .glassPill(tint: Theme.accent)
+                .glassPill()
                 .lineLimit(2)
         case .tool_use:
             Text(event.toolName ?? event.content)
@@ -75,7 +75,7 @@ struct EventRow: View {
                 .foregroundStyle(color)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .glassPill(tint: Theme.thinking)
+                .glassPill()
         default:
             Text(event.content)
                 .font(.system(size: 13, design: .monospaced))

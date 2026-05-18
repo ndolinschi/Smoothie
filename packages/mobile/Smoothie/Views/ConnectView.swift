@@ -18,15 +18,15 @@ struct ConnectView: View {
                         .foregroundStyle(.white)
                     Text("Connect to your Mac")
                         .font(.system(size: 17))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.55))
                 }
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Tailscale address")
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(0.5)
-                            .foregroundStyle(.white.opacity(0.55))
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.45))
 
                         TextField("100.64.0.10:7749", text: $input)
                             .focused($inputFocused)
@@ -42,7 +42,7 @@ struct ConnectView: View {
 
                         if let errorText {
                             HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
+                                Image(systemName: "exclamationmark.circle.fill")
                                     .font(.system(size: 11))
                                 Text(errorText)
                                     .font(.system(size: 13))
@@ -63,31 +63,20 @@ struct ConnectView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: [Theme.accent, Theme.accent.opacity(0.85)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        in: .rect(cornerRadius: Theme.Radius.button)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
-                            .strokeBorder(.white.opacity(0.25), lineWidth: 0.5)
-                    )
+                    .background(.white, in: .rect(cornerRadius: Theme.Radius.button))
                 }
                 .disabled(isConnecting || trimmed.isEmpty)
-                .opacity(trimmed.isEmpty ? 0.5 : 1)
+                .opacity(trimmed.isEmpty ? 0.35 : 1)
 
                 Spacer()
 
                 HStack(spacing: 8) {
-                    Image(systemName: "lock.shield.fill")
+                    Image(systemName: "lock.shield")
                         .font(.system(size: 13))
-                        .foregroundStyle(Theme.accent.opacity(0.6))
+                        .foregroundStyle(.white.opacity(0.35))
                     Text("Both your Mac and iPhone need Tailscale running on the same tailnet.")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.white.opacity(0.35))
                 }
                 .padding(.bottom, 30)
             }

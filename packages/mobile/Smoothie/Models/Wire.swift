@@ -64,6 +64,44 @@ struct ProjectDTO: Codable, Sendable, Identifiable, Hashable {
     let isGit: Bool
 }
 
+struct FileEntry: Codable, Sendable, Identifiable, Hashable {
+    var id: String { fullPath }
+    let path: String        // relative to project root
+    let fullPath: String    // absolute
+    let size: Int
+}
+
+struct FileContent: Codable, Sendable {
+    let path: String        // absolute
+    let content: String
+    let size: Int
+    let truncated: Bool
+}
+
+struct StagedAttachment: Identifiable, Hashable, Sendable {
+    let id = UUID()
+    let name: String        // last path component for display
+    let relativePath: String // relative to project root (for @-mention syntax)
+    let content: String     // text content
+    let truncated: Bool
+}
+
+struct BrowseEntry: Codable, Sendable, Identifiable, Hashable {
+    var id: String { path }
+    let name: String
+    let path: String
+    let isDirectory: Bool
+    let isGit: Bool
+    let isAllowed: Bool
+}
+
+struct BrowseResponse: Codable, Sendable {
+    let current: String?
+    let parent: String?
+    let entries: [BrowseEntry]
+    let roots: [String]
+}
+
 struct AdapterInfo: Codable, Sendable, Identifiable {
     var id: String { cli.rawValue }
     let cli: CLIType

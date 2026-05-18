@@ -7,18 +7,37 @@ struct StatusBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(state.tint)
+                .fill(dotColor)
                 .frame(width: 6, height: 6)
                 .opacity(connected ? 1.0 : 0.3)
-                .shadow(color: state.tint.opacity(0.6), radius: 4)
+                .shadow(color: dotColor.opacity(0.55), radius: 4)
             Text(state.rawValue)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(state.tint)
+                .foregroundStyle(textColor)
                 .tracking(0.3)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .glassPill(tint: state.tint)
+        .glassPill(emphasized: state == .waiting || state == .error)
+    }
+
+    private var dotColor: Color {
+        switch state {
+        case .waiting: return .white                           // attention
+        case .error:   return Theme.error
+        case .thinking: return .white.opacity(0.85)
+        case .done:    return .white.opacity(0.5)
+        case .starting: return .white.opacity(0.5)
+        }
+    }
+
+    private var textColor: Color {
+        switch state {
+        case .error:   return Theme.error
+        case .waiting: return .white
+        case .thinking: return .white.opacity(0.85)
+        default:       return .white.opacity(0.6)
+        }
     }
 }
 
