@@ -3,23 +3,60 @@ import Shared
 
 @main
 struct SmoothieApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var pairing: PairingService
+    @State private var server: SmoothieHTTPServer
+
+    init() {
+        let p = PairingService()
+        let s = SmoothieHTTPServer(pairing: p)
+        _pairing = State(initialValue: p)
+        _server = State(initialValue: s)
+        AppDelegate.bootstrap = AppDelegate.Bootstrap(server: s)
+    }
+
     var body: some Scene {
         MenuBarExtra {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Smoothie")
-                    .font(.system(size: 13, weight: .semibold))
-                Text("v0.2.0 · K/N shared business logic ready")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Divider()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .keyboardShortcut("q")
-            }
-            .padding(12)
-            .frame(width: 280)
+            MenubarPopover()
+                .environment(pairing)
+                .environment(server)
         } label: {
-            Image(systemName: "waveform.path")
+            iconView
         }
         .menuBarExtraStyle(.window)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch server.status {
+        case .running:
+            Image(systemName: "waveform.path.badge.plus")
+                .accessibilityLabel("Smoothie running")
+        case .starting:
+            Image(systemName: "waveform.path")
+                .accessibilityLabel("Smoothie starting")
+        case .failed:
+            Image(systemName: "waveform.path.badge.minus")
+                .accessibilityLabel("Smoothie failed")
+        case .stopped:
+            Image(systemName: "waveform.path")
+                .accessibilityLabel("Smoothie stopped")
+        }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    struct Bootstrap {
+        let server: SmoothieHTTPServer
+    }
+    static var bootstrap: Bootstrap?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.bootstrap?.server.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppDelegate.bootstrap?.server.stop()
     }
 }

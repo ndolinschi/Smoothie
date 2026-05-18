@@ -12,8 +12,16 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
 
+packages:
+  Hummingbird:
+    url: https://github.com/hummingbird-project/hummingbird.git
+    from: "2.13.0"
+
 targets:
   SmoothieMac:
+    dependencies:
+      - package: Hummingbird
+        product: Hummingbird
     type: application
     platform: macOS
     sources:

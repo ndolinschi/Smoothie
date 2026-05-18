@@ -3,22 +3,26 @@ import Shared
 
 @main
 struct SmoothieApp: App {
+    @State private var pairing = PairingStore()
+
     var body: some Scene {
         WindowGroup {
-            VStack(spacing: 16) {
-                Text("Smoothie")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("v0.2.0 · iOS 26 Liquid Glass build")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.6))
-                Text("Pair via QR (next phase)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black)
-            .preferredColorScheme(.dark)
+            RootView()
+                .environment(pairing)
+                .preferredColorScheme(.dark)
+                .tint(.white)
+        }
+    }
+}
+
+private struct RootView: View {
+    @Environment(PairingStore.self) private var pairing
+
+    var body: some View {
+        if pairing.current != nil {
+            HomeView()
+        } else {
+            ConnectView()
         }
     }
 }
