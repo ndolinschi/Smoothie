@@ -11,9 +11,9 @@ packages/server/.build/
 packages/server/.swiftpm/
 packages/server/Package.resolved
 
-# Xcode (mobile) — generated, regenerate via setup.sh
-packages/mobile/Smoothie.xcodeproj/
-packages/mobile/*.xcworkspace/
+# Xcode — generated via xcodegen, regenerate via setup.sh in each package
+**/*.xcodeproj/
+**/*.xcworkspace/
 xcuserdata/
 *.xcuserstate
 
