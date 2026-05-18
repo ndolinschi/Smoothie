@@ -56,11 +56,7 @@ struct EventRow: View {
     private var content: some View {
         switch event.type {
         case .message:
-            Text(event.content)
-                .font(.system(size: 15))
-                .foregroundStyle(.white)
-                .textSelection(.enabled)
-                .lineSpacing(2)
+            MarkdownText(content: event.content)
         case .file_edit:
             Text(event.filePath ?? event.content)
                 .font(.system(size: 13, design: .monospaced))
