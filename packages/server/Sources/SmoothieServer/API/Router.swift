@@ -29,6 +29,33 @@ enum APIRouter {
             return try jsonResponse(projects)
         }
 
+        router.get("/projects/files") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            guard let path = query["path"], config.isPathAllowed(path) else {
+                return errorResponse(status: .forbidden, message: "Path not allowed")
+            }
+            let q = query["q"] ?? ""
+            let files = listFiles(under: path, query: q)
+            return try jsonResponse(files)
+        }
+
+        router.get("/projects/file") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            guard let path = query["path"], config.isPathAllowed(path) else {
+                return errorResponse(status: .forbidden, message: "Path not allowed")
+            }
+            guard let content = readFile(at: path) else {
+                return errorResponse(status: .notFound, message: "File not found or not readable")
+            }
+            return try jsonResponse(content)
+        }
+
+        router.get("/browse") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            let response = browse(path: query["path"], config: config)
+            return try jsonResponse(response)
+        }
+
         router.get("/adapters") { _, _ -> Response in
             let info = await registry.info
             return try jsonResponse(info)
@@ -150,6 +177,131 @@ enum APIRouter {
     private static func readBody(_ request: Request, max: Int) async throws -> Data {
         let buffer = try await request.body.collect(upTo: max)
         return Data(buffer.readableBytesView)
+    }
+
+    private static func parseQuery(_ raw: String?) -> [String: String] {
+        guard let raw, !raw.isEmpty else { return [:] }
+        var result: [String: String] = [:]
+        for pair in raw.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let key = String(parts[0])
+            let rawValue = String(parts[1])
+            let value = rawValue.removingPercentEncoding ?? rawValue
+            result[key] = value
+        }
+        return result
+    }
+
+    private static let fileListExcludes: Set<String> = [
+        ".git", ".build", ".swiftpm", "node_modules", "DerivedData",
+        ".expo", ".next", ".cache", "dist", "build", ".turbo",
+        ".DS_Store", "Pods", ".gradle"
+    ]
+
+    private static let fileListMaxResults = 1000
+    private static let fileMaxBytes = 100 * 1024
+
+    private static func listFiles(under root: String, query: String) -> [FileEntry] {
+        let fm = FileManager.default
+        let q = query.lowercased()
+        let rootURL = URL(fileURLWithPath: root)
+        guard let enumerator = fm.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var results: [FileEntry] = []
+        let rootPrefix = root.hasSuffix("/") ? root : root + "/"
+
+        for case let url as URL in enumerator {
+            if results.count >= fileListMaxResults { break }
+            let name = url.lastPathComponent
+            if fileListExcludes.contains(name) {
+                enumerator.skipDescendants()
+                continue
+            }
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            if values?.isDirectory == true { continue }
+            let abs = url.path
+            let relative = abs.hasPrefix(rootPrefix) ? String(abs.dropFirst(rootPrefix.count)) : abs
+            if !q.isEmpty, !relative.lowercased().contains(q) { continue }
+            results.append(FileEntry(path: relative, fullPath: abs, size: values?.fileSize ?? 0))
+        }
+        return results.sorted { $0.path.lowercased() < $1.path.lowercased() }
+    }
+
+    private static let browseExcludes: Set<String> = [
+        ".Trash", ".cache", "Library", ".npm", ".yarn", ".pnpm", ".bun"
+    ]
+
+    private static func browse(path: String?, config: Config) -> BrowseResponse {
+        let roots = config.allowedRoots
+        if let path, !path.isEmpty {
+            guard config.isPathAllowed(path) else {
+                return BrowseResponse(current: nil, parent: nil, entries: rootEntries(roots), roots: roots)
+            }
+            let parentPath = (path as NSString).deletingLastPathComponent
+            let parent: String? = {
+                if parentPath == path { return nil }
+                return config.isPathAllowed(parentPath) ? parentPath : nil
+            }()
+            return BrowseResponse(
+                current: path,
+                parent: parent,
+                entries: listSubdirs(at: path, config: config),
+                roots: roots
+            )
+        }
+        return BrowseResponse(current: nil, parent: nil, entries: rootEntries(roots), roots: roots)
+    }
+
+    private static func rootEntries(_ roots: [String]) -> [BrowseEntry] {
+        let fm = FileManager.default
+        return roots.compactMap { root in
+            guard fm.fileExists(atPath: root) else { return nil }
+            let name = (root as NSString).lastPathComponent
+            let isGit = fm.fileExists(atPath: (root as NSString).appendingPathComponent(".git"))
+            return BrowseEntry(name: name, path: root, isDirectory: true, isGit: isGit, isAllowed: true)
+        }
+    }
+
+    private static func listSubdirs(at path: String, config: Config) -> [BrowseEntry] {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(atPath: path) else { return [] }
+        var entries: [BrowseEntry] = []
+        for name in contents {
+            if name.hasPrefix(".") && name != ".git" { continue }
+            if browseExcludes.contains(name) { continue }
+            if fileListExcludes.contains(name) { continue }
+            let full = (path as NSString).appendingPathComponent(name)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { continue }
+            let isGit = fm.fileExists(atPath: (full as NSString).appendingPathComponent(".git"))
+            let isAllowed = config.isPathAllowed(full)
+            entries.append(BrowseEntry(name: name, path: full, isDirectory: true, isGit: isGit, isAllowed: isAllowed))
+        }
+        return entries.sorted { a, b in
+            if a.isGit != b.isGit { return a.isGit }
+            return a.name.lowercased() < b.name.lowercased()
+        }
+    }
+
+    private static func readFile(at path: String) -> FileContent? {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else { return nil }
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+
+        let attrs = try? fm.attributesOfItem(atPath: path)
+        let actualSize = (attrs?[.size] as? Int) ?? 0
+        let data = (try? handle.read(upToCount: fileMaxBytes + 1)) ?? Data()
+        let truncated = data.count > fileMaxBytes
+        let trimmed = truncated ? data.prefix(fileMaxBytes) : data
+        guard let text = String(data: trimmed, encoding: .utf8) else { return nil }
+        return FileContent(path: path, content: text, size: trimmed.count.advanced(by: 0), truncated: truncated || actualSize > fileMaxBytes)
     }
 
     private static func listProjects(under roots: [String]) -> [ProjectDTO] {

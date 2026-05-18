@@ -54,6 +54,34 @@ struct ProjectDTO: Codable, Sendable {
     let isGit: Bool
 }
 
+struct FileEntry: Codable, Sendable {
+    let path: String        // relative to project root
+    let fullPath: String    // absolute
+    let size: Int           // bytes
+}
+
+struct FileContent: Codable, Sendable {
+    let path: String        // absolute
+    let content: String
+    let size: Int           // bytes returned (may be < actual size if truncated)
+    let truncated: Bool
+}
+
+struct BrowseEntry: Codable, Sendable {
+    let name: String
+    let path: String        // absolute
+    let isDirectory: Bool
+    let isGit: Bool
+    let isAllowed: Bool     // can the user pick this as a project root?
+}
+
+struct BrowseResponse: Codable, Sendable {
+    let current: String?    // absolute path of the folder shown (nil when showing roots)
+    let parent: String?     // parent path if user can go up
+    let entries: [BrowseEntry]
+    let roots: [String]     // allowed root paths
+}
+
 struct AdapterInfo: Codable, Sendable {
     let cli: CLIType
     let installed: Bool

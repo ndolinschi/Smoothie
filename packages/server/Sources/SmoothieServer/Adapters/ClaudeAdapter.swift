@@ -14,6 +14,8 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
     private let stateLock = NSLock()
     private var _state: SessionState = .starting
     private var _terminated = false
+    private var recentNonJSONLines: [String] = []
+    private let recentNonJSONCap = 20
 
     private init(pty: PTYProcess) {
         self.pty = pty
@@ -122,20 +124,44 @@ final class ClaudeAdapter: AgentAdapter, @unchecked Sendable {
         Task.detached { [weak self] in
             for await code in exitStream {
                 if code != 0, let self, !self.isTerminated() {
+                    let exitCode = Self.decodeWaitStatus(code)
                     self.setState(.error)
+                    let tail = self.takeRecentNonJSONLines()
+                    let detail = tail.isEmpty ? "" : "\nLast output:\n\(tail.joined(separator: "\n"))"
                     self.eventContinuation.yield(SmoothieEvent(
                         type: .error,
-                        content: "claude exited with code \(code)"
+                        content: "claude exited with code \(exitCode)\(detail)"
                     ))
                 }
             }
         }
     }
 
+    /// `waitpid` returns status with the exit code in the high byte. Decode it.
+    private static func decodeWaitStatus(_ status: Int32) -> Int32 {
+        if status & 0x7F == 0 { return (status >> 8) & 0xFF }   // normal exit
+        if status & 0x7F != 0 && (status & 0x80) == 0 { return -((status & 0x7F)) } // signal
+        return status
+    }
+
+    private func takeRecentNonJSONLines() -> [String] {
+        stateLock.lock(); defer { stateLock.unlock() }
+        let lines = recentNonJSONLines
+        recentNonJSONLines.removeAll()
+        return lines
+    }
+
     private func handleLine(_ line: String) {
         guard let data = line.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = obj["type"] as? String else {
+            // Not JSON — remember for surfacing if process crashes early.
+            stateLock.lock()
+            recentNonJSONLines.append(line)
+            if recentNonJSONLines.count > recentNonJSONCap {
+                recentNonJSONLines.removeFirst(recentNonJSONLines.count - recentNonJSONCap)
+            }
+            stateLock.unlock()
             return
         }
 
