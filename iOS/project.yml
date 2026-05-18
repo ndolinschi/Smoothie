@@ -2,7 +2,7 @@ name: SmoothieiOS
 options:
   bundleIdPrefix: dev.smoothie
   deploymentTarget:
-    iOS: "18.0"
+    iOS: "26.0"
   developmentLanguage: en
   createIntermediateGroups: true
 
