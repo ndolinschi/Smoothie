@@ -8,7 +8,7 @@ struct SmoothieApp: App {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Smoothie")
                     .font(.system(size: 13, weight: .semibold))
-                Text(Placeholder.shared.versionString)
+                Text("v0.2.0 · K/N shared business logic ready")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Divider()
