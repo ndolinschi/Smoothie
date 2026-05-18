@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+
+# Swift / Xcode
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode (server)
+packages/server/.build/
+packages/server/.swiftpm/
+packages/server/Package.resolved
+
+# Xcode (mobile) — generated, regenerate via setup.sh
+packages/mobile/Smoothie.xcodeproj/
+packages/mobile/*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+
+# Build artefacts
+DerivedData/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
