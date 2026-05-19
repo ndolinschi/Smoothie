@@ -41,6 +41,20 @@ final class ProcessRegistry {
             throw SpawnError.pathForbidden(request.projectPath)
         }
 
+        // v1 ships Claude as the only persistent-process adapter. Gemini's
+        // `-p` mode is one-shot per process, and OpenCode needs an
+        // HTTP-transport host. Both land in v1.5.
+        if request.cli == CLIType.gemini {
+            throw SpawnError.launchFailed(
+                "Gemini multi-turn sessions land in v1.5 — single-prompt support lives in the shared parser, host wiring is next."
+            )
+        }
+        if request.cli == CLIType.openCode {
+            throw SpawnError.launchFailed(
+                "OpenCode runs over its own `opencode serve` HTTP transport; v1.5 wires that up. Use Claude for now."
+            )
+        }
+
         // Snap the request through Preferences so it gets the default model if
         // the request omitted one and the user has set a preference.
         let effective = prefs.applyDefaults(to: request)
