@@ -120,9 +120,8 @@ struct NewSessionView: View {
             if installed { selectedCLI = a.cli }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: cliIcon(a.cli))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(installed ? 0.75 : 0.3))
+                ProviderIcon(cli: a.cli, size: 18)
+                    .opacity(installed ? 1 : 0.35)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.cli.displayName).foregroundStyle(installed ? .white : .white.opacity(0.4))
@@ -142,14 +141,6 @@ struct NewSessionView: View {
         }
         .buttonStyle(.plain)
         .disabled(!installed)
-    }
-
-    private func cliIcon(_ cli: CLIWire) -> String {
-        switch cli {
-        case .claudeCode: return "sparkle"
-        case .gemini:     return "diamond"
-        case .openCode:   return "terminal"
-        }
     }
 
     private func load() async {

@@ -166,9 +166,7 @@ struct HomeView: View {
     private func sessionCard(_ s: SessionDescriptorWire) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: "circle.dotted")
-                    .font(.system(size: 14))
-                    .foregroundStyle(s.state.color)
+                ProviderIcon(cli: s.cli, size: 16)
                 Text(s.projectName)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)

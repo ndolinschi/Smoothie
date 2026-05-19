@@ -113,8 +113,7 @@ struct MessageInput: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: cliIcon)
-                    .font(.system(size: 11, weight: .semibold))
+                ProviderIcon(cli: session.cli, size: 12)
                 Text(modelLabel)
                     .font(.system(size: 12, weight: .semibold))
                 Image(systemName: "chevron.up.chevron.down")
@@ -134,14 +133,6 @@ struct MessageInput: View {
             return "\(model) · \(effort)"
         }
         return model
-    }
-
-    private var cliIcon: String {
-        switch session.cli {
-        case .claudeCode: return "sparkle"
-        case .gemini:     return "diamond"
-        case .openCode:   return "terminal"
-        }
     }
 
     private func attachmentChip(_ att: StagedAttachment) -> some View {
