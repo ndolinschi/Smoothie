@@ -34,7 +34,13 @@ struct DiffSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
             } else {
-                ForEach(entries) { entry in
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(SmoothieColor.strokeSoft)
+                            .frame(height: 0.5)
+                            .padding(.vertical, 4)
+                    }
                     DiffEntryView(
                         entry: entry,
                         comment: Binding(
@@ -119,12 +125,7 @@ private struct DiffEntryView: View {
                 commentField
             }
         }
-        .padding(12)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
-        .overlay(
-            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .padding(.vertical, 6)
     }
 
     private var header: some View {
@@ -158,8 +159,9 @@ private struct DiffEntryView: View {
 
     /// Unified line-by-line view: every removed line of `old_string` is a
     /// red `-` row, every added line of `new_string` (or `content` for
-    /// Write) is a green `+` row. No extra container per side — just one
-    /// list of lines with a gutter, matching the diff idiom users expect.
+    /// Write) is a green `+` row. No card around the list — the row tints
+    /// already make the diff region visually distinct against the sheet
+    /// background.
     @ViewBuilder
     private var changesBlock: some View {
         let rows = entry.diffRows()
@@ -169,11 +171,6 @@ private struct DiffEntryView: View {
                     DiffLineRowView(row: row, language: entry.languageHint)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm))
-            .overlay(
-                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm)
-                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-            )
         }
     }
 
