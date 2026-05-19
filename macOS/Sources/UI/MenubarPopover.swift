@@ -16,6 +16,8 @@ struct MenubarPopover: View {
             Divider()
             statusSection
             Divider()
+            tunnelSection
+            Divider()
             pairingSection
             Divider()
             actions
@@ -50,14 +52,103 @@ struct MenubarPopover: View {
         case .stopped:
             statusRow(color: .gray, label: "Stopped", detail: "")
         }
-        if !pairing.hostIsTailscale {
+        if !pairing.hostIsTailscale && !pairing.isPublicTunnelActive {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 10))
                     .foregroundStyle(.orange)
-                Text("Tailscale not detected — only 127.0.0.1 will be reachable.")
+                Text("Tailscale not detected — phone must be on the same LAN, or turn on the public tunnel below.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tunnelSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text("PUBLIC TUNNEL")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Toggle("", isOn: tunnelBinding)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .labelsHidden()
+                    .disabled(!pairing.cloudflared.isInstalled)
+            }
+            tunnelStatusBody
+        }
+    }
+
+    private var tunnelBinding: Binding<Bool> {
+        Binding(
+            get: { pairing.isPublicTunnelActive || isTunnelStarting },
+            set: { on in
+                if on { pairing.cloudflared.start() }
+                else  { pairing.cloudflared.stop() }
+            }
+        )
+    }
+
+    private var isTunnelStarting: Bool {
+        if case .starting = pairing.cloudflared.status { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var tunnelStatusBody: some View {
+        if !pairing.cloudflared.isInstalled {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("`cloudflared` is not installed.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text("Run `brew install cloudflared` and reopen this popover.")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        } else {
+            switch pairing.cloudflared.status {
+            case .off:
+                Text("Off — phone must reach this Mac directly (LAN or Tailscale).")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            case .starting:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Asking Cloudflare for a URL…")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            case .running(let url):
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 6, height: 6)
+                        Text("Public — anyone with the QR can connect from anywhere.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(url.absoluteString)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            case .failed(let msg):
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                    Text(msg)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -103,10 +194,10 @@ struct MenubarPopover: View {
                         .foregroundStyle(.secondary)
                     copyableRow(
                         label: "host",
-                        value: "\(pairing.host):\(pairing.port)",
+                        value: pairingHostDisplay,
                         field: .host,
                         action: {
-                            copy("\(pairing.host):\(pairing.port)", as: .host)
+                            copy(pairingHostDisplay, as: .host)
                         }
                     )
                     copyableRow(
@@ -128,6 +219,16 @@ struct MenubarPopover: View {
             PairingFullView(showing: $showingFullQR)
                 .environment(pairing)
         }
+    }
+
+    /// What to show next to "host:" in the pairing card. Falls back to the
+    /// local LAN/Tailscale `host:port`; uses the Cloudflare public URL when
+    /// the tunnel toggle is on.
+    private var pairingHostDisplay: String {
+        if case .running(let url) = pairing.cloudflared.status {
+            return url.absoluteString
+        }
+        return "\(pairing.host):\(pairing.port)"
     }
 
     private var maskedToken: String {
@@ -242,6 +343,13 @@ struct PairingFullView: View {
     @Binding var showing: Bool
     @State private var copied: String?
 
+    private var pairingHostDisplayForFull: String {
+        if case .running(let url) = pairing.cloudflared.status {
+            return url.absoluteString
+        }
+        return "\(pairing.host):\(pairing.port)"
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             Text("Pair Smoothie")
@@ -261,9 +369,12 @@ struct PairingFullView: View {
                 Text("Or enter manually:")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                Text("\(pairing.host):\(pairing.port)")
+                Text(pairingHostDisplayForFull)
                     .font(.system(size: 12, design: .monospaced))
                     .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.horizontal, 12)
                 Text("token: \(pairing.token)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)

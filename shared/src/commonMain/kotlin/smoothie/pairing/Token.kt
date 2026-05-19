@@ -17,9 +17,16 @@ data class QRPayload(
     val host: String,
     val port: Int,
     val token: String,
+    /// Connection scheme — `http` for local/Tailscale binds, `https` for
+    /// public tunnels (Cloudflare etc.). Optional on the wire for
+    /// backward compatibility: a missing `scheme` parameter parses as
+    /// `http` so existing QR codes keep working.
+    val scheme: String = "http",
 ) {
-    fun toURL(): String =
-        "smoothie://pair?host=${host.urlPercentEncode()}&port=$port&token=${token.urlPercentEncode()}"
+    fun toURL(): String {
+        val schemeParam = if (scheme == "http") "" else "&scheme=${scheme.urlPercentEncode()}"
+        return "smoothie://pair?host=${host.urlPercentEncode()}&port=$port&token=${token.urlPercentEncode()}$schemeParam"
+    }
 
     companion object {
         /// Parse a `smoothie://pair?...` URL. Returns null on malformed input.
@@ -33,7 +40,8 @@ data class QRPayload(
             val host = params["host"] ?: return null
             val port = params["port"]?.toIntOrNull() ?: return null
             val token = params["token"] ?: return null
-            return QRPayload(host, port, token)
+            val scheme = params["scheme"]?.takeIf { it == "http" || it == "https" } ?: "http"
+            return QRPayload(host, port, token, scheme)
         }
     }
 }

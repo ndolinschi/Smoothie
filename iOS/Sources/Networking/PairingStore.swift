@@ -20,19 +20,44 @@ final class PairingStore {
         var host: String
         var port: Int
         var token: String
+        /// `http` for LAN / Tailscale, `https` for Cloudflare tunnel pairings.
+        /// Optional in the wire payload — older QRs without `scheme=` parse
+        /// as `http`.
+        var scheme: String
 
-        var baseURL: URL { URL(string: "http://\(host):\(port)")! }
+        var baseURL: URL {
+            // For `https` tunnels (Cloudflare), drop the explicit port if it's
+            // the default 443 so URLSession picks the right port and SNI
+            // hostname without surprises.
+            if scheme == "https" && (port == 443 || port == 0) {
+                return URL(string: "https://\(host)")!
+            }
+            return URL(string: "\(scheme)://\(host):\(port)")!
+        }
 
-        init(label: String, host: String, port: Int, token: String) {
-            self.id = Self.makeId(host: host, port: port)
+        init(label: String, host: String, port: Int, token: String, scheme: String = "http") {
+            self.id = Self.makeId(host: host, port: port, scheme: scheme)
             self.label = label
             self.host = host
             self.port = port
             self.token = token
+            self.scheme = scheme
         }
 
-        static func makeId(host: String, port: Int) -> String {
-            let digest = SHA256.hash(data: Data("\(host):\(port)".utf8))
+        // Backwards-compatible decoder so older Keychain blobs without a
+        // `scheme` field still load (they default to "http").
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.id     = try c.decode(String.self, forKey: .id)
+            self.label  = try c.decode(String.self, forKey: .label)
+            self.host   = try c.decode(String.self, forKey: .host)
+            self.port   = try c.decode(Int.self,    forKey: .port)
+            self.token  = try c.decode(String.self, forKey: .token)
+            self.scheme = (try? c.decode(String.self, forKey: .scheme)) ?? "http"
+        }
+
+        static func makeId(host: String, port: Int, scheme: String = "http") -> String {
+            let digest = SHA256.hash(data: Data("\(scheme)://\(host):\(port)".utf8))
             return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
         }
     }
@@ -65,15 +90,16 @@ final class PairingStore {
     /// Save a pairing parsed from QR or entered manually. If this Mac is
     /// already in the list (matched by host:port) the entry is updated in
     /// place; either way the new id becomes active.
-    func save(host: String, port: Int, token: String, label: String? = nil) {
+    func save(host: String, port: Int, token: String, scheme: String = "http", label: String? = nil) {
         let derivedLabel = label ?? defaultLabel(host: host)
-        let pairing = Pairing(label: derivedLabel, host: host, port: port, token: token)
+        let pairing = Pairing(label: derivedLabel, host: host, port: port, token: token, scheme: scheme)
         if let i = pairings.firstIndex(where: { $0.id == pairing.id }) {
             // Preserve user-edited label if present.
             var existing = pairings[i]
             existing.host = pairing.host
             existing.port = pairing.port
             existing.token = pairing.token
+            existing.scheme = pairing.scheme
             if label != nil { existing.label = derivedLabel }
             pairings[i] = existing
         } else {
@@ -123,7 +149,7 @@ final class PairingStore {
             lastError = "QR is not a Smoothie pairing code"
             return false
         }
-        save(host: payload.host, port: Int(payload.port), token: payload.token)
+        save(host: payload.host, port: Int(payload.port), token: payload.token, scheme: payload.scheme)
         return true
     }
 
@@ -135,18 +161,18 @@ final class PairingStore {
             lastError = "QR is not a Smoothie pairing code"
             return false
         }
-        return await tryPair(host: payload.host, port: Int(payload.port), token: payload.token)
+        return await tryPair(host: payload.host, port: Int(payload.port), token: payload.token, scheme: payload.scheme)
     }
 
     /// Atomic "save + verify, roll back on failure" helper. Used by
     /// ConnectView and ManualPairView so a failed pair attempt never leaves
     /// a dead entry in the list.
     @discardableResult
-    func tryPair(host: String, port: Int, token: String, label: String? = nil) async -> Bool {
-        let id = Pairing.makeId(host: host, port: port)
+    func tryPair(host: String, port: Int, token: String, scheme: String = "http", label: String? = nil) async -> Bool {
+        let id = Pairing.makeId(host: host, port: port, scheme: scheme)
         let alreadyExisted = pairings.contains { $0.id == id }
         let priorActive = activeId
-        save(host: host, port: port, token: token, label: label)
+        save(host: host, port: port, token: token, scheme: scheme, label: label)
         let ok = await verify()
         if !ok {
             if alreadyExisted {
