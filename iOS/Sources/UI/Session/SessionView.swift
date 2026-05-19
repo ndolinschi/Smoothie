@@ -64,6 +64,7 @@ struct SessionView: View {
     let session: SessionDescriptorWire
     @Environment(PairingStore.self) private var pairing
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var currentSession: SessionDescriptorWire
     @State private var store: SessionLiveStore?
     @State private var features: ProviderFeaturesWire?
@@ -71,6 +72,7 @@ struct SessionView: View {
     @State private var switching: SwitchTarget?
     @State private var restarting = false
     @State private var switchError: String?
+    @State private var lastNotifiedState: SessionStateWire?
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -159,6 +161,10 @@ struct SessionView: View {
         .onDisappear {
             store?.disconnect()
         }
+        .onChange(of: store?.state) { _, new in
+            guard let new else { return }
+            handlePotentialNotification(state: new)
+        }
         .alert("Kill session?", isPresented: $confirmKill) {
             Button("Kill", role: .destructive) {
                 Task { await killSession() }
@@ -208,6 +214,25 @@ struct SessionView: View {
             features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
             // non-fatal; ComposerMenu degrades gracefully
+        }
+    }
+
+    private func handlePotentialNotification(state: SessionStateWire) {
+        guard scenePhase != .active else {
+            lastNotifiedState = state
+            return
+        }
+        guard state != lastNotifiedState else { return }
+        lastNotifiedState = state
+        switch state {
+        case .waiting:
+            LocalNotifier.shared.notifyWaiting(projectName: currentSession.projectName, sessionId: currentSession.id)
+        case .done:
+            LocalNotifier.shared.notifyDone(projectName: currentSession.projectName, sessionId: currentSession.id)
+        case .limitReached:
+            LocalNotifier.shared.notifyLimitReached(projectName: currentSession.projectName, sessionId: currentSession.id)
+        default:
+            break
         }
     }
 
