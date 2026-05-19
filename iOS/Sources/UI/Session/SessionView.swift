@@ -201,10 +201,10 @@ struct SessionView: View {
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed)
                         },
-                        onSwitchModel: { m in Task { await applyRestart(.model(m)) } },
-                        onSwitchEffort: { e in Task { await applyRestart(.effort(e)) } },
+                        onSwitchModel: { m in await applyRestart(.model(m)) },
+                        onSwitchEffort: { e in await applyRestart(.effort(e)) },
                         onSwitchMode: { applyMode($0) },
-                        onSwitchProvider: { c in Task { await applyRestart(.provider(c)) } },
+                        onSwitchProvider: { c in await applyRestart(.provider(c)) },
                         onTapMode: { showingModeSheet = true }
                     )
                 }

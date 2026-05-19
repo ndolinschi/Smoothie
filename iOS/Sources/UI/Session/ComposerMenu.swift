@@ -12,11 +12,15 @@ struct ModelPickerSheet: View {
     let currentModel: String?
     let currentEffort: String?
     let features: ProviderFeaturesWire
-    let onPickModel: (String) -> Void
-    let onPickEffort: (String) -> Void
+    let onPickModel: (String) async -> Void
+    let onPickEffort: (String) async -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var query: String = ""
+    /// While non-nil, the sheet is awaiting the restart triggered by the
+    /// row's tap. The selected row shows a spinner; all other rows disable.
+    @State private var pickingModel: String?
+    @State private var pickingEffort: String?
 
     private var filtered: [String] {
         if query.isEmpty { return features.availableModels }
@@ -97,47 +101,80 @@ struct ModelPickerSheet: View {
         HStack(spacing: 6) {
             ForEach(features.availableReasoningEfforts, id: \.self) { effort in
                 Button {
-                    onPickEffort(effort)
-                    dismiss()
+                    Task { await selectEffort(effort) }
                 } label: {
-                    Text(effort)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(currentEffort == effort ? .black : .white.opacity(0.7))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(
-                            currentEffort == effort ? Color.white : Color.clear,
-                            in: .capsule
-                        )
-                        .overlay(
-                            Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                        )
+                    HStack(spacing: 5) {
+                        if pickingEffort == effort {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(.black)
+                        }
+                        Text(effort)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(currentEffort == effort ? .black : .white.opacity(0.7))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        currentEffort == effort ? Color.white : Color.clear,
+                        in: .capsule
+                    )
+                    .overlay(
+                        Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                    )
                 }
                 .buttonStyle(.plain)
+                .disabled(isPicking)
+                .opacity(isPicking && pickingEffort != effort ? 0.45 : 1)
             }
         }
     }
 
+    private var isPicking: Bool { pickingModel != nil || pickingEffort != nil }
+
+    private func selectModel(_ model: String) async {
+        guard !isPicking else { return }
+        pickingModel = model
+        await onPickModel(model)
+        pickingModel = nil
+        dismiss()
+    }
+
+    private func selectEffort(_ effort: String) async {
+        guard !isPicking else { return }
+        pickingEffort = effort
+        await onPickEffort(effort)
+        pickingEffort = nil
+        dismiss()
+    }
+
     private func modelRow(_ model: String) -> some View {
         let isCurrent = (currentModel ?? features.defaultModel) == model
-        // We don't have access to CLIWire in this scope (the sheet is
-        // adapter-agnostic), so the raw id falls through unaltered. Most of
-        // the time it IS already friendly because Cursor's pattern of "alias
-        // first" is also how Claude / Gemini are configured. Provider chip
-        // outside the sheet handles the marketing-name lookup.
+        let isLoading = pickingModel == model
         return Button {
-            onPickModel(model)
-            dismiss()
+            Task { await selectModel(model) }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17))
-                    .foregroundStyle(isCurrent ? .white : .white.opacity(0.35))
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                        .frame(width: 17, height: 17)
+                } else {
+                    Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 17))
+                        .foregroundStyle(isCurrent ? .white : .white.opacity(0.35))
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.white)
-                    if model == features.defaultModel {
+                    if isLoading {
+                        Text("switching…")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .tracking(0.3)
+                            .foregroundStyle(SmoothieColor.accent)
+                    } else if model == features.defaultModel {
                         Text("default")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .tracking(0.3)
@@ -150,6 +187,8 @@ struct ModelPickerSheet: View {
             .glassEffect(in: .rect(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .disabled(isPicking)
+        .opacity(isPicking && !isLoading ? 0.45 : 1)
     }
 }
 

@@ -10,10 +10,13 @@ struct MessageInput: View {
     let allAdapters: [AdapterInfoWire]
     let isFreshSession: Bool
     let onSend: (String, [StagedAttachment]) async -> Void
-    let onSwitchModel: (String) -> Void
-    let onSwitchEffort: (String) -> Void
+    /// Async because the upstream applyRestart spawns a fresh process; the
+    /// model picker awaits it so it can show a row-level spinner instead of
+    /// dismissing silently.
+    let onSwitchModel: (String) async -> Void
+    let onSwitchEffort: (String) async -> Void
     let onSwitchMode: (String) -> Void
-    let onSwitchProvider: (CLIWire) -> Void
+    let onSwitchProvider: (CLIWire) async -> Void
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
@@ -108,8 +111,8 @@ struct MessageInput: View {
                     currentModel: session.model,
                     currentEffort: session.reasoningEffort,
                     features: f,
-                    onPickModel: { onSwitchModel($0) },
-                    onPickEffort: { onSwitchEffort($0) }
+                    onPickModel: { m in await onSwitchModel(m) },
+                    onPickEffort: { e in await onSwitchEffort(e) }
                 )
                 .presentationDetents([.medium, .large])
                 .presentationBackground(.clear)
