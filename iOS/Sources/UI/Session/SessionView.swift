@@ -186,10 +186,8 @@ struct SessionView: View {
                     if !store.events.isEmpty {
                         ActionChipsRow(
                             events: store.events,
-                            state: store.state,
                             onPlanTap: { showingModeSheet = true },
-                            onDiffTap: { showingDiffSheet = true },
-                            onAbortTap: { Task { await abortTurn() } }
+                            onDiffTap: { showingDiffSheet = true }
                         )
                     }
                     MessageInput(
@@ -197,10 +195,12 @@ struct SessionView: View {
                         features: features,
                         allAdapters: allAdapters,
                         isFreshSession: store.events.isEmpty,
+                        sessionState: store.state,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed)
                         },
+                        onAbort: { Task { await abortTurn() } },
                         onSwitchModel: { m in await applyRestart(.model(m)) },
                         onSwitchEffort: { e in await applyRestart(.effort(e)) },
                         onSwitchMode: { applyMode($0) },

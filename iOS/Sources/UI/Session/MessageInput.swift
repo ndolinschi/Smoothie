@@ -9,7 +9,11 @@ struct MessageInput: View {
     let features: ProviderFeaturesWire?
     let allAdapters: [AdapterInfoWire]
     let isFreshSession: Bool
+    /// Current session state. When `.starting`/`.thinking`, the trailing
+    /// send button becomes an Abort button instead.
+    let sessionState: SessionStateWire
     let onSend: (String, [StagedAttachment]) async -> Void
+    let onAbort: () -> Void
     /// Async because the upstream applyRestart spawns a fresh process; the
     /// model picker awaits it so it can show a row-level spinner instead of
     /// dismissing silently.
@@ -216,16 +220,35 @@ struct MessageInput: View {
         }
     }
 
+    private var isThinking: Bool {
+        sessionState == .starting || sessionState == .thinking
+    }
+
+    /// Either Send (coral arrow.up) or Abort (red stop.fill) depending on
+    /// whether the agent is currently working. Same slot so the user never
+    /// has to hunt for a separate "stop" affordance.
+    @ViewBuilder
     private var sendButton: some View {
-        Button(action: send) {
-            Image(systemName: sending ? "ellipsis" : "arrow.up")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
-                .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
+        if isThinking {
+            Button(action: onAbort) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
+                    .background(SmoothieColor.statusErr, in: .circle)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button(action: send) {
+                Image(systemName: sending ? "ellipsis" : "arrow.up")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
+                    .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
         }
-        .buttonStyle(.plain)
-        .disabled(!canSend)
     }
 
     private var attachmentsRow: some View {

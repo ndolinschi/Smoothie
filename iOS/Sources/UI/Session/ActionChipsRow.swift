@@ -5,25 +5,16 @@ import SwiftUI
 /// file edits) a Diff button that opens DiffSheet for review + comments.
 struct ActionChipsRow: View {
     let events: [SmoothieEventWire]
-    let state: SessionStateWire
     let onPlanTap: () -> Void
     let onDiffTap: () -> Void
-    let onAbortTap: () -> Void
 
     private var fileEditCount: Int {
         events.filter { $0.type == .fileEdit }.count
     }
 
-    private var isThinking: Bool {
-        state == .starting || state == .thinking
-    }
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                if isThinking {
-                    abortChip
-                }
                 planChip
                 if fileEditCount > 0 {
                     diffChip
@@ -31,22 +22,6 @@ struct ActionChipsRow: View {
             }
             .padding(.horizontal, 14)
         }
-    }
-
-    private var abortChip: some View {
-        Button(action: onAbortTap) {
-            HStack(spacing: 6) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 11, weight: .bold))
-                Text("Abort")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(SmoothieColor.statusErr.opacity(0.85), in: .capsule)
-        }
-        .buttonStyle(.plain)
     }
 
     private var planChip: some View {
