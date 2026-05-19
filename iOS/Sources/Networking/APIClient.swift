@@ -139,6 +139,17 @@ struct APIClient {
         return (try? decode(R.self, from: data).terminated) ?? false
     }
 
+    /// Cancel the in-flight turn without killing the session. Per-CLI
+    /// semantics: Claude → SIGINT (process keeps running); Gemini →
+    /// terminate current one-shot spawn; OpenCode → opencode `/abort`.
+    @discardableResult
+    func abortSession(sessionId: String) async throws -> Bool {
+        struct EmptyBody: Encodable {}
+        let data = try await post("/sessions/\(sessionId)/abort", json: EmptyBody())
+        struct R: Decodable { let aborted: Bool }
+        return (try? decode(R.self, from: data).aborted) ?? false
+    }
+
     func streamURL(sessionId: String) -> URL? {
         guard let p = store.current else { return nil }
         return p.baseURL.appendingPathComponent("sessions/\(sessionId)/stream")

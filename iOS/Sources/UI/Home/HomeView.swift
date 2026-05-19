@@ -167,10 +167,12 @@ struct HomeView: View {
     private func topBarButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(SmoothieColor.textPrimary)
-                .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
-                .contentShape(Rectangle())
+                .frame(width: 36, height: 36)
+                .background(SmoothieColor.bgCard, in: .circle)
+                .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
     }

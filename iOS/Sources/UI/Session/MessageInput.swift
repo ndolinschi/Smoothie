@@ -54,7 +54,6 @@ struct MessageInput: View {
             if voice.isListening {
                 voiceComposerRow
             } else {
-                projectRow
                 textField
                 actionsRow
             }
@@ -151,25 +150,6 @@ struct MessageInput: View {
 
     // MARK: - Rows
 
-    private var projectRow: some View {
-        HStack(spacing: 8) {
-            Button {
-                showingAttach = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-                    .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
-                    .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            RepoChip(projectPath: session.projectPath, isGit: true)
-            Spacer(minLength: 0)
-        }
-    }
-
     private var textField: some View {
         TextField(
             isFreshSession ? "Code" : "Add feedback…",
@@ -190,7 +170,19 @@ struct MessageInput: View {
     }
 
     private var actionsRow: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
+            Button {
+                showingAttach = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SmoothieColor.textPrimary)
+                    .frame(width: 26, height: 26)
+                    .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
             ModeChip(mode: session.mode) {
                 onTapMode()
             }

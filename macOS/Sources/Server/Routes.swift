@@ -124,6 +124,19 @@ enum Routes {
             return jsonResponse("{\"terminated\":\(terminated)}")
         }
 
+        group.post("/sessions/:id/abort") { _, context -> Response in
+            guard let id = context.parameters.get("id") else {
+                return errorResponse(.badRequest, "missing id")
+            }
+            let ok: Bool = await Task { @MainActor in
+                guard let host = handle.processes.host(forSessionId: id) else { return false }
+                await host.abort()
+                return true
+            }.value
+            if !ok { return errorResponse(.notFound, "session not found") }
+            return jsonResponse("{\"aborted\":true}")
+        }
+
         group.post("/sessions/:id/message") { request, context -> Response in
             guard let id = context.parameters.get("id") else {
                 return errorResponse(.badRequest, "missing id")

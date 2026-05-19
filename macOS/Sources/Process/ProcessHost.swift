@@ -96,6 +96,15 @@ final class ProcessHost: SessionHost {
         }
     }
 
+    /// Try to interrupt the current turn without killing the session.
+    /// Claude Code handles SIGINT by stopping the active generation but
+    /// keeping the stream-json loop alive, so subsequent writes still
+    /// reach the same process.
+    func abort() async {
+        guard process.isRunning else { return }
+        kill(process.processIdentifier, SIGINT)
+    }
+
     // MARK: - Internals
 
     private func handleStdout(_ data: Data) async {

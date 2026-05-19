@@ -9,8 +9,9 @@ import Shared
 ///    to capture the bound port.
 /// 3. Creates an OpenCode session via `POST /session` and subscribes to
 ///    `/global/event` over SSE for that session's updates.
-/// 4. `write(_:)` POSTs `/session/{id}/message` with a `parts:[{type:"text",text:...}]`
-///    body and waits for the SSE stream to surface assistant events.
+/// 4. `write(_:)` POSTs `/session/{id}/prompt_async` with a
+///    `parts:[{type:"text",text:...}]` body. The response returns 200
+///    immediately; assistant output streams in via the SSE feed.
 /// 5. `terminate()` aborts the active turn and tears down the child process.
 @MainActor
 final class OpenCodeServeHost: NSObject, SessionHost {
@@ -31,9 +32,15 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     private var sseTask: URLSessionDataTask?
     private var sseLineBuffer = ""
 
-    /// Tracks the cumulative assistant text per messageID so we can emit
-    /// incremental MESSAGE events as the response streams in.
-    private var emittedLength: [String: Int] = [:]
+    /// Buffered text content per message part. Some opencode versions emit
+    /// per-token deltas (`properties.delta`) and others emit a cumulative
+    /// `part.text` snapshot — we handle both, then flush each part as a
+    /// single MESSAGE event on `session.idle`.
+    private var textBuffers: [String: String] = [:]
+    /// Tool / file parts we've already emitted, keyed by `part.id`, so
+    /// repeated `message.part.updated` events for the same tool call don't
+    /// produce duplicate TOOL_USE rows.
+    private var emittedToolParts: Set<String> = []
 
     var isRunning: Bool { process?.isRunning ?? false }
 
@@ -84,7 +91,7 @@ final class OpenCodeServeHost: NSObject, SessionHost {
             pendingWrites.append(content)
             return
         }
-        try await postMessage(port: port, sessionID: id, content: content)
+        try await postPrompt(port: port, sessionID: id, content: content)
     }
 
     func terminate() {
@@ -106,6 +113,15 @@ final class OpenCodeServeHost: NSObject, SessionHost {
                 kill(proc.processIdentifier, SIGKILL)
             }
         }
+    }
+
+    /// Abort just the in-flight turn — opencode keeps its server up and the
+    /// session record. The next `write(_:)` re-uses the same session id.
+    func abort() async {
+        guard let port, let id = ocSessionId else { return }
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(id)/abort")!)
+        req.httpMethod = "POST"
+        _ = try? await URLSession.shared.data(for: req)
     }
 
     // MARK: - Log parsing
@@ -130,9 +146,8 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     private func connectOnceReady() async {
         guard let port else { return }
-        // Wait a moment for the server's HTTP routes to fully register
-        // after the listening log line — opencode logs the port before
-        // routes are bound on some versions.
+        // Wait a moment for the server's HTTP routes to register after the
+        // listening log line.
         try? await Task.sleep(for: .milliseconds(150))
 
         // Create an OpenCode session.
@@ -157,16 +172,21 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         let queued = pendingWrites
         pendingWrites.removeAll()
         for content in queued {
-            try? await postMessage(port: port, sessionID: ocSessionId!, content: content)
+            try? await postPrompt(port: port, sessionID: ocSessionId!, content: content)
         }
     }
 
-    private func postMessage(port: Int, sessionID: String, content: String) async throws {
+    /// `/session/:id/prompt_async` is the headless equivalent of opencode's
+    /// chat-window send — it queues the prompt and returns 200 immediately,
+    /// streaming the assistant's response via `/global/event`. The legacy
+    /// `/message` endpoint is synchronous and blocks until completion, which
+    /// holds the iOS request open for the full turn and times out.
+    private func postPrompt(port: Int, sessionID: String, content: String) async throws {
         let body: [String: Any] = [
             "parts": [["type": "text", "text": content]]
         ]
         let data = try JSONSerialization.data(withJSONObject: body)
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(sessionID)/message")!)
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(sessionID)/prompt_async")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = data
@@ -192,63 +212,90 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     }
 
     private func handleSSEPayload(_ json: [String: Any]) async {
-        // OpenCode SSE frames look like:
-        //   data: { "payload": { "type": "message.updated", "properties": { ... } } }
         guard let payload = json["payload"] as? [String: Any],
               let type = payload["type"] as? String,
               let properties = payload["properties"] as? [String: Any] else { return }
 
+        // Filter to our session id whenever the event carries one.
+        let propSessionID = properties["sessionID"] as? String
+            ?? (properties["part"] as? [String: Any])?["sessionID"] as? String
+        if let propSessionID, let ocSessionId, propSessionID != ocSessionId { return }
+
         switch type {
-        case "message.updated":
-            await handleMessageUpdated(properties)
-        case "message.removed":
-            if let messageID = properties["messageID"] as? String {
-                emittedLength.removeValue(forKey: messageID)
+        case "message.part.delta":
+            handlePartDelta(properties)
+        case "message.part.updated":
+            handlePartUpdated(properties)
+        case "session.idle":
+            await flushBufferedTextParts()
+            try? await session.injectEvent(event: makeEvent(.waiting, content: ""))
+        case "session.error":
+            let err = properties["error"] as? [String: Any]
+            let msg = (err?["message"] as? String) ?? "opencode error"
+            try? await session.markError(message: msg)
+        default:
+            break
+        }
+    }
+
+    private func handlePartDelta(_ properties: [String: Any]) {
+        guard let partID = properties["partID"] as? String,
+              let delta = properties["delta"] as? String,
+              !delta.isEmpty else { return }
+        let field = (properties["field"] as? String) ?? "text"
+        guard field == "text" else { return }   // ignore reasoning deltas for now
+        textBuffers[partID, default: ""].append(delta)
+    }
+
+    private func handlePartUpdated(_ properties: [String: Any]) {
+        guard let part = properties["part"] as? [String: Any],
+              let partID = part["id"] as? String,
+              let partType = part["type"] as? String else { return }
+
+        switch partType {
+        case "text":
+            // Cumulative snapshot if delta wasn't already supplied.
+            if let snapshot = part["text"] as? String, !snapshot.isEmpty {
+                textBuffers[partID] = snapshot
+            } else if let delta = properties["delta"] as? String, !delta.isEmpty {
+                textBuffers[partID, default: ""].append(delta)
+            }
+        case "tool":
+            if emittedToolParts.contains(partID) { return }
+            emittedToolParts.insert(partID)
+            let toolName = (part["tool"] as? String)
+                ?? ((part["state"] as? [String: Any])?["title"] as? String)
+                ?? "tool"
+            Task { @MainActor in
+                try? await session.injectEvent(event: makeEvent(.toolUse, content: toolName))
+            }
+        case "file":
+            if emittedToolParts.contains(partID) { return }
+            emittedToolParts.insert(partID)
+            let path = (part["path"] as? String) ?? "file"
+            Task { @MainActor in
+                try? await session.injectEvent(event: makeEvent(.toolUse, content: "Read \(path)"))
             }
         default:
             break
         }
     }
 
-    private func handleMessageUpdated(_ properties: [String: Any]) async {
-        guard let info = properties["info"] as? [String: Any] else { return }
-        // Filter to our own opencode session id.
-        if let sessionID = info["sessionID"] as? String, sessionID != ocSessionId { return }
-        guard let messageID = info["id"] as? String else { return }
-        guard let role = info["role"] as? String, role == "assistant" else { return }
-
-        // Surface an error if the assistant message ended with one.
-        if let errorBlob = info["error"] as? [String: Any] {
-            let data = errorBlob["data"] as? [String: Any]
-            let msg = (data?["message"] as? String) ?? (errorBlob["name"] as? String) ?? "opencode error"
-            try? await session.markError(message: msg)
-            return
+    private func flushBufferedTextParts() async {
+        for (_, text) in textBuffers where !text.isEmpty {
+            try? await session.injectEvent(event: makeEvent(.message, content: text))
         }
-
-        // OpenCode hasn't surfaced a `parts` field directly here; it lives on
-        // a separate `part.updated` event in some builds. For v0 we don't
-        // accumulate text — we just rely on `time.completed` to mark the
-        // turn as ready for the user.
-        if let time = info["time"] as? [String: Any], time["completed"] is NSNumber {
-            let event = SmoothieEvent(
-                type: EventType.waiting,
-                content: "",
-                metadata: nil,
-                timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
-            )
-            try? await session.injectEvent(event: event)
-            emittedLength.removeValue(forKey: messageID)
-        }
+        textBuffers.removeAll()
+        emittedToolParts.removeAll()
     }
 
-    /// Find the textual content the assistant has produced so far in the
-    /// current message — concatenate every `text` part if present.
-    private func extractText(from info: [String: Any]) -> String {
-        guard let parts = info["parts"] as? [[String: Any]] else { return "" }
-        return parts.compactMap { p -> String? in
-            guard (p["type"] as? String) == "text" else { return nil }
-            return p["text"] as? String
-        }.joined()
+    private func makeEvent(_ type: EventType, content: String) -> SmoothieEvent {
+        SmoothieEvent(
+            type: type,
+            content: content,
+            metadata: nil,
+            timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
+        )
     }
 
     // MARK: - Termination
@@ -274,7 +321,6 @@ extension OpenCodeServeHost: URLSessionDataDelegate {
         Task { @MainActor in
             guard let me = weakSelfRef.value else { return }
             me.sseLineBuffer.append(chunk)
-            // SSE messages are separated by an empty line.
             while let range = me.sseLineBuffer.range(of: "\n\n") {
                 let frame = String(me.sseLineBuffer[..<range.lowerBound])
                 me.sseLineBuffer.removeSubrange(..<range.upperBound)
@@ -307,9 +353,6 @@ private final class WeakOCBox {
     weak var value: OpenCodeServeHost?
     init(_ value: OpenCodeServeHost) { self.value = value }
 
-    // The SSE delegate runs on a non-isolated queue and needs to construct
-    // a weak reference without hopping. We do the unsafe construction here
-    // and immediately bounce back to the MainActor before reading `.value`.
     nonisolated init(unsafeOwner: OpenCodeServeHost) {
         self.value = unsafeOwner
     }

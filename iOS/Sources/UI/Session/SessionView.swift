@@ -135,8 +135,6 @@ struct SessionView: View {
     @State private var features: ProviderFeaturesWire?
     @State private var allAdapters: [AdapterInfoWire] = []
     @State private var confirmKill = false
-    @State private var switching: SwitchTarget?
-    @State private var restarting = false
     @State private var switchError: String?
     @State private var lastNotifiedState: SessionStateWire?
     @State private var showingModeSheet = false
@@ -182,22 +180,16 @@ struct SessionView: View {
     var body: some View {
         ZStack {
             SmoothieColor.bgPrimary.ignoresSafeArea()
-            if restarting {
-                VStack(spacing: 12) {
-                    ProgressView().tint(SmoothieColor.textSecondary)
-                    Text("Restarting session…")
-                        .font(.system(size: 13))
-                        .foregroundStyle(SmoothieColor.textSecondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let store {
+            if let store {
                 VStack(spacing: 8) {
                     AgentStream(events: store.events)
                     if !store.events.isEmpty {
                         ActionChipsRow(
                             events: store.events,
+                            state: store.state,
                             onPlanTap: { showingModeSheet = true },
-                            onDiffTap: { showingDiffSheet = true }
+                            onDiffTap: { showingDiffSheet = true },
+                            onAbortTap: { Task { await abortTurn() } }
                         )
                     }
                     MessageInput(
@@ -209,10 +201,10 @@ struct SessionView: View {
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed)
                         },
-                        onSwitchModel: { switching = .model($0) },
-                        onSwitchEffort: { switching = .effort($0) },
+                        onSwitchModel: { m in Task { await applyRestart(.model(m)) } },
+                        onSwitchEffort: { e in Task { await applyRestart(.effort(e)) } },
                         onSwitchMode: { applyMode($0) },
-                        onSwitchProvider: { switching = .provider($0) },
+                        onSwitchProvider: { c in Task { await applyRestart(.provider(c)) } },
                         onTapMode: { showingModeSheet = true }
                     )
                 }
@@ -244,11 +236,6 @@ struct SessionView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        switching = .model(currentSession.model ?? "")
-                    } label: {
-                        Label("Switch model…", systemImage: "cube")
-                    }
                     Button(role: .destructive) {
                         confirmKill = true
                     } label: {
@@ -256,10 +243,12 @@ struct SessionView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(SmoothieColor.textPrimary)
-                        .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
-                        .contentShape(Rectangle())
+                        .frame(width: 36, height: 36)
+                        .background(SmoothieColor.bgCard, in: .circle)
+                        .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+                        .contentShape(Circle())
                 }
             }
         }
@@ -303,22 +292,7 @@ struct SessionView: View {
         } message: {
             Text("This terminates the agent process on your Mac.")
         }
-        .confirmationDialog(
-            "Restart session?",
-            isPresented: Binding(
-                get: { switching != nil },
-                set: { if !$0 { switching = nil } }
-            ),
-            presenting: switching
-        ) { target in
-            Button("Restart with \(target.label)", role: .destructive) {
-                Task { await restart(with: target) }
-            }
-            Button("Cancel", role: .cancel) { switching = nil }
-        } message: { target in
-            Text("Changing \(target.label) starts a fresh \(currentSession.cli.displayName) process in the same project. The current conversation will be terminated.")
-        }
-        .alert("Couldn't restart", isPresented: Binding(
+        .alert("Couldn't switch", isPresented: Binding(
             get: { switchError != nil },
             set: { if !$0 { switchError = nil } }
         )) {
@@ -391,16 +365,21 @@ struct SessionView: View {
         dismiss()
     }
 
-    // MARK: - Restart-on-change
-
-    private func restart(with target: SwitchTarget) async {
+    private func abortTurn() async {
         let api = APIClient(store: pairing)
-        switching = nil
-        restarting = true
-        store?.disconnect()
-        store = nil
+        _ = try? await api.abortSession(sessionId: currentSession.id)
+    }
 
-        _ = try? await api.killSession(sessionId: currentSession.id)
+    // MARK: - Silent restart for setting changes
+
+    /// Apply a model / effort / provider switch with the same silent UX as
+    /// `applyMode`: no confirmation dialog, no full-screen spinner. The old
+    /// process is terminated in the background while we create a fresh
+    /// session with the new args; the composer chip updates immediately so
+    /// the change feels instantaneous. Events from the old session stay
+    /// visible until the new SSE stream takes over.
+    private func applyRestart(_ target: SwitchTarget) async {
+        let api = APIClient(store: pairing)
 
         let cli: CLIWire = {
             if case .provider(let c) = target { return c }
@@ -409,7 +388,6 @@ struct SessionView: View {
         let providerChanged = cli != currentSession.cli
         let model: String? = {
             if case .model(let m) = target { return m }
-            // Drop incompatible model when switching providers
             return providerChanged ? nil : currentSession.model
         }()
         let effort: String? = {
@@ -421,6 +399,10 @@ struct SessionView: View {
             return providerChanged ? nil : currentSession.mode
         }()
 
+        // Kill the old process in the background — we don't wait.
+        let oldId = currentSession.id
+        Task.detached { _ = try? await api.killSession(sessionId: oldId) }
+
         do {
             let req = CreateSessionRequestWire(
                 projectPath: currentSession.projectPath,
@@ -430,19 +412,16 @@ struct SessionView: View {
                 mode: mode
             )
             let new = try await api.createSession(req)
+            // Atomically swap. Until this point the user keeps seeing the
+            // previous session's events; the new SSE picks up immediately.
+            store?.disconnect()
             currentSession = new
             let s = SessionLiveStore(session: new)
             s.connect(api: api)
             store = s
-            // Refetch features for the (possibly new) provider so the
-            // composer rebuilds its sections.
             await loadFeatures()
         } catch {
             switchError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            // Best-effort: revert by reconnecting to the same descriptor
-            // (the underlying process is dead; user can dismiss and start over)
-            dismiss()
         }
-        restarting = false
     }
 }

@@ -124,8 +124,7 @@ struct NewSessionView: View {
     private func cliRow(_ a: AdapterInfoWire) -> some View {
         let isSelected = selectedCLI == a.cli
         let installed = a.installed
-        let supported = isSupported(a.cli)
-        let selectable = installed && supported
+        let selectable = installed && isSupported(a.cli)
         return Button {
             if selectable { selectedCLI = a.cli }
         } label: {
@@ -134,20 +133,10 @@ struct NewSessionView: View {
                     .opacity(selectable ? 1 : 0.35)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(a.cli.displayName)
-                            .foregroundStyle(selectable ? .white : .white.opacity(0.4))
-                            .font(.system(size: 15, weight: .medium))
-                        if !supported {
-                            Text("v1.5")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(SmoothieColor.accent)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(SmoothieColor.accentSoft, in: .capsule)
-                        }
-                    }
-                    Text(rowSubtitle(installed: installed, supported: supported, version: a.version))
+                    Text(a.cli.displayName)
+                        .foregroundStyle(selectable ? .white : .white.opacity(0.4))
+                        .font(.system(size: 15, weight: .medium))
+                    Text(rowSubtitle(installed: installed, version: a.version))
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.4))
                 }
@@ -164,9 +153,8 @@ struct NewSessionView: View {
         .disabled(!selectable)
     }
 
-    private func rowSubtitle(installed: Bool, supported: Bool, version: String?) -> String {
+    private func rowSubtitle(installed: Bool, version: String?) -> String {
         if !installed { return "not installed" }
-        if !supported { return "multi-turn host lands in v1.5" }
         return version.map { "v\($0)" } ?? "ready"
     }
 

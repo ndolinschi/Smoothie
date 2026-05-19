@@ -111,6 +111,14 @@ final class GeminiOneshotHost: SessionHost {
         }
     }
 
+    /// Abort the in-flight one-shot spawn. The Smoothie session is kept;
+    /// the next `write(_:)` will respawn `gemini -p` with `--resume` so the
+    /// agent picks up where it left off.
+    func abort() async {
+        guard let proc = current, proc.isRunning else { return }
+        proc.terminate()
+    }
+
     // MARK: - Internals
 
     private func handleStdout(_ data: Data) async {

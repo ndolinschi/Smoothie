@@ -28,11 +28,11 @@ import smoothie.util.nowEpochMillis
  *    repeated until the turn ends
  * - `{"type":"result","status":"success",…}` at end of turn
  *
- * v1 ships Gemini as **one-shot per session** — the gemini process exits
- * after each turn. Multi-turn `--resume <id>` continuation lands in v1.5
- * once the macOS host knows how to re-spawn per send. Today: a session
- * sends one message and reaches WAITING; for a follow-up the user creates
- * a new session.
+ * Gemini's CLI is one-shot per process — every turn spawns a fresh
+ * `gemini -p "<text>"` invocation on the Swift side via
+ * `GeminiOneshotHost`. The first `init` event carries a `session_id` we
+ * capture in [lastSessionId]; the host threads it back as `--resume <id>`
+ * on the next spawn so the agent keeps memory across turns.
  */
 class GeminiAdapter : AdapterParser {
     override val cli: CLIType = CLIType.GEMINI
