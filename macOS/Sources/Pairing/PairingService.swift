@@ -109,15 +109,25 @@ final class PairingService {
             } catch { }
         }
 
-        // Path B — scan local network interfaces. The Mac App Store build of
-        // Tailscale ships only the GUI app (no `tailscale` CLI binary), but
-        // it still assigns an IPv4 in the CGNAT range 100.64.0.0/10 to a
-        // utun* interface. Pick that up directly.
-        if let cgnat = tailscaleAddressFromInterfaces() {
+        // Path B — Tailscale's macOS GUI build (App Store) ships no CLI
+        // binary, but it does install /Applications/Tailscale.app. Only run
+        // the CGNAT interface scan when the GUI is actually present, so we
+        // don't misattribute another VPN client's 100.64.0.0/10 utun (NordVPN
+        // and a few others sit in the same RFC 6598 range) as Tailscale.
+        if isTailscaleGUIInstalled(), let cgnat = tailscaleAddressFromInterfaces() {
             return (cgnat, true)
         }
 
         return ("127.0.0.1", false)
+    }
+
+    private static func isTailscaleGUIInstalled() -> Bool {
+        let fm = FileManager.default
+        let candidates = [
+            "/Applications/Tailscale.app",
+            "\(NSHomeDirectory())/Applications/Tailscale.app",
+        ]
+        return candidates.contains { fm.fileExists(atPath: $0) }
     }
 
     /// Enumerate IPv4 interfaces and return the first one whose address sits
