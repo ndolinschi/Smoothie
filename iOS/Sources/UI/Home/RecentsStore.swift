@@ -1,43 +1,73 @@
 import Foundation
 import Observation
 
-/// UserDefaults-backed list of pinned + recently-used project paths. Mirrors
-/// the "Recents" section in Cursor's "Run Cursor anywhere…" picker. Capped at
-/// 20 entries.
+/// UserDefaults-backed timestamped path map. Each path is stored with the
+/// `Date` it was last touched so the picker can render "Opened 2h ago"
+/// sublabels and HomeView can sort by recency. Capped at 20 entries; oldest
+/// rows are evicted first when the cap is exceeded.
+///
+/// Migration: a prior version of the app persisted a plain `[String]` under
+/// `smoothie.recents`. We read that on first launch, stamp each entry with
+/// `now`, and persist into the new key.
 @MainActor
 @Observable
 final class RecentsStore {
-    private static let key = "smoothie.recents"
+    private static let key = "smoothie.recents.v2"
+    private static let legacyKey = "smoothie.recents"
     private static let cap = 20
 
-    private(set) var paths: [String]
+    private var timestamps: [String: Date]
 
-    init() {
-        if let stored = UserDefaults.standard.array(forKey: Self.key) as? [String] {
-            self.paths = stored
-        } else {
-            self.paths = []
+    /// Paths sorted by most-recent first. Mirrors the prior `paths` API so
+    /// HomeView / FolderPickerSheet keep compiling.
+    var paths: [String] {
+        timestamps.keys.sorted { a, b in
+            (timestamps[a] ?? .distantPast) > (timestamps[b] ?? .distantPast)
         }
     }
 
+    init() {
+        if let data = UserDefaults.standard.data(forKey: Self.key),
+           let decoded = try? JSONDecoder().decode([String: Date].self, from: data) {
+            self.timestamps = decoded
+            return
+        }
+        if let legacy = UserDefaults.standard.array(forKey: Self.legacyKey) as? [String] {
+            let now = Date()
+            self.timestamps = Dictionary(uniqueKeysWithValues: legacy.map { ($0, now) })
+            UserDefaults.standard.removeObject(forKey: Self.legacyKey)
+            persistInline()
+            return
+        }
+        self.timestamps = [:]
+    }
+
     func touch(_ path: String) {
-        paths.removeAll { $0 == path }
-        paths.insert(path, at: 0)
-        if paths.count > Self.cap { paths.removeLast(paths.count - Self.cap) }
-        persist()
+        timestamps[path] = Date()
+        if timestamps.count > Self.cap {
+            let oldest = timestamps.sorted { ($0.value) < ($1.value) }
+            for (k, _) in oldest.prefix(timestamps.count - Self.cap) {
+                timestamps.removeValue(forKey: k)
+            }
+        }
+        persistInline()
     }
 
     func remove(_ path: String) {
-        paths.removeAll { $0 == path }
-        persist()
+        timestamps.removeValue(forKey: path)
+        persistInline()
     }
 
     func clear() {
-        paths.removeAll()
-        persist()
+        timestamps.removeAll()
+        persistInline()
     }
 
-    private func persist() {
-        UserDefaults.standard.set(paths, forKey: Self.key)
+    func lastOpened(_ path: String) -> Date? { timestamps[path] }
+
+    private func persistInline() {
+        if let data = try? JSONEncoder().encode(timestamps) {
+            UserDefaults.standard.set(data, forKey: Self.key)
+        }
     }
 }

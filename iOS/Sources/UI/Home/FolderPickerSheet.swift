@@ -10,7 +10,13 @@ struct FolderPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(PairingStore.self) private var pairing
     @Environment(RecentsStore.self) private var recents
+    let activeProjects: [String]
     let onPick: (String) -> Void
+
+    init(activeProjects: [String] = [], onPick: @escaping (String) -> Void) {
+        self.activeProjects = activeProjects
+        self.onPick = onPick
+    }
 
     @State private var mode: Mode = .root
     @State private var query: String = ""
@@ -167,51 +173,15 @@ struct FolderPickerSheet: View {
     private func recentRow(path: String) -> some View {
         let isHome = path == NSHomeDirectory()
         let name = (path as NSString).lastPathComponent
-        return HStack(spacing: 0) {
-            // Body: tap to drill into the folder
-            Button {
-                Task { await navigate(to: path) }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: isHome ? "house" : "folder")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .frame(width: 22)
-                    Text(isHome ? "Home" : name)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(path)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
-                .padding(.leading, 12)
-                .padding(.vertical, 10)
-                .padding(.trailing, 4)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            // Trailing "Use" pill: tap to commit this folder directly
-            Button {
-                choose(path)
-            } label: {
-                Text("Use")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.white, in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 8)
-        }
-        .glassEffect(in: .rect(cornerRadius: 12))
+        return splitRow(
+            icon: isHome ? "house" : "folder",
+            iconAlpha: 0.6,
+            title: isHome ? "Home" : name,
+            sublabel: sublabel(for: path, isGit: nil),
+            isActive: activeProjects.contains(path),
+            onCommit: { choose(path) },
+            onDrill: { Task { await navigate(to: path) } }
+        )
         .contextMenu {
             Button(role: .destructive) {
                 recents.remove(path)
@@ -222,36 +192,83 @@ struct FolderPickerSheet: View {
     }
 
     private func projectRow(_ project: ProjectWire) -> some View {
-        // Tap = drill in (so users can reach subfolders); the "Use this folder"
-        // bar in browse mode commits.
-        Button {
-            Task { await navigate(to: project.path) }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: project.isGit ? "point.3.connected.trianglepath.dotted" : "folder")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(project.isGit ? 0.8 : 0.55))
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(project.name)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
-                    Text(project.path)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
-                        .lineLimit(1)
-                        .truncationMode(.head)
+        splitRow(
+            icon: project.isGit ? "point.3.connected.trianglepath.dotted" : "folder",
+            iconAlpha: project.isGit ? 0.85 : 0.55,
+            title: project.name,
+            sublabel: sublabel(for: project.path, isGit: project.isGit),
+            isActive: activeProjects.contains(project.path),
+            onCommit: { choose(project.path) },
+            onDrill: { Task { await navigate(to: project.path) } }
+        )
+    }
+
+    /// Two-tap-target glass row: body commits the folder, trailing chevron
+    /// drills in. Mirrors the reference's repository-chooser layout.
+    private func splitRow(
+        icon: String,
+        iconAlpha: Double,
+        title: String,
+        sublabel: String,
+        isActive: Bool,
+        onCommit: @escaping () -> Void,
+        onDrill: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 0) {
+            Button(action: onCommit) {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(iconAlpha))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(sublabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    if isActive {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
                 }
-                Spacer()
+                .padding(.leading, 12)
+                .padding(.vertical, 10)
+                .padding(.trailing, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 0.5, height: 28)
+
+            Button(action: onDrill) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: 40, height: 44)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .glassEffect(in: .rect(cornerRadius: 12))
+    }
+
+    /// "Opened 2h ago" if the path is in Recents; else "git" / "no-git" derived
+    /// from the wire metadata when available; else the absolute path truncated.
+    private func sublabel(for path: String, isGit: Bool?) -> String {
+        if let date = recents.lastOpened(path) {
+            return "Opened " + date.relative
+        }
+        if let isGit { return isGit ? "git" : "no-git" }
+        return path
     }
 
     private var browseMacRow: some View {

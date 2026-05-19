@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 @MainActor
 @Observable
@@ -40,6 +41,7 @@ final class SessionLiveStore {
         if events.count > 2000 {
             events.removeFirst(events.count - 2000)
         }
+        let priorState = state
         switch event.type {
         case .waiting:      state = .waiting
         case .done:         state = .done
@@ -48,6 +50,24 @@ final class SessionLiveStore {
         case .message, .thinking, .toolUse, .toolResult, .fileEdit:
             state = .thinking
         }
+        if state != priorState {
+            publishWidgetSnapshot()
+        }
+    }
+
+    /// Mirror the most-recent session state into the App Group container for
+    /// the Lock Screen / Home Screen widget. Called only when state actually
+    /// transitions, so disk writes stay infrequent.
+    private func publishWidgetSnapshot() {
+        let snapshot = WidgetSnapshot(
+            sessionId: session.id,
+            projectName: session.projectName,
+            cli: session.cli.snapshotCLI,
+            state: state.snapshotState,
+            lastEventAt: .now
+        )
+        WidgetSnapshotStore.write(snapshot)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func update(connectionState: SSEClient.State) {
@@ -123,6 +143,7 @@ struct SessionView: View {
                         session: currentSession,
                         features: features,
                         allAdapters: allAdapters,
+                        isFreshSession: store.events.isEmpty,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed)

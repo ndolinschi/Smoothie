@@ -54,8 +54,11 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Resources/SmoothieiOS.entitlements
         FRAMEWORK_SEARCH_PATHS: $(inherited) "$(BUILT_PRODUCTS_DIR)"
         OTHER_LDFLAGS: $(inherited) -framework Shared
+    dependencies:
+      - target: SmoothieWidgetExt
     preBuildScripts:
       - script: |
           cd "$SRCROOT/.."
@@ -65,3 +68,26 @@ targets:
           - $(SRCROOT)/../shared/build.gradle.kts
         outputFiles:
           - $(BUILT_PRODUCTS_DIR)/Shared.framework
+
+  SmoothieWidgetExt:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SmoothieWidget
+      - path: Sources/Widget
+    info:
+      path: SmoothieWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Smoothie
+        CFBundleShortVersionString: "0.2.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.smoothie.ios.widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Resources/SmoothieWidget.entitlements
+        SKIP_INSTALL: "YES"

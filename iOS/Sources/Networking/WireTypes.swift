@@ -51,6 +51,15 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
 enum SessionStateWire: String, Codable, Sendable {
     case starting, thinking, waiting, done, error
     case limitReached = "limit_reached"
+
+    /// Treated as completed in the HomeView filter — the agent isn't going to
+    /// produce more events without a manual restart.
+    var isCompleted: Bool {
+        switch self {
+        case .done, .error, .limitReached: return true
+        case .starting, .thinking, .waiting: return false
+        }
+    }
 }
 
 enum EventTypeWire: String, Codable, Sendable {
@@ -204,5 +213,30 @@ struct AnyCodable: Codable, Sendable, Hashable {
     var stringValue: String? {
         if case .string(let s) = value { return s }
         return nil
+    }
+}
+
+// MARK: - Widget snapshot bridges
+
+extension CLIWire {
+    var snapshotCLI: WidgetSnapshot.WireCLI {
+        switch self {
+        case .claudeCode: return .claudeCode
+        case .gemini:     return .gemini
+        case .openCode:   return .openCode
+        }
+    }
+}
+
+extension SessionStateWire {
+    var snapshotState: WidgetSnapshot.WireState {
+        switch self {
+        case .starting:     return .starting
+        case .thinking:     return .thinking
+        case .waiting:      return .waiting
+        case .done:         return .done
+        case .error:        return .error
+        case .limitReached: return .limitReached
+        }
     }
 }

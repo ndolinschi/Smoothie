@@ -10,6 +10,9 @@ struct MessageInput: View {
     /// Every adapter info row from /adapters — enables in-chat provider
     /// switching ("open in OpenCode") via the model chip menu.
     let allAdapters: [AdapterInfoWire]
+    /// True while the session has no events yet — surfaces the starter
+    /// suggestion bar. SessionView derives this from `store.events.isEmpty`.
+    let isFreshSession: Bool
     let onSend: (String, [StagedAttachment]) async -> Void
     let onSwitchModel: (String) -> Void
     let onSwitchEffort: (String) -> Void
@@ -28,12 +31,22 @@ struct MessageInput: View {
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool { !sending && (!trimmed.isEmpty || !attachments.isEmpty) }
+    private var showSuggestions: Bool {
+        isFreshSession && trimmed.isEmpty && attachments.isEmpty
+    }
 
     var body: some View {
         VStack(spacing: 8) {
+            if showSuggestions {
+                SuggestionsBar(session: session) { snippet in
+                    insertAtCursor(snippet)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             chipsRow
             composerRow
         }
+        .animation(.easeOut(duration: 0.18), value: showSuggestions)
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 12)
@@ -192,32 +205,78 @@ struct MessageInput: View {
         .glassEffect(in: .capsule)
     }
 
+    @ViewBuilder
     private var composerRow: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            ComposerMenu(
-                session: session,
-                features: features,
-                onInsertSlash: { cmd in insertAtCursor(cmd) },
-                onAttachFile: { showingImporter = true },
-                onMentionFile: { showingMention = true },
-                onRestartWithModel: { onSwitchModel($0) },
-                onRestartWithEffort: { onSwitchEffort($0) },
-                onRestartWithMode: { onSwitchMode($0) }
-            )
+        if voice.isListening {
+            voiceComposerRow
+        } else {
+            HStack(alignment: .bottom, spacing: 8) {
+                ComposerMenu(
+                    session: session,
+                    features: features,
+                    onInsertSlash: { cmd in insertAtCursor(cmd) },
+                    onAttachFile: { showingImporter = true },
+                    onMentionFile: { showingMention = true },
+                    onRestartWithModel: { onSwitchModel($0) },
+                    onRestartWithEffort: { onSwitchEffort($0) },
+                    onRestartWithMode: { onSwitchMode($0) }
+                )
 
-            TextField(
-                "Plan, Build, / for commands, @ for context",
-                text: $text,
-                axis: .vertical
-            )
-            .focused($focused)
-            .lineLimit(1...5)
+                TextField(
+                    "Plan, Build, / for commands, @ for context",
+                    text: $text,
+                    axis: .vertical
+                )
+                .focused($focused)
+                .lineLimit(1...5)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .foregroundStyle(.white)
+                .glassEffect(in: .rect(cornerRadius: 14))
+
+                trailingActionButton
+            }
+        }
+    }
+
+    /// Full-width glass capsule shown in place of the standard composer while
+    /// dictation is running. Sparkle icon on the left, waveform driven by
+    /// `voice.level` in the centre, stop button on the right.
+    private var voiceComposerRow: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 28, height: 28)
+
+                VoiceWaveform(level: voice.level)
+                    .frame(height: 28)
+                    .frame(maxWidth: .infinity)
+
+                Button {
+                    voice.stop()
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 36, height: 36)
+                        .background(.white, in: .circle)
+                }
+                .buttonStyle(.plain)
+            }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .foregroundStyle(.white)
-            .glassEffect(in: .rect(cornerRadius: 14))
+            .padding(.vertical, 8)
+            .glassEffect(in: .rect(cornerRadius: 22))
 
-            trailingActionButton
+            if !voice.draft.isEmpty {
+                Text(voice.draft)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .padding(.horizontal, 14)
+            }
         }
     }
 

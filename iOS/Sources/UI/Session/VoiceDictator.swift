@@ -17,6 +17,9 @@ final class VoiceDictator {
 
     private(set) var state: State = .idle
     private(set) var draft: String = ""
+    /// Most recent buffer's RMS, mapped to 0...1. Drives the composer
+    /// waveform animation while listening.
+    private(set) var level: Float = 0
 
     private let recognizer: SFSpeechRecognizer?
     private let audioEngine = AVAudioEngine()
@@ -59,6 +62,8 @@ final class VoiceDictator {
             inputNode.removeTap(onBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
                 self?.request?.append(buffer)
+                let mapped = Self.rmsLevel(of: buffer)
+                Task { @MainActor [weak self] in self?.level = mapped }
             }
             audioEngine.prepare()
             try audioEngine.start()
@@ -94,7 +99,24 @@ final class VoiceDictator {
         task?.cancel()
         task = nil
         request = nil
+        level = 0
         state = .idle
+    }
+
+    /// Compute the per-buffer RMS amplitude, mapped into 0...1 with a gain that
+    /// makes typical speech visibly drive the waveform. Cheap — no allocations.
+    private static func rmsLevel(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData else { return 0 }
+        let frames = Int(buffer.frameLength)
+        guard frames > 0 else { return 0 }
+        let samples = channelData[0]
+        var sumOfSquares: Float = 0
+        for i in 0..<frames {
+            let s = samples[i]
+            sumOfSquares += s * s
+        }
+        let rms = (sumOfSquares / Float(frames)).squareRoot()
+        return min(1, rms.squareRoot() * 4)
     }
 
     private func setupAudioSession() throws {
