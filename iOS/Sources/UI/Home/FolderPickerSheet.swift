@@ -137,7 +137,7 @@ struct FolderPickerSheet: View {
                     }
                 }
                 if !filteredTopProjects.isEmpty {
-                    sectionHeader("Discovered projects")
+                    sectionHeader("Open a folder")
                     ForEach(filteredTopProjects) { project in
                         projectRow(project)
                     }
@@ -167,29 +167,51 @@ struct FolderPickerSheet: View {
     private func recentRow(path: String) -> some View {
         let isHome = path == NSHomeDirectory()
         let name = (path as NSString).lastPathComponent
-        return Button {
-            choose(path)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isHome ? "house" : "folder")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .frame(width: 22)
-                Text(isHome ? "Home" : name)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text(path)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.3))
-                    .lineLimit(1)
-                    .truncationMode(.head)
+        return HStack(spacing: 0) {
+            // Body: tap to drill into the folder
+            Button {
+                Task { await navigate(to: path) }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: isHome ? "house" : "folder")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 22)
+                    Text(isHome ? "Home" : name)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(path)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+                .padding(.leading, 12)
+                .padding(.vertical, 10)
+                .padding(.trailing, 4)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .buttonStyle(.plain)
+
+            // Trailing "Use" pill: tap to commit this folder directly
+            Button {
+                choose(path)
+            } label: {
+                Text("Use")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.white, in: .capsule)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
         }
-        .buttonStyle(.plain)
+        .glassEffect(in: .rect(cornerRadius: 12))
         .contextMenu {
             Button(role: .destructive) {
                 recents.remove(path)
@@ -200,8 +222,10 @@ struct FolderPickerSheet: View {
     }
 
     private func projectRow(_ project: ProjectWire) -> some View {
+        // Tap = drill in (so users can reach subfolders); the "Use this folder"
+        // bar in browse mode commits.
         Button {
-            choose(project.path)
+            Task { await navigate(to: project.path) }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: project.isGit ? "point.3.connected.trianglepath.dotted" : "folder")
@@ -219,6 +243,9 @@ struct FolderPickerSheet: View {
                         .truncationMode(.head)
                 }
                 Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.3))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
