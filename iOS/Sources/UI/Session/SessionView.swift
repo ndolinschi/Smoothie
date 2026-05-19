@@ -140,6 +140,7 @@ struct SessionView: View {
     @State private var switchError: String?
     @State private var lastNotifiedState: SessionStateWire?
     @State private var showingModeSheet = false
+    @State private var showingDiffSheet = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -193,9 +194,11 @@ struct SessionView: View {
                 VStack(spacing: 8) {
                     AgentStream(events: store.events)
                     if !store.events.isEmpty {
-                        ActionChipsRow(events: store.events) {
-                            showingModeSheet = true
-                        }
+                        ActionChipsRow(
+                            events: store.events,
+                            onPlanTap: { showingModeSheet = true },
+                            onDiffTap: { showingDiffSheet = true }
+                        )
                     }
                     MessageInput(
                         session: currentSession,
@@ -268,6 +271,16 @@ struct SessionView: View {
                 onDismiss: { showingModeSheet = false }
             )
             .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+        }
+        .sheet(isPresented: $showingDiffSheet) {
+            DiffSheet(
+                events: store?.events ?? [],
+                onSend: { body in await sendMessage(body) },
+                onDismiss: { showingDiffSheet = false }
+            )
+            .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
         }

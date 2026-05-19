@@ -75,6 +75,13 @@ class ClaudeAdapter : AdapterParser {
             "--verbose",
             "--include-partial-messages",
             "--add-dir", request.projectPath,
+            // Smoothie is a remote-control surface for the user's *own* Mac
+            // — the user has already authenticated via Tailscale + Bearer
+            // and explicitly initiated this session, so a per-edit
+            // confirmation prompt blocks the agent with no UI to resolve it
+            // mobile-side. Plan mode (when picked) still constrains edits
+            // via the system prompt.
+            "--dangerously-skip-permissions",
         )
         request.model?.let { args += listOf("--model", it) }
         request.reasoningEffort?.let { args += listOf("--effort", it) }
