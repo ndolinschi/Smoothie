@@ -43,12 +43,7 @@ struct EventRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .thinking:
             if !event.content.isEmpty {
-                Text(event.content)
-                    .font(.system(size: 13))
-                    .italic()
-                    .foregroundStyle(.white.opacity(0.55))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                thinkingRow
             }
         case .toolUse:
             toolRow(icon: "wrench.adjustable", tint: .white.opacity(0.75))
@@ -82,6 +77,44 @@ struct EventRow: View {
             .padding(12)
             .glassEffect(in: .rect(cornerRadius: 12))
         }
+    }
+
+    /// Collapsed reasoning chip ("thinking ▾"). Tap to reveal the italic
+    /// monologue — hidden by default so Claude's internal stream-of-
+    /// consciousness doesn't dominate the chat. Each thinking event keeps
+    /// its own expansion state.
+    private var thinkingRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("thinking")
+                        .font(.system(size: 11, weight: .semibold))
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .foregroundStyle(SmoothieColor.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(SmoothieColor.bgCard, in: .capsule)
+                .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Text(event.content)
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.55))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 14)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Chip + optional expandable detail for `.toolUse` and `.fileEdit`.
