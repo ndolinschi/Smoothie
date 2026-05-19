@@ -68,6 +68,7 @@ struct SessionView: View {
     @State private var currentSession: SessionDescriptorWire
     @State private var store: SessionLiveStore?
     @State private var features: ProviderFeaturesWire?
+    @State private var allAdapters: [AdapterInfoWire] = []
     @State private var confirmKill = false
     @State private var switching: SwitchTarget?
     @State private var restarting = false
@@ -78,12 +79,14 @@ struct SessionView: View {
         case model(String)
         case effort(String)
         case mode(String)
+        case provider(CLIWire)
 
         var id: String {
             switch self {
             case .model(let s): return "model:\(s)"
             case .effort(let s): return "effort:\(s)"
             case .mode(let s): return "mode:\(s)"
+            case .provider(let c): return "provider:\(c.rawValue)"
             }
         }
 
@@ -92,6 +95,7 @@ struct SessionView: View {
             case .model(let s): return "model = \(s)"
             case .effort(let s): return "reasoning effort = \(s)"
             case .mode(let s): return "mode = \(s)"
+            case .provider(let c): return "provider = \(c.displayName)"
             }
         }
     }
@@ -118,13 +122,15 @@ struct SessionView: View {
                     MessageInput(
                         session: currentSession,
                         features: features,
+                        allAdapters: allAdapters,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed)
                         },
                         onSwitchModel: { switching = .model($0) },
                         onSwitchEffort: { switching = .effort($0) },
-                        onSwitchMode: { switching = .mode($0) }
+                        onSwitchMode: { switching = .mode($0) },
+                        onSwitchProvider: { switching = .provider($0) }
                     )
                 }
             } else {
@@ -211,6 +217,7 @@ struct SessionView: View {
         let api = APIClient(store: pairing)
         do {
             let adapters = try await api.adapters()
+            allAdapters = adapters
             features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
             // non-fatal; ComposerMenu degrades gracefully
@@ -262,23 +269,29 @@ struct SessionView: View {
 
         _ = try? await api.killSession(sessionId: currentSession.id)
 
+        let cli: CLIWire = {
+            if case .provider(let c) = target { return c }
+            return currentSession.cli
+        }()
+        let providerChanged = cli != currentSession.cli
         let model: String? = {
             if case .model(let m) = target { return m }
-            return currentSession.model
+            // Drop incompatible model when switching providers
+            return providerChanged ? nil : currentSession.model
         }()
         let effort: String? = {
             if case .effort(let e) = target { return e }
-            return currentSession.reasoningEffort
+            return providerChanged ? nil : currentSession.reasoningEffort
         }()
         let mode: String? = {
             if case .mode(let m) = target { return m }
-            return currentSession.mode
+            return providerChanged ? nil : currentSession.mode
         }()
 
         do {
             let req = CreateSessionRequestWire(
                 projectPath: currentSession.projectPath,
-                cli: currentSession.cli,
+                cli: cli,
                 model: model,
                 reasoningEffort: effort,
                 mode: mode
@@ -288,6 +301,9 @@ struct SessionView: View {
             let s = SessionLiveStore(session: new)
             s.connect(api: api)
             store = s
+            // Refetch features for the (possibly new) provider so the
+            // composer rebuilds its sections.
+            await loadFeatures()
         } catch {
             switchError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             // Best-effort: revert by reconnecting to the same descriptor

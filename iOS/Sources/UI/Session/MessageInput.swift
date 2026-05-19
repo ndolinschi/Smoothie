@@ -7,10 +7,14 @@ import UniformTypeIdentifiers
 struct MessageInput: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
+    /// Every adapter info row from /adapters — enables in-chat provider
+    /// switching ("open in OpenCode") via the model chip menu.
+    let allAdapters: [AdapterInfoWire]
     let onSend: (String, [StagedAttachment]) async -> Void
     let onSwitchModel: (String) -> Void
     let onSwitchEffort: (String) -> Void
     let onSwitchMode: (String) -> Void
+    let onSwitchProvider: (CLIWire) -> Void
 
     @State private var text: String = ""
     @State private var sending = false
@@ -79,34 +83,47 @@ struct MessageInput: View {
 
     private var modelChip: some View {
         Menu {
-            if let f = features {
-                if !f.availableModels.isEmpty {
-                    Section("Models") {
-                        ForEach(f.availableModels, id: \.self) { m in
-                            Button {
-                                onSwitchModel(m)
-                            } label: {
-                                if (session.model ?? f.defaultModel) == m {
-                                    Label(m, systemImage: "checkmark")
-                                } else {
-                                    Text(m)
-                                }
+            // Section 1 — model picker for the CURRENT provider.
+            if let f = features, !f.availableModels.isEmpty {
+                Section(session.cli.displayName + " models") {
+                    ForEach(f.availableModels, id: \.self) { m in
+                        Button {
+                            onSwitchModel(m)
+                        } label: {
+                            if (session.model ?? f.defaultModel) == m {
+                                Label(m, systemImage: "checkmark")
+                            } else {
+                                Text(m)
                             }
                         }
                     }
                 }
-                if f.supportsReasoningEffort, !f.availableReasoningEfforts.isEmpty {
-                    Section("Reasoning effort") {
-                        ForEach(f.availableReasoningEfforts, id: \.self) { e in
-                            Button {
-                                onSwitchEffort(e)
-                            } label: {
-                                if session.reasoningEffort == e {
-                                    Label(e, systemImage: "checkmark")
-                                } else {
-                                    Text(e)
-                                }
+            }
+            // Section 2 — reasoning effort if supported.
+            if let f = features, f.supportsReasoningEffort, !f.availableReasoningEfforts.isEmpty {
+                Section("Reasoning effort") {
+                    ForEach(f.availableReasoningEfforts, id: \.self) { e in
+                        Button {
+                            onSwitchEffort(e)
+                        } label: {
+                            if session.reasoningEffort == e {
+                                Label(e, systemImage: "checkmark")
+                            } else {
+                                Text(e)
                             }
+                        }
+                    }
+                }
+            }
+            // Section 3 — switch provider entirely ("Open in OpenCode" etc.).
+            let otherInstalled = allAdapters.filter { $0.installed && $0.cli != session.cli }
+            if !otherInstalled.isEmpty {
+                Section("Open in another provider") {
+                    ForEach(otherInstalled) { adapter in
+                        Button {
+                            onSwitchProvider(adapter.cli)
+                        } label: {
+                            Label("Open in \(adapter.cli.displayName)", systemImage: "arrow.right.circle")
                         }
                     }
                 }
@@ -177,7 +194,7 @@ struct MessageInput: View {
             )
 
             TextField(
-                session.state == .waiting ? "agent is waiting for you…" : "send a message",
+                "Plan, Build, / for commands, @ for context",
                 text: $text,
                 axis: .vertical
             )

@@ -7,10 +7,7 @@ struct EventRow: View {
         Group {
             switch event.type {
             case .message:
-                Text(event.content)
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white)
-                    .textSelection(.enabled)
+                MarkdownText(content: event.content)
                     .frame(maxWidth: .infinity, alignment: .leading)
             case .thinking:
                 if !event.content.isEmpty {
