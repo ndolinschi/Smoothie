@@ -40,6 +40,10 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to scan a pairing QR code shown by the Smoothie menubar app on your Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used to record short voice input that's transcribed into your message.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Smoothie transcribes your voice into the message field locally.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

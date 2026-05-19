@@ -22,6 +22,8 @@ struct MessageInput: View {
     @State private var showingMention = false
     @State private var showingImporter = false
     @State private var importError: String?
+    @State private var voice = VoiceDictator()
+    @State private var voiceError: String?
     @FocusState private var focused: Bool
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -67,6 +69,14 @@ struct MessageInput: View {
         } message: {
             Text(importError ?? "")
         }
+        .alert("Voice unavailable", isPresented: Binding(
+            get: { voiceError != nil },
+            set: { if !$0 { voiceError = nil } }
+        )) {
+            Button("OK", role: .cancel) { voiceError = nil }
+        } message: {
+            Text(voiceError ?? "")
+        }
     }
 
     private var chipsRow: some View {
@@ -90,10 +100,11 @@ struct MessageInput: View {
                         Button {
                             onSwitchModel(m)
                         } label: {
+                            let friendly = session.cli.friendlyModelName(m)
                             if (session.model ?? f.defaultModel) == m {
-                                Label(m, systemImage: "checkmark")
+                                Label(friendly, systemImage: "checkmark")
                             } else {
-                                Text(m)
+                                Text(friendly)
                             }
                         }
                     }
@@ -145,11 +156,12 @@ struct MessageInput: View {
     }
 
     private var modelLabel: String {
-        let model = session.model ?? features?.defaultModel ?? session.cli.displayName
+        let raw = session.model ?? features?.defaultModel ?? session.cli.displayName
+        let friendly = session.cli.friendlyModelName(raw)
         if let effort = session.reasoningEffort, !effort.isEmpty {
-            return "\(model) · \(effort)"
+            return "\(friendly) · \(effort)"
         }
-        return model
+        return friendly
     }
 
     private func attachmentChip(_ att: StagedAttachment) -> some View {
@@ -201,19 +213,59 @@ struct MessageInput: View {
             .focused($focused)
             .lineLimit(1...5)
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .foregroundStyle(.white)
             .glassEffect(in: .rect(cornerRadius: 14))
 
+            trailingActionButton
+        }
+    }
+
+    /// Voice icon when nothing is typed; arrow-up send when there is. Smaller
+    /// than the v1 button to match the Cursor-style composer reference.
+    @ViewBuilder
+    private var trailingActionButton: some View {
+        if canSend {
             Button(action: send) {
                 Image(systemName: sending ? "ellipsis" : "arrow.up")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(canSend ? .black : .white.opacity(0.4))
-                    .frame(width: 44, height: 44)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 36, height: 36)
+                    .background(.white, in: .circle)
             }
-            .buttonStyle(.glassProminent)
-            .tint(.white)
-            .disabled(!canSend)
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                Task { await toggleVoice() }
+            } label: {
+                Image(systemName: voice.isListening ? "waveform" : "mic.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(voice.isListening ? .black : .white)
+                    .frame(width: 36, height: 36)
+                    .background {
+                        if voice.isListening {
+                            Circle().fill(.white)
+                        } else {
+                            Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75)
+                        }
+                    }
+                    .glassEffect(in: .circle)
+            }
+            .buttonStyle(.plain)
+            .symbolEffect(.variableColor.iterative, isActive: voice.isListening)
+        }
+    }
+
+    private func toggleVoice() async {
+        if voice.isListening {
+            voice.stop()
+            return
+        }
+        await voice.start(initial: text) { transcribed in
+            text = transcribed
+        }
+        if case .unavailable(let msg) = voice.state {
+            voiceError = msg
         }
     }
 

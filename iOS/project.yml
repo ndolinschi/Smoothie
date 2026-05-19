@@ -42,6 +42,8 @@ targets:
         CFBundleShortVersionString: "0.2.0"
         CFBundleVersion: "1"
         NSCameraUsageDescription: "Used to scan a pairing QR code shown by the Smoothie menubar app on your Mac."
+        NSMicrophoneUsageDescription: "Used to record short voice input that's transcribed into your message."
+        NSSpeechRecognitionUsageDescription: "Smoothie transcribes your voice into the message field locally."
         CFBundleURLTypes:
           - CFBundleURLName: dev.smoothie.ios
             CFBundleURLSchemes:

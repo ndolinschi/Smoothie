@@ -22,6 +22,30 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
     /// Server expects the same lowercased token the Kotlin enum's `.name`
     /// produces (`claude_code`, `gemini`, `codex`, `open_code`).
     var wireValue: String { rawValue }
+
+    /// Pretty model name shown in the composer — the wire `id` (sent as
+    /// `--model` to the CLI) is usually an alias like `sonnet` that's
+    /// useless to the user. Maps known aliases to the marketing name.
+    func friendlyModelName(_ id: String) -> String {
+        switch self {
+        case .claudeCode:
+            switch id.lowercased() {
+            case "sonnet":  return "Claude Sonnet 4.6"
+            case "haiku":   return "Claude Haiku 4.5"
+            case "opus":    return "Claude Opus 4.7"
+            default:        return id
+            }
+        case .gemini:
+            switch id.lowercased() {
+            case "auto-gemini-3":         return "Gemini 3 · auto"
+            case "gemini-3-flash-preview": return "Gemini 3 Flash"
+            case "gemini-3.1-flash-lite":  return "Gemini 3.1 Flash Lite"
+            default:                       return id
+            }
+        case .openCode:
+            return id
+        }
+    }
 }
 
 enum SessionStateWire: String, Codable, Sendable {

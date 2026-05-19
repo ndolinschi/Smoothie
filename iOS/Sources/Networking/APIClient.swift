@@ -42,8 +42,14 @@ struct APIClient {
 
     private func request(method: String, path: String, body: Data?) async throws -> Data {
         guard let pairing = store.current else { throw APIError.notPaired }
-        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        var req = URLRequest(url: pairing.baseURL.appendingPathComponent(trimmed))
+        // appendingPathComponent percent-encodes `?` and `=`, which destroys
+        // query strings. Build the URL as a string so `/projects/files?path=…&q=…`
+        // round-trips intact.
+        let separator = path.hasPrefix("/") ? "" : "/"
+        guard let url = URL(string: "\(pairing.baseURL.absoluteString)\(separator)\(path)") else {
+            throw APIError.transport("Bad URL for \(path)")
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("Bearer \(pairing.token)", forHTTPHeaderField: "Authorization")
         if let body {

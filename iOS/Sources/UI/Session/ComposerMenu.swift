@@ -238,6 +238,11 @@ struct ModelPickerSheet: View {
 
     private func modelRow(_ model: String) -> some View {
         let isCurrent = (currentModel ?? features.defaultModel) == model
+        // We don't have access to CLIWire in this scope (the sheet is
+        // adapter-agnostic), so the raw id falls through unaltered. Most of
+        // the time it IS already friendly because Cursor's pattern of "alias
+        // first" is also how Claude / Gemini are configured. Provider chip
+        // outside the sheet handles the marketing-name lookup.
         return Button {
             onPickModel(model)
             dismiss()
