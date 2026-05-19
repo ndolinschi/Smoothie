@@ -64,18 +64,66 @@ struct SessionView: View {
     let session: SessionDescriptorWire
     @Environment(PairingStore.self) private var pairing
     @Environment(\.dismiss) private var dismiss
+    @State private var currentSession: SessionDescriptorWire
     @State private var store: SessionLiveStore?
+    @State private var features: ProviderFeaturesWire?
     @State private var confirmKill = false
+    @State private var switching: SwitchTarget?
+    @State private var restarting = false
+    @State private var switchError: String?
+
+    enum SwitchTarget: Identifiable, Equatable {
+        case model(String)
+        case effort(String)
+        case mode(String)
+
+        var id: String {
+            switch self {
+            case .model(let s): return "model:\(s)"
+            case .effort(let s): return "effort:\(s)"
+            case .mode(let s): return "mode:\(s)"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .model(let s): return "model = \(s)"
+            case .effort(let s): return "reasoning effort = \(s)"
+            case .mode(let s): return "mode = \(s)"
+            }
+        }
+    }
+
+    init(session: SessionDescriptorWire) {
+        self.session = session
+        _currentSession = State(initialValue: session)
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let store {
+            if restarting {
+                VStack(spacing: 12) {
+                    ProgressView().tint(.white.opacity(0.6))
+                    Text("Restarting session…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let store {
                 VStack(spacing: 0) {
                     AgentStream(events: store.events)
-                    MessageInput(state: store.state) { content in
-                        await sendMessage(content: content, store: store)
-                    }
+                    MessageInput(
+                        session: currentSession,
+                        features: features,
+                        onSend: { text, attachments in
+                            let composed = attachments.composedMessage(with: text)
+                            await sendMessage(composed)
+                        },
+                        onSwitchModel: { switching = .model($0) },
+                        onSwitchEffort: { switching = .effort($0) },
+                        onSwitchMode: { switching = .mode($0) }
+                    )
                 }
             } else {
                 ProgressView().tint(.white.opacity(0.5))
@@ -88,7 +136,7 @@ struct SessionView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 3) {
-                    Text(session.projectName)
+                    Text(currentSession.projectName)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                     if let store {
@@ -97,9 +145,7 @@ struct SessionView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) {
-                    confirmKill = true
-                } label: {
+                Button(role: .destructive) { confirmKill = true } label: {
                     Image(systemName: "xmark.circle")
                         .font(.system(size: 18))
                         .foregroundStyle(.white.opacity(0.7))
@@ -107,10 +153,8 @@ struct SessionView: View {
             }
         }
         .onAppear {
-            guard store == nil else { return }
-            let s = SessionLiveStore(session: session)
-            s.connect(api: APIClient(store: pairing))
-            store = s
+            connectStore()
+            Task { await loadFeatures() }
         }
         .onDisappear {
             store?.disconnect()
@@ -123,20 +167,108 @@ struct SessionView: View {
         } message: {
             Text("This terminates the agent process on your Mac.")
         }
+        .confirmationDialog(
+            "Restart session?",
+            isPresented: Binding(
+                get: { switching != nil },
+                set: { if !$0 { switching = nil } }
+            ),
+            presenting: switching
+        ) { target in
+            Button("Restart with \(target.label)", role: .destructive) {
+                Task { await restart(with: target) }
+            }
+            Button("Cancel", role: .cancel) { switching = nil }
+        } message: { target in
+            Text("Changing \(target.label) starts a fresh \(currentSession.cli.displayName) process in the same project. The current conversation will be terminated.")
+        }
+        .alert("Couldn't restart", isPresented: Binding(
+            get: { switchError != nil },
+            set: { if !$0 { switchError = nil } }
+        )) {
+            Button("OK", role: .cancel) { switchError = nil }
+        } message: {
+            Text(switchError ?? "")
+        }
     }
 
-    private func sendMessage(content: String, store: SessionLiveStore) async {
+    // MARK: - Lifecycle
+
+    private func connectStore() {
+        guard store == nil else { return }
+        let s = SessionLiveStore(session: currentSession)
+        s.connect(api: APIClient(store: pairing))
+        store = s
+    }
+
+    private func loadFeatures() async {
         let api = APIClient(store: pairing)
         do {
-            try await api.sendMessage(sessionId: session.id, content: content)
+            let adapters = try await api.adapters()
+            features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
-            // No-op — the SSE error event surfaces server-side failures
+            // non-fatal; ComposerMenu degrades gracefully
+        }
+    }
+
+    private func sendMessage(_ content: String) async {
+        let api = APIClient(store: pairing)
+        do {
+            try await api.sendMessage(sessionId: currentSession.id, content: content)
+        } catch {
+            // SSE error event surfaces server-side failures
         }
     }
 
     private func killSession() async {
         let api = APIClient(store: pairing)
-        _ = try? await api.killSession(sessionId: session.id)
+        _ = try? await api.killSession(sessionId: currentSession.id)
         dismiss()
+    }
+
+    // MARK: - Restart-on-change
+
+    private func restart(with target: SwitchTarget) async {
+        let api = APIClient(store: pairing)
+        switching = nil
+        restarting = true
+        store?.disconnect()
+        store = nil
+
+        _ = try? await api.killSession(sessionId: currentSession.id)
+
+        let model: String? = {
+            if case .model(let m) = target { return m }
+            return currentSession.model
+        }()
+        let effort: String? = {
+            if case .effort(let e) = target { return e }
+            return currentSession.reasoningEffort
+        }()
+        let mode: String? = {
+            if case .mode(let m) = target { return m }
+            return currentSession.mode
+        }()
+
+        do {
+            let req = CreateSessionRequestWire(
+                projectPath: currentSession.projectPath,
+                cli: currentSession.cli,
+                model: model,
+                reasoningEffort: effort,
+                mode: mode
+            )
+            let new = try await api.createSession(req)
+            currentSession = new
+            let s = SessionLiveStore(session: new)
+            s.connect(api: api)
+            store = s
+        } catch {
+            switchError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // Best-effort: revert by reconnecting to the same descriptor
+            // (the underlying process is dead; user can dismiss and start over)
+            dismiss()
+        }
+        restarting = false
     }
 }
