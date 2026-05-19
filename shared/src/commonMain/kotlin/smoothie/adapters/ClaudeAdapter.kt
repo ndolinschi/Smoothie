@@ -162,6 +162,11 @@ class ClaudeAdapter : AdapterParser {
                     val metadata = buildMap<String, JsonElement> {
                         put("name", JsonPrimitive(name))
                         if (filePath != null) put("path", JsonPrimitive(filePath))
+                        // Stash the full input so the iOS row can show
+                        // e.g. Bash's `command`, Edit's old_string/new_string,
+                        // Read's offset/limit. Kept as a nested JsonObject so
+                        // the Swift side sees structured fields, not a string.
+                        if (input != null) put("input", input)
                     }
                     val eventType = if (filePath != null &&
                         name in setOf("Edit", "Write", "MultiEdit", "NotebookEdit")

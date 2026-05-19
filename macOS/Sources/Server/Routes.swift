@@ -259,7 +259,11 @@ func encodeEvent(_ e: SmoothieEvent) -> String {
     keys.append("\"type\":\"\(e.type.name.lowercased())\"")
     keys.append("\"content\":\(jsonString(e.content))")
     keys.append("\"timestamp\":\(e.timestamp)")
-    keys.append("\"metadata\":null")
+    if let meta = e.metadataJson() {
+        keys.append("\"metadata\":\(meta)")
+    } else {
+        keys.append("\"metadata\":null")
+    }
     return "{" + keys.joined(separator: ",") + "}"
 }
 

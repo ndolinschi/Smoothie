@@ -8,6 +8,7 @@ fileprivate let dividerSentinel = "__SMOOTHIE_DIVIDER__::"
 
 struct EventRow: View {
     let event: SmoothieEventWire
+    @State private var expanded = false
 
     var body: some View {
         if event.content.hasPrefix(dividerSentinel) {
@@ -34,78 +35,164 @@ struct EventRow: View {
         .padding(.vertical, 10)
     }
 
+    @ViewBuilder
     private var typedBody: some View {
-        Group {
-            switch event.type {
-            case .message:
-                MarkdownText(content: event.content)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            case .thinking:
-                if !event.content.isEmpty {
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .padding(.top, 3)
-                        Text(event.content)
-                            .font(.system(size: 13))
-                            .italic()
-                            .foregroundStyle(.white.opacity(0.55))
-                            .textSelection(.enabled)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            case .toolUse:
-                HStack(spacing: 6) {
-                    Image(systemName: "wrench.adjustable")
-                        .font(.system(size: 11))
-                    Text(event.content)
-                        .font(.system(size: 12, design: .monospaced))
-                }
-                .foregroundStyle(.white.opacity(0.75))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassEffect(in: .capsule)
-            case .toolResult:
-                Text(event.content)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .lineLimit(4)
-            case .fileEdit:
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.text.fill")
-                        .font(.system(size: 11))
-                    Text(event.content)
-                        .font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .foregroundStyle(.green.opacity(0.85))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassEffect(in: .capsule)
-            case .waiting:
-                EmptyView()       // never a row — bottom status pill shows this
-            case .done:
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle")
-                    Text(event.content.isEmpty ? "Done" : event.content)
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.55))
-            case .error, .limitReached:
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text(event.content)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
-                        .textSelection(.enabled)
-                }
+        switch event.type {
+        case .message:
+            MarkdownText(content: event.content)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .glassEffect(in: .rect(cornerRadius: 12))
+        case .thinking:
+            if !event.content.isEmpty {
+                Text(event.content)
+                    .font(.system(size: 13))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.55))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        case .toolUse:
+            toolRow(icon: "wrench.adjustable", tint: .white.opacity(0.75))
+        case .toolResult:
+            Text(event.content)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.55))
+                .lineLimit(expanded ? nil : 4)
+                .onTapGesture { expanded.toggle() }
+        case .fileEdit:
+            toolRow(icon: "doc.text.fill", tint: .green.opacity(0.85))
+        case .waiting:
+            EmptyView()
+        case .done:
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle")
+                Text(event.content.isEmpty ? "Done" : event.content)
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.white.opacity(0.55))
+        case .error, .limitReached:
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text(event.content)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .glassEffect(in: .rect(cornerRadius: 12))
+        }
+    }
+
+    /// Chip + optional expandable detail for `.toolUse` and `.fileEdit`.
+    /// The chip is always tappable; if the event has structured input
+    /// metadata (Bash's `command`, Edit's `old_string`, etc.), tapping
+    /// reveals a key/value detail block below.
+    private func toolRow(icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                if !inputFields.isEmpty { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.system(size: 11))
+                    Text(event.content)
+                        .font(.system(size: 12, design: .monospaced))
+                    if !inputFields.isEmpty {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .foregroundStyle(tint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .glassEffect(in: .capsule)
+            }
+            .buttonStyle(.plain)
+
+            if expanded, !inputFields.isEmpty {
+                ToolInputView(fields: inputFields)
             }
         }
+    }
+
+    /// Ordered list of (key, value) pairs extracted from
+    /// `metadata.input`. Empty if the event has no input — in which case
+    /// the chip stays non-expandable.
+    private var inputFields: [(String, String)] {
+        guard let metadata = event.metadata,
+              let input = metadata["input"]
+        else { return [] }
+        guard case .object(let inputObj) = input.value else { return [] }
+        let priority = [
+            "command", "description",
+            "file_path", "path",
+            "pattern", "glob",
+            "old_string", "new_string",
+            "content",
+            "url",
+            "prompt",
+        ]
+        var seen: Set<String> = []
+        var ordered: [(String, String)] = []
+        for key in priority {
+            if let v = inputObj[key] {
+                ordered.append((key, anyCodableString(v)))
+                seen.insert(key)
+            }
+        }
+        for key in inputObj.keys.sorted() where !seen.contains(key) {
+            if let v = inputObj[key] {
+                ordered.append((key, anyCodableString(v)))
+            }
+        }
+        return ordered
+    }
+
+    private func anyCodableString(_ v: AnyCodable) -> String {
+        switch v.value {
+        case .null:           return "null"
+        case .bool(let b):    return b ? "true" : "false"
+        case .int(let i):     return String(i)
+        case .double(let d):  return String(d)
+        case .string(let s):  return s
+        case .array(let arr):
+            return "[" + arr.map { anyCodableString($0) }.joined(separator: ", ") + "]"
+        case .object(let obj):
+            return "{" + obj.map { "\($0.key): \(anyCodableString($0.value))" }.joined(separator: ", ") + "}"
+        }
+    }
+}
+
+/// Renders the structured input args of a tool call. Mono-font, scrollable
+/// for very long fields (e.g. Edit's `old_string`). Sits below the chip
+/// when the user taps to expand.
+private struct ToolInputView: View {
+    let fields: [(String, String)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(fields.enumerated()), id: \.offset) { _, field in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(field.0.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                    Text(field.1)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerSm))
+        .overlay(
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
     }
 }
