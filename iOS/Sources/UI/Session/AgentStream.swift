@@ -7,6 +7,17 @@ struct AgentStream: View {
         AgentStreamItem.collapse(events)
     }
 
+    /// Re-render trigger that picks up incremental changes the agent makes to
+    /// the latest event — Claude / OpenCode stream by emitting many
+    /// `.message` / `.toolUse` rows in quick succession, but stale appends
+    /// can also extend the trailing event's content (think OpenCode delta
+    /// buffer flushes). Combining count + last id + last length means we
+    /// scroll on either trigger.
+    private var scrollKey: String {
+        let last = events.last
+        return "\(events.count)-\(last?.id ?? "-")-\(last?.content.count ?? 0)"
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -24,9 +35,22 @@ struct AgentStream: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
             }
-            .scrollContentBackground(.hidden)
-            .onChange(of: events.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.18)) {
+            .onChange(of: scrollKey) { _, _ in
+                // One runloop tick so LazyVStack lays out the new row before
+                // we ask the proxy to scroll. Without the delay the target
+                // index hasn't been registered yet and the scroll is a no-op.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(40))
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        proxy.scrollTo("BOTTOM", anchor: .bottom)
+                    }
+                }
+            }
+            .onAppear {
+                // Snap to the bottom on first appearance so opening an
+                // active session lands you at the latest message.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(40))
                     proxy.scrollTo("BOTTOM", anchor: .bottom)
                 }
             }

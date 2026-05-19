@@ -126,9 +126,8 @@ struct MarkdownText: View {
                 .padding(.bottom, 2)
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
+                Text(SyntaxHighlighter.highlight(code, language: language))
                     .font(.system(size: 12.5, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.92))
                     .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
