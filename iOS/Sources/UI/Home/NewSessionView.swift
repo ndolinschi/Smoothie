@@ -3,12 +3,10 @@ import SwiftUI
 struct NewSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(PairingStore.self) private var pairing
-    let preselectedProject: ProjectWire?
+    let preselectedPath: String?
     let onCreated: (SessionDescriptorWire) -> Void
 
-    @State private var projects: [ProjectWire] = []
     @State private var adapters: [AdapterInfoWire] = []
-    @State private var selectedProject: ProjectWire?
     @State private var selectedCLI: CLIWire = .claudeCode
     @State private var loading = true
     @State private var loadError: String?
@@ -18,21 +16,27 @@ struct NewSessionView: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
+                RadialGradient(
+                    colors: [Color.white.opacity(0.05), .clear],
+                    center: .top, startRadius: 0, endRadius: 500
+                )
+                .ignoresSafeArea()
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        section("PROJECT") {
-                            if loading && projects.isEmpty {
-                                ProgressView().tint(.white.opacity(0.5)).padding(8)
-                            } else {
-                                VStack(spacing: 8) {
-                                    ForEach(projects) { p in projectRow(p) }
-                                }
+                        if let preselectedPath {
+                            section("PROJECT") {
+                                projectCard(path: preselectedPath)
                             }
                         }
 
                         section("CLI") {
-                            VStack(spacing: 8) {
-                                ForEach(adapters) { a in cliRow(a) }
+                            if loading && adapters.isEmpty {
+                                ProgressView().tint(.white.opacity(0.5)).padding(8)
+                            } else {
+                                VStack(spacing: 8) {
+                                    ForEach(adapters) { a in cliRow(a) }
+                                }
                             }
                         }
 
@@ -73,7 +77,7 @@ struct NewSessionView: View {
     }
 
     private var canStart: Bool {
-        selectedProject != nil &&
+        preselectedPath != nil &&
         (adapters.first { $0.cli == selectedCLI }?.installed ?? false)
     }
 
@@ -85,30 +89,28 @@ struct NewSessionView: View {
         }
     }
 
-    private func projectRow(_ p: ProjectWire) -> some View {
-        let isSelected = selectedProject?.path == p.path
-        return Button {
-            selectedProject = p
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: p.isGit ? "point.3.connected.trianglepath.dotted" : "folder")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(p.isGit ? 0.75 : 0.45))
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(p.name).foregroundStyle(.white).font(.system(size: 15, weight: .medium))
-                    Text(p.path).font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3)).lineLimit(1).truncationMode(.middle)
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
-                }
+    private func projectCard(path: String) -> some View {
+        let name = (path as NSString).lastPathComponent
+        return HStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.white.opacity(0.75))
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(path)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
-            .padding(14)
-            .glassEffect(in: .rect(cornerRadius: 14))
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(in: .rect(cornerRadius: 14))
     }
 
     private func cliRow(_ a: AdapterInfoWire) -> some View {
@@ -154,11 +156,7 @@ struct NewSessionView: View {
         let api = APIClient(store: pairing)
         loading = true
         do {
-            async let p = api.projects()
-            async let a = api.adapters()
-            projects = try await p
-            adapters = try await a
-            if selectedProject == nil { selectedProject = preselectedProject ?? projects.first }
+            adapters = try await api.adapters()
             if let first = adapters.first(where: { $0.installed }) {
                 selectedCLI = first.cli
             }
@@ -169,12 +167,12 @@ struct NewSessionView: View {
     }
 
     private func start() {
-        guard let project = selectedProject else { return }
+        guard let path = preselectedPath else { return }
         let api = APIClient(store: pairing)
         starting = true
         Task {
             do {
-                let req = CreateSessionRequestWire(projectPath: project.path, cli: selectedCLI)
+                let req = CreateSessionRequestWire(projectPath: path, cli: selectedCLI)
                 let session = try await api.createSession(req)
                 starting = false
                 dismiss()

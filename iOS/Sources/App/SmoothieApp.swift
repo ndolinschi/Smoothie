@@ -4,11 +4,13 @@ import Shared
 @main
 struct SmoothieApp: App {
     @State private var pairing = PairingStore()
+    @State private var recents = RecentsStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(pairing)
+                .environment(recents)
                 .preferredColorScheme(.dark)
                 .tint(.white)
         }

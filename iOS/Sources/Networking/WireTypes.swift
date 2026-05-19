@@ -108,6 +108,36 @@ struct ProjectWire: Codable, Sendable, Identifiable, Hashable {
     var id: String { path }
 }
 
+struct BrowseEntryWire: Codable, Sendable, Identifiable, Hashable {
+    let name: String
+    let path: String
+    let isDirectory: Bool
+    let isGit: Bool
+    let isAllowed: Bool
+    var id: String { path }
+}
+
+struct BrowseResponseWire: Codable, Sendable {
+    let current: String?
+    let parent: String?
+    let entries: [BrowseEntryWire]
+    let roots: [String]
+}
+
+struct FileEntryWire: Codable, Sendable, Identifiable, Hashable {
+    let path: String
+    let fullPath: String
+    let size: Int
+    var id: String { fullPath }
+}
+
+struct FileContentWire: Codable, Sendable {
+    let path: String
+    let content: String
+    let size: Int
+    let truncated: Bool
+}
+
 /// Type-erased JSON value for `metadata`. Decode-only.
 struct AnyCodable: Codable, Sendable, Hashable {
     enum Value: Hashable, Sendable {

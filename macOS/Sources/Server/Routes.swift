@@ -38,7 +38,7 @@ enum Routes {
             return jsonResponse(encodeAdapterList(infos))
         }
 
-        // MARK: Projects (P5: top-level scan; full browse in P6)
+        // MARK: Projects
 
         group.get("/projects") { _, _ -> Response in
             let json = await Task { @MainActor in
@@ -46,6 +46,46 @@ enum Routes {
                 return encodeProjectList(projects)
             }.value
             return jsonResponse(json)
+        }
+
+        group.get("/browse") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            let json = await Task { @MainActor in
+                let path = query["path"]
+                let response = browseFolder(path: path, prefs: handle.prefs)
+                return encodeBrowseResponse(response)
+            }.value
+            return jsonResponse(json)
+        }
+
+        group.get("/projects/files") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            let result: (Bool, String) = await Task { @MainActor in
+                guard let path = query["path"], handle.prefs.isPathAllowed(path) else {
+                    return (false, "path not allowed")
+                }
+                let q = query["q"] ?? ""
+                let files = listProjectFiles(under: path, query: q)
+                return (true, encodeFileEntries(files))
+            }.value
+            if !result.0 {
+                return errorResponse(.forbidden, result.1)
+            }
+            return jsonResponse(result.1)
+        }
+
+        group.get("/projects/file") { request, _ -> Response in
+            let query = parseQuery(request.uri.query)
+            let result: (HTTPResponse.Status, String) = await Task { @MainActor in
+                guard let path = query["path"], handle.prefs.isPathAllowed(path) else {
+                    return (.forbidden, "{\"error\":\"path not allowed\"}")
+                }
+                guard let content = readSingleFile(at: path) else {
+                    return (.notFound, "{\"error\":\"file not found or not readable\"}")
+                }
+                return (.ok, encodeFileContent(content))
+            }.value
+            return jsonResponse(result.1, status: result.0)
         }
 
         // MARK: Sessions
@@ -265,6 +305,206 @@ func encodeProjectList(_ projects: [ProjectInfo]) -> String {
         "{\"name\":\(jsonString(p.name)),\"path\":\(jsonString(p.path)),\"isGit\":\(p.isGit)}"
     }
     return "[" + items.joined(separator: ",") + "]"
+}
+
+// MARK: - Folder browser (P6)
+
+struct BrowseEntryInfo: Sendable {
+    let name: String
+    let path: String
+    let isDirectory: Bool
+    let isGit: Bool
+    let isAllowed: Bool
+}
+
+struct BrowseResponseInfo: Sendable {
+    let current: String?
+    let parent: String?
+    let entries: [BrowseEntryInfo]
+    let roots: [String]
+}
+
+private let browseHiddenExcludes: Set<String> = [
+    ".Trash", ".cache", "Library", ".npm", ".yarn", ".pnpm", ".bun"
+]
+
+private let browseDirExcludes: Set<String> = [
+    ".git", ".build", ".swiftpm", "node_modules", "DerivedData",
+    ".expo", ".next", ".cache", "dist", "build", ".turbo",
+    ".DS_Store", "Pods", ".gradle"
+]
+
+@MainActor
+func browseFolder(path: String?, prefs: Preferences) -> BrowseResponseInfo {
+    let roots = prefs.allowedRoots
+    if let path, !path.isEmpty {
+        guard prefs.isPathAllowed(path) else {
+            return BrowseResponseInfo(current: nil, parent: nil, entries: rootBrowseEntries(roots), roots: roots)
+        }
+        let parentPath = (path as NSString).deletingLastPathComponent
+        let parent: String? = {
+            if parentPath == path { return nil }
+            return prefs.isPathAllowed(parentPath) ? parentPath : nil
+        }()
+        return BrowseResponseInfo(
+            current: path,
+            parent: parent,
+            entries: listSubdirs(at: path, prefs: prefs),
+            roots: roots
+        )
+    }
+    return BrowseResponseInfo(current: nil, parent: nil, entries: rootBrowseEntries(roots), roots: roots)
+}
+
+private func rootBrowseEntries(_ roots: [String]) -> [BrowseEntryInfo] {
+    let fm = FileManager.default
+    return roots.compactMap { root in
+        guard fm.fileExists(atPath: root) else { return nil }
+        let name = (root as NSString).lastPathComponent
+        let isGit = fm.fileExists(atPath: (root as NSString).appendingPathComponent(".git"))
+        return BrowseEntryInfo(name: name, path: root, isDirectory: true, isGit: isGit, isAllowed: true)
+    }
+}
+
+@MainActor
+private func listSubdirs(at path: String, prefs: Preferences) -> [BrowseEntryInfo] {
+    let fm = FileManager.default
+    guard let contents = try? fm.contentsOfDirectory(atPath: path) else { return [] }
+    var entries: [BrowseEntryInfo] = []
+    for name in contents {
+        if name.hasPrefix(".") && name != ".git" { continue }
+        if browseHiddenExcludes.contains(name) { continue }
+        if browseDirExcludes.contains(name) { continue }
+        let full = (path as NSString).appendingPathComponent(name)
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { continue }
+        let isGit = fm.fileExists(atPath: (full as NSString).appendingPathComponent(".git"))
+        entries.append(BrowseEntryInfo(
+            name: name,
+            path: full,
+            isDirectory: true,
+            isGit: isGit,
+            isAllowed: prefs.isPathAllowed(full)
+        ))
+    }
+    return entries.sorted { a, b in
+        if a.isGit != b.isGit { return a.isGit }
+        return a.name.lowercased() < b.name.lowercased()
+    }
+}
+
+func encodeBrowseResponse(_ r: BrowseResponseInfo) -> String {
+    var keys: [String] = []
+    if let c = r.current { keys.append("\"current\":\(jsonString(c))") } else { keys.append("\"current\":null") }
+    if let p = r.parent { keys.append("\"parent\":\(jsonString(p))") } else { keys.append("\"parent\":null") }
+    let entryItems = r.entries.map { e in
+        "{\"name\":\(jsonString(e.name)),\"path\":\(jsonString(e.path)),\"isDirectory\":\(e.isDirectory),\"isGit\":\(e.isGit),\"isAllowed\":\(e.isAllowed)}"
+    }
+    keys.append("\"entries\":[" + entryItems.joined(separator: ",") + "]")
+    keys.append("\"roots\":\(jsonStringArray(r.roots))")
+    return "{" + keys.joined(separator: ",") + "}"
+}
+
+// MARK: - File listing (P6 — used by Mention picker in P7 too)
+
+struct FileEntryInfo: Sendable {
+    let path: String        // relative
+    let fullPath: String    // absolute
+    let size: Int
+}
+
+struct FileContentInfo: Sendable {
+    let path: String
+    let content: String
+    let size: Int
+    let truncated: Bool
+}
+
+private let fileListExcludes: Set<String> = [
+    ".git", ".build", ".swiftpm", "node_modules", "DerivedData",
+    ".expo", ".next", ".cache", "dist", "build", ".turbo",
+    ".DS_Store", "Pods", ".gradle"
+]
+private let fileMaxBytes = 100 * 1024
+private let fileListMaxResults = 1000
+
+@MainActor
+func listProjectFiles(under root: String, query: String) -> [FileEntryInfo] {
+    let fm = FileManager.default
+    let q = query.lowercased()
+    let rootURL = URL(fileURLWithPath: root)
+    guard let enumerator = fm.enumerator(
+        at: rootURL,
+        includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+        options: [.skipsHiddenFiles]
+    ) else { return [] }
+
+    var results: [FileEntryInfo] = []
+    let rootPrefix = root.hasSuffix("/") ? root : root + "/"
+
+    for case let url as URL in enumerator {
+        if results.count >= fileListMaxResults { break }
+        let name = url.lastPathComponent
+        if fileListExcludes.contains(name) {
+            enumerator.skipDescendants()
+            continue
+        }
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        if values?.isDirectory == true { continue }
+        let abs = url.path
+        let relative = abs.hasPrefix(rootPrefix) ? String(abs.dropFirst(rootPrefix.count)) : abs
+        if !q.isEmpty, !relative.lowercased().contains(q) { continue }
+        results.append(FileEntryInfo(path: relative, fullPath: abs, size: values?.fileSize ?? 0))
+    }
+    return results.sorted { $0.path.lowercased() < $1.path.lowercased() }
+}
+
+@MainActor
+func readSingleFile(at path: String) -> FileContentInfo? {
+    let fm = FileManager.default
+    var isDir: ObjCBool = false
+    guard fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else { return nil }
+    guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? handle.close() }
+    let attrs = try? fm.attributesOfItem(atPath: path)
+    let actualSize = (attrs?[.size] as? Int) ?? 0
+    let data = (try? handle.read(upToCount: fileMaxBytes + 1)) ?? Data()
+    let truncated = data.count > fileMaxBytes || actualSize > fileMaxBytes
+    let trimmed = truncated ? data.prefix(fileMaxBytes) : data
+    guard let text = String(data: trimmed, encoding: .utf8) else { return nil }
+    return FileContentInfo(path: path, content: text, size: trimmed.count, truncated: truncated)
+}
+
+func encodeFileEntries(_ entries: [FileEntryInfo]) -> String {
+    let items = entries.map { e in
+        "{\"path\":\(jsonString(e.path)),\"fullPath\":\(jsonString(e.fullPath)),\"size\":\(e.size)}"
+    }
+    return "[" + items.joined(separator: ",") + "]"
+}
+
+func encodeFileContent(_ c: FileContentInfo) -> String {
+    var keys: [String] = []
+    keys.append("\"path\":\(jsonString(c.path))")
+    keys.append("\"content\":\(jsonString(c.content))")
+    keys.append("\"size\":\(c.size)")
+    keys.append("\"truncated\":\(c.truncated)")
+    return "{" + keys.joined(separator: ",") + "}"
+}
+
+// MARK: - Query parsing
+
+func parseQuery(_ raw: String?) -> [String: String] {
+    guard let raw, !raw.isEmpty else { return [:] }
+    var result: [String: String] = [:]
+    for pair in raw.split(separator: "&") {
+        let parts = pair.split(separator: "=", maxSplits: 1)
+        guard parts.count == 2 else { continue }
+        let key = String(parts[0])
+        let rawValue = String(parts[1])
+        let value = rawValue.removingPercentEncoding ?? rawValue
+        result[key] = value
+    }
+    return result
 }
 
 // MARK: - Decoders

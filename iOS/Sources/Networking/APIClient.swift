@@ -86,6 +86,31 @@ struct APIClient {
         return try decode([ProjectWire].self, from: data)
     }
 
+    func browse(path: String? = nil) async throws -> BrowseResponseWire {
+        let p: String
+        if let path {
+            p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        } else {
+            p = ""
+        }
+        let route = p.isEmpty ? "/browse" : "/browse?path=\(p)"
+        let data = try await get(route)
+        return try decode(BrowseResponseWire.self, from: data)
+    }
+
+    func projectFiles(path: String, query: String = "") async throws -> [FileEntryWire] {
+        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let data = try await get("/projects/files?path=\(p)&q=\(q)")
+        return try decode([FileEntryWire].self, from: data)
+    }
+
+    func fileContent(path: String) async throws -> FileContentWire {
+        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        let data = try await get("/projects/file?path=\(p)")
+        return try decode(FileContentWire.self, from: data)
+    }
+
     func sessions() async throws -> [SessionDescriptorWire] {
         let data = try await get("/sessions")
         return try decode([SessionDescriptorWire].self, from: data)
