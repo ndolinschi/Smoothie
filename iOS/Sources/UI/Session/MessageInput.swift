@@ -227,7 +227,7 @@ struct MessageInput: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
-                .background(canSend ? SmoothieColor.accent : SmoothieColor.bgGlyph, in: .circle)
+                .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
         }
         .buttonStyle(.plain)
         .disabled(!canSend)

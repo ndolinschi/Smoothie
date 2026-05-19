@@ -8,8 +8,13 @@ final class SessionLiveStore {
     private(set) var state: SessionStateWire
     private(set) var connected: Bool = false
     private(set) var error: String?
+    /// Mode switch requested by the user. Flushed when state leaves
+    /// `.thinking` so the divider appears AFTER the in-flight turn rather
+    /// than interrupting it.
+    private var pendingMode: String?
 
     private var sse: SSEClient?
+    private var api: APIClient?
     let session: SessionDescriptorWire
 
     init(session: SessionDescriptorWire) {
@@ -18,6 +23,7 @@ final class SessionLiveStore {
     }
 
     func connect(api: APIClient) {
+        self.api = api
         guard sse == nil, let url = api.streamURL(sessionId: session.id),
               let bearer = api.store.current?.token else { return }
         let onEvent: @Sendable (SmoothieEventWire) -> Void = { [weak self] event in
@@ -52,7 +58,46 @@ final class SessionLiveStore {
         }
         if state != priorState {
             publishWidgetSnapshot()
+            // Drain a queued mode change once the turn has finished
+            // thinking — the divider lands AFTER the visible work.
+            if pendingMode != nil, state != .thinking {
+                Task { await flushModeChange() }
+            }
         }
+    }
+
+    /// Queue a soft mode switch. If the session is idle (any state other
+    /// than `.thinking`) we flush immediately; otherwise the next
+    /// `ingest(_:)` state transition will trigger the flush.
+    func queueModeChange(_ mode: String) {
+        pendingMode = mode
+        if state != .thinking {
+            Task { await flushModeChange() }
+        }
+    }
+
+    private func flushModeChange() async {
+        guard let mode = pendingMode else { return }
+        pendingMode = nil
+
+        let label = mode.lowercased() == "plan" ? "Plan" : "Code"
+        let divider = SmoothieEventWire(
+            type: .toolResult,
+            content: "__SMOOTHIE_DIVIDER__::Switched to \(label) mode",
+            metadata: nil,
+            timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
+        )
+        events.append(divider)
+
+        guard let api else { return }
+        let instruction: String
+        switch mode.lowercased() {
+        case "plan":
+            instruction = "Switch to Plan mode. From now on, explore the code and present a plan before making any edits. Do not modify any files until I explicitly approve a step. Keep replies focused on planning."
+        default:
+            instruction = "Switch back to Code mode. You may apply edits directly again."
+        }
+        _ = try? await api.sendMessage(sessionId: session.id, content: instruction)
     }
 
     /// Mirror the most-recent session state into the App Group container for
@@ -163,7 +208,7 @@ struct SessionView: View {
                         },
                         onSwitchModel: { switching = .model($0) },
                         onSwitchEffort: { switching = .effort($0) },
-                        onSwitchMode: { switching = .mode($0) },
+                        onSwitchMode: { applyMode($0) },
                         onSwitchProvider: { switching = .provider($0) },
                         onTapMode: { showingModeSheet = true }
                     )
@@ -220,7 +265,7 @@ struct SessionView: View {
             ModeSheet(
                 session: currentSession,
                 features: features,
-                onPick: { switching = .mode($0) },
+                onPick: { applyMode($0) },
                 onDismiss: { showingModeSheet = false }
             )
             .presentationDetents([.medium])
@@ -308,6 +353,15 @@ struct SessionView: View {
         default:
             break
         }
+    }
+
+    /// Soft mode switch — no process restart, no confirmation dialog. The
+    /// mode chip flips immediately and the live store renders a divider in
+    /// the stream once the in-flight turn (if any) settles.
+    private func applyMode(_ mode: String) {
+        let normalised = mode.lowercased() == "default" ? nil : mode
+        currentSession = currentSession.withMode(normalised)
+        store?.queueModeChange(mode)
     }
 
     private func sendMessage(_ content: String) async {

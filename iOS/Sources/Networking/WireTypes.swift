@@ -90,6 +90,16 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
     let mode: String?
     let state: SessionStateWire
     let createdAt: Int64
+
+    /// Return a copy with `mode` swapped. Used by the soft mode-switch path
+    /// (P17) so the composer chip flips instantly without a session restart.
+    func withMode(_ newMode: String?) -> SessionDescriptorWire {
+        SessionDescriptorWire(
+            id: id, projectPath: projectPath, projectName: projectName, cli: cli,
+            model: model, reasoningEffort: reasoningEffort, mode: newMode,
+            state: state, createdAt: createdAt
+        )
+    }
 }
 
 struct SlashCommandWire: Codable, Sendable, Identifiable, Hashable {

@@ -94,7 +94,7 @@ struct HomeView: View {
                         .foregroundStyle(SmoothieColor.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    topBarButton(systemName: "plus", filled: true) {
+                    topBarButton(systemName: "plus.bubble.fill", filled: true) {
                         presentingPicker = true
                     }
                 }
@@ -157,8 +157,8 @@ struct HomeView: View {
     private func topBarButton(systemName: String, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(filled ? SmoothieColor.textPrimary : SmoothieColor.textPrimary)
+                .font(.system(size: 15, weight: filled ? .regular : .semibold))
+                .foregroundStyle(SmoothieColor.textPrimary)
                 .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
                 .background(
                     filled ? SmoothieColor.accent : Color.clear,
@@ -323,12 +323,25 @@ struct HomeView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-            Text(message).font(.system(size: 13))
+                .foregroundStyle(SmoothieColor.statusErr)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundStyle(SmoothieColor.statusErr)
+                .lineLimit(2)
+            Spacer(minLength: 6)
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { loadError = nil }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SmoothieColor.textTertiary)
+            }
+            .buttonStyle(.plain)
         }
-        .foregroundStyle(SmoothieColor.statusErr)
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
     }
@@ -349,9 +362,22 @@ struct HomeView: View {
             sessions = try await s
             adapters = try await a
         } catch {
+            if Self.isCancellation(error) {
+                loading = false
+                return
+            }
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return true }
+        let msg = nsError.localizedDescription.lowercased()
+        if msg.contains("cancelled") || msg.contains("canceled") { return true }
+        return false
     }
 
     private func deleteSession(_ s: SessionDescriptorWire) async {
