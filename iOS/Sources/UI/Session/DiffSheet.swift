@@ -156,41 +156,24 @@ private struct DiffEntryView: View {
         .buttonStyle(.plain)
     }
 
+    /// Unified line-by-line view: every removed line of `old_string` is a
+    /// red `-` row, every added line of `new_string` (or `content` for
+    /// Write) is a green `+` row. No extra container per side — just one
+    /// list of lines with a gutter, matching the diff idiom users expect.
     @ViewBuilder
     private var changesBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let before = entry.before, !before.isEmpty {
-                codeBlock(label: "BEFORE", text: before, tint: SmoothieColor.statusErr)
+        let rows = entry.diffRows()
+        if !rows.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    DiffLineRowView(row: row, language: entry.languageHint)
+                }
             }
-            if let after = entry.after, !after.isEmpty {
-                codeBlock(label: "AFTER", text: after, tint: SmoothieColor.statusDone)
-            }
-            if let write = entry.writeContent, !write.isEmpty {
-                codeBlock(label: "CONTENT", text: write, tint: SmoothieColor.statusDone)
-            }
-        }
-    }
-
-    private func codeBlock(label: String, text: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Circle().fill(tint).frame(width: 5, height: 5)
-                Text(label)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.8)
-                    .foregroundStyle(tint.opacity(0.9))
-            }
-            Text(text)
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(SmoothieColor.textPrimary.opacity(0.9))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(tint.opacity(0.08), in: .rect(cornerRadius: SmoothieMetrics.cornerSm))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm)
-                        .strokeBorder(tint.opacity(0.3), lineWidth: 0.5)
-                )
-                .textSelection(.enabled)
+            .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm))
+            .overlay(
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm)
+                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+            )
         }
     }
 
@@ -293,6 +276,162 @@ struct DiffEntry: Identifiable {
         case "Write":      return SmoothieColor.statusDone
         case "MultiEdit":  return SmoothieColor.modeCode
         default:           return SmoothieColor.statusWaiting
+        }
+    }
+
+    /// Filename extension → SyntaxHighlighter language id. Returns nil for
+    /// unknown extensions (the highlighter renders as plain text in that
+    /// case).
+    var languageHint: String? {
+        let ext = (path as NSString).pathExtension.lowercased()
+        switch ext {
+        case "swift":               return "swift"
+        case "kt", "kts":           return "kotlin"
+        case "java":                return "java"
+        case "js", "mjs", "cjs":    return "javascript"
+        case "jsx":                 return "jsx"
+        case "ts":                  return "typescript"
+        case "tsx":                 return "tsx"
+        case "py":                  return "python"
+        case "sh", "bash", "zsh":   return "bash"
+        case "rb":                  return "ruby"
+        case "go":                  return "go"
+        case "rs":                  return "rust"
+        case "json":                return "json"
+        case "yml", "yaml":         return "yaml"
+        case "sql":                 return "sql"
+        case "":                    return nil
+        default:                    return ext
+        }
+    }
+
+    /// Turn the entry's `before` / `after` (Edit / MultiEdit) or
+    /// `writeContent` (Write) into a flat list of `DiffLineItem`s ready for
+    /// row rendering. No real LCS — Claude's Edit tool already gives us
+    /// just the differing region, so every `before` line is a removal and
+    /// every `after` / `content` line is an addition.
+    func diffRows() -> [DiffLineItem] {
+        var rows: [DiffLineItem] = []
+        if let before, !before.isEmpty {
+            var n = 1
+            for line in before.split(separator: "\n", omittingEmptySubsequences: false) {
+                rows.append(DiffLineItem(
+                    kind: .deletion,
+                    oldLineNumber: n,
+                    newLineNumber: nil,
+                    text: String(line)
+                ))
+                n += 1
+            }
+        }
+        if let after, !after.isEmpty {
+            var n = 1
+            for line in after.split(separator: "\n", omittingEmptySubsequences: false) {
+                rows.append(DiffLineItem(
+                    kind: .addition,
+                    oldLineNumber: nil,
+                    newLineNumber: n,
+                    text: String(line)
+                ))
+                n += 1
+            }
+        }
+        if let writeContent, !writeContent.isEmpty {
+            var n = 1
+            for line in writeContent.split(separator: "\n", omittingEmptySubsequences: false) {
+                rows.append(DiffLineItem(
+                    kind: .addition,
+                    oldLineNumber: nil,
+                    newLineNumber: n,
+                    text: String(line)
+                ))
+                n += 1
+            }
+        }
+        return rows
+    }
+}
+
+/// One renderable line in the unified diff: kind tells us whether to tint
+/// the row red / green / leave it neutral; the gutter shows the line number
+/// from the matching side and the +/- sign.
+struct DiffLineItem {
+    enum Kind { case context, addition, deletion }
+    let kind: Kind
+    let oldLineNumber: Int?
+    let newLineNumber: Int?
+    let text: String
+}
+
+/// Single row in the diff list. Gutter left (old line# | new line# | sign),
+/// monospaced syntax-highlighted content right, background tinted by kind.
+struct DiffLineRowView: View {
+    let row: DiffLineItem
+    let language: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            gutter
+            content
+            Spacer(minLength: 0)
+        }
+        .background(rowBackground)
+    }
+
+    private var gutter: some View {
+        HStack(spacing: 0) {
+            Text(row.oldLineNumber.map(String.init) ?? "")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(SmoothieColor.textTertiary)
+                .frame(width: 24, alignment: .trailing)
+                .padding(.trailing, 2)
+            Text(row.newLineNumber.map(String.init) ?? "")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(SmoothieColor.textTertiary)
+                .frame(width: 24, alignment: .trailing)
+                .padding(.trailing, 2)
+            Text(signGlyph)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(signTint)
+                .frame(width: 14, alignment: .center)
+        }
+        .padding(.vertical, 1)
+        .background(Color.black.opacity(0.15))
+    }
+
+    private var content: some View {
+        let raw = row.text.isEmpty ? " " : row.text
+        return Text(SyntaxHighlighter.highlight(raw, language: language))
+            .font(.system(size: 11.5, design: .monospaced))
+            .padding(.leading, 8)
+            .padding(.trailing, 6)
+            .padding(.vertical, 1)
+            .textSelection(.enabled)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var signGlyph: String {
+        switch row.kind {
+        case .addition:  return "+"
+        case .deletion:  return "-"
+        case .context:   return " "
+        }
+    }
+
+    private var signTint: Color {
+        switch row.kind {
+        case .addition:  return SmoothieColor.statusDone
+        case .deletion:  return SmoothieColor.statusErr
+        case .context:   return .clear
+        }
+    }
+
+    private var rowBackground: Color {
+        switch row.kind {
+        case .addition:  return SmoothieColor.statusDone.opacity(0.10)
+        case .deletion:  return SmoothieColor.statusErr.opacity(0.12)
+        case .context:   return .clear
         }
     }
 }
