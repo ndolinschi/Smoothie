@@ -6,6 +6,5 @@ import kotlinx.serialization.Serializable
 enum class CLIType(val executableName: String, val displayName: String) {
     CLAUDE_CODE(executableName = "claude", displayName = "Claude Code"),
     GEMINI(executableName = "gemini", displayName = "Gemini"),
-    CODEX(executableName = "codex", displayName = "Codex"),
     OPEN_CODE(executableName = "opencode", displayName = "OpenCode"),
 }

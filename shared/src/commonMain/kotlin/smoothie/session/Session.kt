@@ -1,5 +1,10 @@
 package smoothie.session
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -7,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import smoothie.adapters.AdapterParser
@@ -64,7 +70,15 @@ class Session(
     /** Pump stdout bytes from the child process. Returns the events produced
      *  so the caller can also forward them (e.g. for logging). */
     suspend fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
-        val parsed = parser.ingest(stdoutBytes)
+        return ingestParsed(parser.ingest(stdoutBytes))
+    }
+
+    /** Convenience for Swift hosts. Decodes UTF-8 text on the Kotlin side. */
+    suspend fun ingestText(text: String): List<SmoothieEvent> {
+        return ingestParsed(parser.ingestText(text))
+    }
+
+    private suspend fun ingestParsed(parsed: List<SmoothieEvent>): List<SmoothieEvent> {
         if (parsed.isEmpty()) return parsed
         mutex.withLock {
             for (event in parsed) {
@@ -77,6 +91,22 @@ class Session(
         }
         for (event in parsed) _live.emit(event)
         return parsed
+    }
+
+    /** Swift-friendly subscription: invokes [onEvent] for every live event
+     *  on a background dispatcher until [Subscription.close] is called.
+     *  The HTTP SSE route uses this to forward events. */
+    fun subscribeForSwift(onEvent: (SmoothieEvent) -> Unit): Subscription {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val job: Job = scope.launch {
+            _live.asSharedFlow().collect { onEvent(it) }
+        }
+        return object : Subscription {
+            override fun close() {
+                job.cancel()
+                scope.cancel()
+            }
+        }
     }
 
     /** Mark the user as having sent a message. Bumps state to THINKING so the

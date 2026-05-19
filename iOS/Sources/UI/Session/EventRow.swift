@@ -1,0 +1,83 @@
+import SwiftUI
+
+struct EventRow: View {
+    let event: SmoothieEventWire
+
+    var body: some View {
+        Group {
+            switch event.type {
+            case .message:
+                Text(event.content)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            case .thinking:
+                if !event.content.isEmpty {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .padding(.top, 3)
+                        Text(event.content)
+                            .font(.system(size: 13))
+                            .italic()
+                            .foregroundStyle(.white.opacity(0.55))
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            case .toolUse:
+                HStack(spacing: 6) {
+                    Image(systemName: "wrench.adjustable")
+                        .font(.system(size: 11))
+                    Text(event.content)
+                        .font(.system(size: 12, design: .monospaced))
+                }
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .glassEffect(in: .capsule)
+            case .toolResult:
+                Text(event.content)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(4)
+            case .fileEdit:
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 11))
+                    Text(event.content)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(.green.opacity(0.85))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .glassEffect(in: .capsule)
+            case .waiting:
+                EmptyView()       // never a row — bottom status pill shows this
+            case .done:
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle")
+                    Text(event.content.isEmpty ? "Done" : event.content)
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.55))
+            case .error, .limitReached:
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(event.content)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .glassEffect(in: .rect(cornerRadius: 12))
+            }
+        }
+    }
+}

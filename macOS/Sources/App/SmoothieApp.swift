@@ -5,14 +5,32 @@ import Shared
 struct SmoothieApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var pairing: PairingService
+    @State private var prefs: Preferences
+    @State private var processes: ProcessRegistry
     @State private var server: SmoothieHTTPServer
 
     init() {
         let p = PairingService()
-        let s = SmoothieHTTPServer(pairing: p)
+        let prefs = Preferences()
+        let manager = SessionManager(registry: AdapterRegistry())
+        let registry = AdapterRegistry()
+        let proc = ProcessRegistry(manager: manager, registry: registry, prefs: prefs)
+        let s = SmoothieHTTPServer(
+            pairing: p,
+            manager: manager,
+            registry: registry,
+            processes: proc,
+            prefs: prefs
+        )
         _pairing = State(initialValue: p)
+        _prefs = State(initialValue: prefs)
+        _processes = State(initialValue: proc)
         _server = State(initialValue: s)
-        AppDelegate.bootstrap = AppDelegate.Bootstrap(server: s)
+        AppDelegate.bootstrap = AppDelegate.Bootstrap(
+            server: s,
+            registry: registry,
+            processes: proc
+        )
     }
 
     var body: some Scene {
@@ -20,6 +38,8 @@ struct SmoothieApp: App {
             MenubarPopover()
                 .environment(pairing)
                 .environment(server)
+                .environment(prefs)
+                .environment(processes)
         } label: {
             iconView
         }
@@ -30,8 +50,13 @@ struct SmoothieApp: App {
     private var iconView: some View {
         switch server.status {
         case .running:
-            Image(systemName: "waveform.path.badge.plus")
-                .accessibilityLabel("Smoothie running")
+            if processes.activeCount > 0 {
+                Image(systemName: "waveform.path.badge.plus")
+                    .accessibilityLabel("Smoothie running with \(processes.activeCount) session(s)")
+            } else {
+                Image(systemName: "waveform.path")
+                    .accessibilityLabel("Smoothie running")
+            }
         case .starting:
             Image(systemName: "waveform.path")
                 .accessibilityLabel("Smoothie starting")
@@ -49,14 +74,27 @@ struct SmoothieApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     struct Bootstrap {
         let server: SmoothieHTTPServer
+        let registry: AdapterRegistry
+        let processes: ProcessRegistry
     }
     static var bootstrap: Bootstrap?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppDelegate.bootstrap?.server.start()
+        SafetyHost.shared.loadPrompts()
+        if let boot = AppDelegate.bootstrap {
+            Task { @MainActor in
+                await AdapterProbe.probeAll(into: boot.registry)
+                boot.server.start()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        AppDelegate.bootstrap?.server.stop()
+        Task { @MainActor in
+            if let boot = AppDelegate.bootstrap {
+                await boot.processes.terminateAll()
+                boot.server.stop()
+            }
+        }
     }
 }

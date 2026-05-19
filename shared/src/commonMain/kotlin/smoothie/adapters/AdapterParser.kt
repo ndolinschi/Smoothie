@@ -27,6 +27,9 @@ interface AdapterParser {
      *  Implementations are stateful — they hold a partial-line buffer. */
     fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent>
 
+    /** Convenience for Swift hosts: feed text directly (already UTF-8 decoded). */
+    fun ingestText(text: String): List<SmoothieEvent> = ingest(text.encodeToByteArray())
+
     /** Encode a user message as the bytes to write to the CLI's stdin. The
      *  returned string already includes the appropriate line terminator. */
     fun encodeUserMessage(content: String): String

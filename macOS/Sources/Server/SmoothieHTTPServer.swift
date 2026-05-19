@@ -4,9 +4,8 @@ import NIOCore
 import Observation
 import Shared
 
-/// Minimal v2 HTTP surface: `/health` (public) and `/whoami` (bearer-guarded
-/// sanity ping). Sessions/SSE/projects/browse routes land in P4/P5/P7 as the
-/// shared K/N session machinery is wired in.
+/// Bearer-guarded HTTP server. /health is public; everything else lives behind
+/// the BearerAuthMiddleware. Routes are mounted via the Routes module.
 @MainActor
 @Observable
 final class SmoothieHTTPServer {
@@ -22,10 +21,23 @@ final class SmoothieHTTPServer {
     private var serverTask: Task<Void, Never>?
 
     let pairing: PairingService
-    let registry = AdapterRegistry()
+    let manager: SessionManager
+    let registry: AdapterRegistry
+    let processes: ProcessRegistry
+    let prefs: Preferences
 
-    init(pairing: PairingService) {
+    init(
+        pairing: PairingService,
+        manager: SessionManager,
+        registry: AdapterRegistry,
+        processes: ProcessRegistry,
+        prefs: Preferences
+    ) {
         self.pairing = pairing
+        self.manager = manager
+        self.registry = registry
+        self.processes = processes
+        self.prefs = prefs
     }
 
     func start() {
@@ -33,8 +45,19 @@ final class SmoothieHTTPServer {
         let token = pairing.token
         let host = pairing.host
         let port = pairing.port
+        let manager = self.manager
+        let registry = self.registry
+        let processes = self.processes
+        let prefs = self.prefs
 
-        let router = Self.buildRouter(token: token)
+        let router = Self.buildRouter(
+            token: token,
+            manager: manager,
+            registry: registry,
+            processes: processes,
+            prefs: prefs
+        )
+
         let app = Application(
             router: router,
             configuration: .init(
@@ -75,34 +98,28 @@ final class SmoothieHTTPServer {
         }
     }
 
-    private static func buildRouter(token: String) -> Router<BasicRequestContext> {
+    private static func buildRouter(
+        token: String,
+        manager: SessionManager,
+        registry: AdapterRegistry,
+        processes: ProcessRegistry,
+        prefs: Preferences
+    ) -> Router<BasicRequestContext> {
         let router = Router(context: BasicRequestContext.self)
 
-        // /health is intentionally public — used by the iOS app to verify the
-        // server is alive before submitting the auth header.
+        // /health is intentionally public so the iOS app can probe before
+        // submitting the Bearer header.
         router.get("/health") { _, _ -> Response in
             jsonResponse("{\"healthy\":true,\"version\":\"0.2.0\"}")
         }
 
-        // Everything else requires Bearer.
-        router.group()
+        let group = router.group()
             .add(middleware: BearerAuthMiddleware(token: token))
-            .get("/whoami") { _, _ -> Response in
-                jsonResponse("{\"paired\":true}")
-            }
+
+        Routes.mount(group, manager: manager, registry: registry, processes: processes, prefs: prefs)
 
         return router
     }
-}
-
-private func jsonResponse(_ body: String, status: HTTPResponse.Status = .ok) -> Response {
-    var buf = ByteBuffer()
-    buf.writeBytes(Array(body.utf8))
-    return Response(
-        status: status,
-        headers: [.contentType: "application/json"],
-        body: ResponseBody(byteBuffer: buf)
-    )
 }
 
 struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
@@ -115,7 +132,7 @@ struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
     ) async throws -> Response {
         let header = request.headers[.authorization]
         guard let header, header == "Bearer \(token)" else {
-            return jsonResponse("{\"error\":\"unauthorized\"}", status: .unauthorized)
+            return errorResponse(.unauthorized, "unauthorized")
         }
         return try await next(request, context)
     }
