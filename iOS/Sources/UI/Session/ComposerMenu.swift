@@ -1,125 +1,10 @@
 import SwiftUI
 
-/// Legacy "+" composer menu — superseded by AttachSheet.swift in P16. The
-/// drill-in sheets below (ModelPickerSheet, SlashCommandSheet,
-/// MCPComingSoonSheet) are still presented by AttachSheet via callbacks, so
-/// they live on. Remove this struct in a follow-up cleanup once we're sure
-/// no surface still references it.
-private struct ComposerMenu: View {
-    let session: SessionDescriptorWire
-    let features: ProviderFeaturesWire?
-    let onInsertSlash: (String) -> Void
-    let onAttachFile: () -> Void
-    let onMentionFile: () -> Void
-    let onRestartWithModel: (String) -> Void
-    let onRestartWithEffort: (String) -> Void
-    let onRestartWithMode: (String) -> Void
-
-    @State private var showingModels = false
-    @State private var showingSlash = false
-    @State private var showingMCP = false
-
-    var body: some View {
-        Menu {
-            Section("Add agents, context, tools…") {
-                // Modes (Plan/Debug/Multitask/Ask in Cursor; Smoothie maps to
-                // provider modes — Gemini's plan/auto_edit/yolo/default).
-                if let f = features, f.supportsModes, !f.availableModes.isEmpty {
-                    Menu("Modes") {
-                        ForEach(f.availableModes, id: \.self) { mode in
-                            Button {
-                                onRestartWithMode(mode)
-                            } label: {
-                                if session.mode == mode {
-                                    Label(modeDisplay(mode), systemImage: "checkmark")
-                                } else {
-                                    Text(modeDisplay(mode))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Button {
-                    onAttachFile()
-                } label: {
-                    Label("Image / file", systemImage: "paperclip")
-                }
-
-                Button {
-                    onMentionFile()
-                } label: {
-                    Label("Mention file (@)", systemImage: "at")
-                }
-            }
-
-            Section {
-                if let f = features, f.supportsModelPicker {
-                    Button {
-                        showingModels = true
-                    } label: {
-                        Label("Models", systemImage: "cube")
-                    }
-                }
-
-                if let f = features, !f.slashCommands.isEmpty {
-                    Button {
-                        showingSlash = true
-                    } label: {
-                        Label("Skills", systemImage: "wand.and.stars")
-                    }
-                }
-
-                Button {
-                    showingMCP = true
-                } label: {
-                    Label("MCP Servers", systemImage: "server.rack")
-                }
-            }
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .glassEffect(in: .rect(cornerRadius: 14))
-        }
-        .sheet(isPresented: $showingModels) {
-            if let f = features {
-                ModelPickerSheet(
-                    currentModel: session.model,
-                    currentEffort: session.reasoningEffort,
-                    features: f,
-                    onPickModel: onRestartWithModel,
-                    onPickEffort: onRestartWithEffort
-                )
-                .presentationDetents([.medium, .large])
-                .presentationBackground(.clear)
-            }
-        }
-        .sheet(isPresented: $showingSlash) {
-            if let f = features {
-                SlashCommandSheet(
-                    commands: f.slashCommands,
-                    onPick: onInsertSlash
-                )
-                .presentationDetents([.medium])
-                .presentationBackground(.clear)
-            }
-        }
-        .sheet(isPresented: $showingMCP) {
-            MCPComingSoonSheet()
-                .presentationDetents([.medium])
-                .presentationBackground(.clear)
-        }
-    }
-
-    private func modeDisplay(_ raw: String) -> String {
-        // Gemini's underscored names; show as plain words
-        raw.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-}
+// The legacy "+" ComposerMenu View struct was removed in P18 — AttachSheet
+// in iOS/Sources/UI/Session/AttachSheet.swift owns that surface now. The
+// drill-in sheets below (ModelPickerSheet, SlashCommandSheet,
+// MCPComingSoonSheet) are still presented by AttachSheet via callbacks, so
+// they live on here.
 
 // MARK: - Model picker
 
@@ -268,7 +153,7 @@ struct ModelPickerSheet: View {
     }
 }
 
-// MARK: - Slash command picker (Skills)
+// MARK: - Slash command picker (Commands)
 
 struct SlashCommandSheet: View {
     let commands: [SlashCommandWire]
@@ -292,7 +177,7 @@ struct SlashCommandSheet: View {
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.white.opacity(0.45))
-                            TextField("Search skills", text: $query)
+                            TextField("Search commands", text: $query)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .foregroundStyle(.white)
@@ -328,7 +213,7 @@ struct SlashCommandSheet: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Skills")
+            .navigationTitle("Commands")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)

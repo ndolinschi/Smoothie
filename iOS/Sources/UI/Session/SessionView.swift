@@ -80,10 +80,10 @@ final class SessionLiveStore {
         guard let mode = pendingMode else { return }
         pendingMode = nil
 
-        let label = mode.lowercased() == "plan" ? "Plan" : "Code"
+        let label = mode.lowercased() == "plan" ? "plan mode" : "code mode"
         let divider = SmoothieEventWire(
             type: .toolResult,
-            content: "__SMOOTHIE_DIVIDER__::Switched to \(label) mode",
+            content: "__SMOOTHIE_DIVIDER__::\(label)",
             metadata: nil,
             timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
         )
@@ -253,11 +253,10 @@ struct SessionView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(SmoothieColor.textPrimary)
                         .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
-                        .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
-                        .clipShape(Circle())
+                        .contentShape(Rectangle())
                 }
             }
         }

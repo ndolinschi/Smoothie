@@ -41,7 +41,7 @@ struct AttachSheet: View {
                     glyph: "wand.and.stars",
                     glyphColor: Color(hex: 0xFBBF24),
                     glyphBackground: Color(hex: 0x2A2415),
-                    title: "Skills",
+                    title: "Commands",
                     subtitle: "Insert a slash command at the cursor"
                 ) {
                     onOpenSkills()

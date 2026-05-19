@@ -18,7 +18,7 @@ class AdapterRegistry {
     init {
         register(ClaudeAdapter())
         register(GeminiAdapter())
-        // P9b: register OpenCodeAdapter once its HTTP-transport host lands.
+        register(OpenCodeAdapter())
     }
 
     private fun register(parser: AdapterParser) {

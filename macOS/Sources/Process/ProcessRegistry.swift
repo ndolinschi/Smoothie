@@ -8,7 +8,7 @@ import Shared
 @MainActor
 @Observable
 final class ProcessRegistry {
-    private var hosts: [String: ProcessHost] = [:]
+    private var hosts: [String: any SessionHost] = [:]
     private(set) var activeCount: Int = 0
 
     let manager: SessionManager
@@ -41,20 +41,6 @@ final class ProcessRegistry {
             throw SpawnError.pathForbidden(request.projectPath)
         }
 
-        // v1 ships Claude as the only persistent-process adapter. Gemini's
-        // `-p` mode is one-shot per process, and OpenCode needs an
-        // HTTP-transport host. Both land in v1.5.
-        if request.cli == CLIType.gemini {
-            throw SpawnError.launchFailed(
-                "Gemini multi-turn sessions land in v1.5 — single-prompt support lives in the shared parser, host wiring is next."
-            )
-        }
-        if request.cli == CLIType.openCode {
-            throw SpawnError.launchFailed(
-                "OpenCode runs over its own `opencode serve` HTTP transport; v1.5 wires that up. Use Claude for now."
-            )
-        }
-
         // Snap the request through Preferences so it gets the default model if
         // the request omitted one and the user has set a preference.
         let effective = prefs.applyDefaults(to: request)
@@ -85,13 +71,31 @@ final class ProcessRegistry {
         let envMap = Self.mapFromKotlin(parser.launchEnvironment())
 
         do {
-            let host = try ProcessHost(
-                session: session,
-                executable: exec,
-                arguments: args,
-                cwd: effective.projectPath,
-                environment: envMap
-            )
+            let host: any SessionHost
+            if effective.cli == CLIType.gemini, let geminiParser = parser as? GeminiAdapter {
+                host = GeminiOneshotHost(
+                    session: session,
+                    parser: geminiParser,
+                    executable: exec,
+                    cwd: effective.projectPath,
+                    baseArgs: args,
+                    env: envMap
+                )
+            } else if effective.cli == CLIType.openCode {
+                host = OpenCodeServeHost(
+                    session: session,
+                    executable: exec,
+                    cwd: effective.projectPath
+                )
+            } else {
+                host = try ProcessHost(
+                    session: session,
+                    executable: exec,
+                    arguments: args,
+                    cwd: effective.projectPath,
+                    environment: envMap
+                )
+            }
             try host.start()
             hosts[session.id] = host
             activeCount = hosts.count
@@ -104,7 +108,7 @@ final class ProcessRegistry {
         return try await session.descriptor()
     }
 
-    func host(forSessionId id: String) -> ProcessHost? {
+    func host(forSessionId id: String) -> (any SessionHost)? {
         hosts[id]
     }
 

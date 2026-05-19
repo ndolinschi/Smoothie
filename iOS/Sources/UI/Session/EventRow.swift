@@ -23,16 +23,15 @@ struct EventRow: View {
             Rectangle()
                 .fill(SmoothieColor.strokeSoft)
                 .frame(height: 0.5)
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .tracking(1.0)
-                .foregroundStyle(SmoothieColor.textSecondary)
+            Text("(\(label))")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(SmoothieColor.textTertiary)
                 .fixedSize()
             Rectangle()
                 .fill(SmoothieColor.strokeSoft)
                 .frame(height: 0.5)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
 
     private var typedBody: some View {

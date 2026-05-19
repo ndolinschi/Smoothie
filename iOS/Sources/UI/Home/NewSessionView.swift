@@ -83,12 +83,11 @@ struct NewSessionView: View {
     }
 
     /// Client-side allowlist of CLIs that actually drive an end-to-end
-    /// session through ProcessHost today. Gemini and OpenCode are present
-    /// in the picker so users see them, but their host wiring lands in
-    /// v1.5 (see ProcessRegistry.spawn).
-    private func isSupported(_ cli: CLIWire) -> Bool {
-        cli == .claudeCode
-    }
+    /// session through ProcessRegistry today. All three providers are
+    /// supported as of P18 — Claude via ProcessHost, Gemini via
+    /// GeminiOneshotHost with --resume, and OpenCode via OpenCodeServeHost
+    /// over the local `opencode serve` HTTP server.
+    private func isSupported(_ cli: CLIWire) -> Bool { true }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -183,6 +182,10 @@ struct NewSessionView: View {
                 selectedCLI = first.cli
             }
         } catch {
+            if isCancellation(error) {
+                loading = false
+                return
+            }
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
@@ -201,6 +204,7 @@ struct NewSessionView: View {
                 onCreated(session)
             } catch {
                 starting = false
+                if isCancellation(error) { return }
                 loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         }

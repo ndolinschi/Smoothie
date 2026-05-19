@@ -43,40 +43,50 @@ struct HomeView: View {
             ZStack {
                 SmoothieColor.bgPrimary.ignoresSafeArea()
 
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        if !tipDismissed {
-                            DashedBanner(
-                                title: "Take your sessions on the go",
-                                message: "Tap + to start a new Claude session in any project on \(activeMacLabel).",
-                                linkText: nil,
-                                onLink: nil,
-                                onDismiss: { withAnimation(.easeOut(duration: 0.2)) { tipDismissed = true } }
-                            ) {
-                                Image(systemName: "macbook")
-                                    .font(.system(size: 28))
-                                    .foregroundStyle(SmoothieColor.textTertiary)
-                                    .padding(.trailing, 4)
-                            }
-                            .padding(.top, 4)
+                List {
+                    if !tipDismissed {
+                        DashedBanner(
+                            title: "Take your sessions on the go",
+                            message: "Tap + to start a new Claude session in any project on \(activeMacLabel).",
+                            linkText: nil,
+                            onLink: nil,
+                            onDismiss: { withAnimation(.easeOut(duration: 0.2)) { tipDismissed = true } }
+                        ) {
+                            Image(systemName: "macbook")
+                                .font(.system(size: 28))
+                                .foregroundStyle(SmoothieColor.textTertiary)
+                                .padding(.trailing, 4)
                         }
-
-                        if loading {
-                            ProgressView()
-                                .tint(SmoothieColor.textSecondary)
-                                .frame(maxWidth: .infinity).padding(.vertical, 40)
-                        } else if let loadError {
-                            errorBanner(loadError)
-                        } else {
-                            filterRow
-                            sessionGroups
-                        }
+                        .padding(.top, 4)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16))
+                        .listRowSeparator(.hidden)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 32)
+
+                    if loading {
+                        ProgressView()
+                            .tint(SmoothieColor.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 40)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                    } else if let loadError {
+                        errorBanner(loadError)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    } else {
+                        filterRow
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                            .listRowSeparator(.hidden)
+                        sessionListContent
+                    }
                 }
+                .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .listSectionSpacing(.compact)
+                .environment(\.defaultMinListRowHeight, 0)
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,7 +94,7 @@ struct HomeView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    topBarButton(systemName: "line.3.horizontal", filled: false) {
+                    topBarButton(systemName: "line.3.horizontal") {
                         presentingPairings = true
                     }
                 }
@@ -94,7 +104,7 @@ struct HomeView: View {
                         .foregroundStyle(SmoothieColor.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    topBarButton(systemName: "plus.bubble.fill", filled: true) {
+                    topBarButton(systemName: "plus") {
                         presentingPicker = true
                     }
                 }
@@ -154,19 +164,13 @@ struct HomeView: View {
 
     // MARK: - Top bar
 
-    private func topBarButton(systemName: String, filled: Bool, action: @escaping () -> Void) -> some View {
+    private func topBarButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: filled ? .regular : .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(SmoothieColor.textPrimary)
                 .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
-                .background(
-                    filled ? SmoothieColor.accent : Color.clear,
-                    in: .circle
-                )
-                .overlay(
-                    Circle().strokeBorder(filled ? Color.clear : SmoothieColor.stroke, lineWidth: 1)
-                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -208,26 +212,38 @@ struct HomeView: View {
     // MARK: - Session groups
 
     @ViewBuilder
-    private var sessionGroups: some View {
+    private var sessionListContent: some View {
         if filteredSessions.isEmpty {
             emptyState
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
         } else {
             let buckets = bucketed(filteredSessions)
             ForEach(buckets, id: \.key) { bucket in
-                Text(bucket.key)
-                    .font(.system(size: 13))
-                    .foregroundStyle(SmoothieColor.textSecondary)
-                    .padding(.top, 12)
-                ForEach(bucket.value) { s in
-                    Button { selectedSession = s } label: { taskRow(s) }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                Task { await deleteSession(s) }
-                            } label: {
-                                Label("Remove", systemImage: "minus.circle")
+                Section {
+                    ForEach(bucket.value) { s in
+                        Button { selectedSession = s } label: { taskRow(s) }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    Task { await deleteSession(s) }
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                }
                             }
-                        }
+                    }
+                } header: {
+                    Text(bucket.key)
+                        .font(.system(size: 13))
+                        .foregroundStyle(SmoothieColor.textSecondary)
+                        .textCase(nil)
+                        .padding(.top, 12)
+                        .padding(.leading, 0)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 4, trailing: 16))
                 }
             }
         }
@@ -362,22 +378,13 @@ struct HomeView: View {
             sessions = try await s
             adapters = try await a
         } catch {
-            if Self.isCancellation(error) {
+            if isCancellation(error) {
                 loading = false
                 return
             }
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
-    }
-
-    private static func isCancellation(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return true }
-        let msg = nsError.localizedDescription.lowercased()
-        if msg.contains("cancelled") || msg.contains("canceled") { return true }
-        return false
     }
 
     private func deleteSession(_ s: SessionDescriptorWire) async {

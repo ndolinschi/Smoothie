@@ -6,7 +6,7 @@ import Shared
 /// and surfaces termination back to Kotlin so the SessionState
 /// transitions to .done / .error.
 @MainActor
-final class ProcessHost {
+final class ProcessHost: SessionHost {
     let session: Session
     private let process: Process
     private let stdinPipe: Pipe
