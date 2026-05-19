@@ -94,6 +94,7 @@ struct SessionView: View {
     @State private var restarting = false
     @State private var switchError: String?
     @State private var lastNotifiedState: SessionStateWire?
+    @State private var showingModeSheet = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -125,20 +126,32 @@ struct SessionView: View {
         _currentSession = State(initialValue: session)
     }
 
+    private var toolbarSubtitle: String {
+        let modeLabel = (currentSession.mode ?? "default")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        return "\(currentSession.cli.displayName) · \(modeLabel)"
+    }
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            SmoothieColor.bgPrimary.ignoresSafeArea()
             if restarting {
                 VStack(spacing: 12) {
-                    ProgressView().tint(.white.opacity(0.6))
+                    ProgressView().tint(SmoothieColor.textSecondary)
                     Text("Restarting session…")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let store {
-                VStack(spacing: 0) {
+                VStack(spacing: 8) {
                     AgentStream(events: store.events)
+                    if !store.events.isEmpty {
+                        ActionChipsRow(events: store.events) {
+                            showingModeSheet = true
+                        }
+                    }
                     MessageInput(
                         session: currentSession,
                         features: features,
@@ -151,35 +164,68 @@ struct SessionView: View {
                         onSwitchModel: { switching = .model($0) },
                         onSwitchEffort: { switching = .effort($0) },
                         onSwitchMode: { switching = .mode($0) },
-                        onSwitchProvider: { switching = .provider($0) }
+                        onSwitchProvider: { switching = .provider($0) },
+                        onTapMode: { showingModeSheet = true }
                     )
                 }
             } else {
-                ProgressView().tint(.white.opacity(0.5))
+                ProgressView().tint(SmoothieColor.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 3) {
+                VStack(spacing: 2) {
                     Text(currentSession.projectName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    if let store {
-                        StatusBadge(state: store.state, connected: store.connected)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(toolbarSubtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(SmoothieColor.textSecondary)
+                            .lineLimit(1)
+                        if let store, store.state != .done, store.state != .error {
+                            StatusBadge(state: store.state, connected: store.connected)
+                        }
                     }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .destructive) { confirmKill = true } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 18))
-                        .foregroundStyle(.white.opacity(0.7))
+                Menu {
+                    Button {
+                        switching = .model(currentSession.model ?? "")
+                    } label: {
+                        Label("Switch model…", systemImage: "cube")
+                    }
+                    Button(role: .destructive) {
+                        confirmKill = true
+                    } label: {
+                        Label("Kill session", systemImage: "stop.circle")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
+                        .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
+                        .clipShape(Circle())
                 }
             }
+        }
+        .sheet(isPresented: $showingModeSheet) {
+            ModeSheet(
+                session: currentSession,
+                features: features,
+                onPick: { switching = .mode($0) },
+                onDismiss: { showingModeSheet = false }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
         }
         .onAppear {
             connectStore()

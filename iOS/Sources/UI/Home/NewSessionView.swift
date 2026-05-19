@@ -77,8 +77,17 @@ struct NewSessionView: View {
     }
 
     private var canStart: Bool {
-        preselectedPath != nil &&
-        (adapters.first { $0.cli == selectedCLI }?.installed ?? false)
+        guard preselectedPath != nil else { return false }
+        guard isSupported(selectedCLI) else { return false }
+        return adapters.first { $0.cli == selectedCLI }?.installed ?? false
+    }
+
+    /// Client-side allowlist of CLIs that actually drive an end-to-end
+    /// session through ProcessHost today. Gemini and OpenCode are present
+    /// in the picker so users see them, but their host wiring lands in
+    /// v1.5 (see ProcessRegistry.spawn).
+    private func isSupported(_ cli: CLIWire) -> Bool {
+        cli == .claudeCode
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -116,31 +125,50 @@ struct NewSessionView: View {
     private func cliRow(_ a: AdapterInfoWire) -> some View {
         let isSelected = selectedCLI == a.cli
         let installed = a.installed
+        let supported = isSupported(a.cli)
+        let selectable = installed && supported
         return Button {
-            if installed { selectedCLI = a.cli }
+            if selectable { selectedCLI = a.cli }
         } label: {
             HStack(spacing: 12) {
                 ProviderIcon(cli: a.cli, size: 18)
-                    .opacity(installed ? 1 : 0.35)
+                    .opacity(selectable ? 1 : 0.35)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(a.cli.displayName).foregroundStyle(installed ? .white : .white.opacity(0.4))
-                        .font(.system(size: 15, weight: .medium))
-                    Text(installed ? (a.version.map { "v\($0)" } ?? "ready") : "not installed")
+                    HStack(spacing: 6) {
+                        Text(a.cli.displayName)
+                            .foregroundStyle(selectable ? .white : .white.opacity(0.4))
+                            .font(.system(size: 15, weight: .medium))
+                        if !supported {
+                            Text("v1.5")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(SmoothieColor.accent)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(SmoothieColor.accentSoft, in: .capsule)
+                        }
+                    }
+                    Text(rowSubtitle(installed: installed, supported: supported, version: a.version))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
                 Spacer()
-                if isSelected, installed {
+                if isSelected, selectable {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
                 }
             }
             .padding(14)
             .glassEffect(in: .rect(cornerRadius: 14))
-            .opacity(installed ? 1 : 0.55)
+            .opacity(selectable ? 1 : 0.55)
         }
         .buttonStyle(.plain)
-        .disabled(!installed)
+        .disabled(!selectable)
+    }
+
+    private func rowSubtitle(installed: Bool, supported: Bool, version: String?) -> String {
+        if !installed { return "not installed" }
+        if !supported { return "multi-turn host lands in v1.5" }
+        return version.map { "v\($0)" } ?? "ready"
     }
 
     private func load() async {
@@ -148,7 +176,10 @@ struct NewSessionView: View {
         loading = true
         do {
             adapters = try await api.adapters()
-            if let first = adapters.first(where: { $0.installed }) {
+            // Prefer a supported, installed CLI; fall back to any installed.
+            if let supportedInstalled = adapters.first(where: { $0.installed && isSupported($0.cli) }) {
+                selectedCLI = supportedInstalled.cli
+            } else if let first = adapters.first(where: { $0.installed }) {
                 selectedCLI = first.cli
             }
         } catch {

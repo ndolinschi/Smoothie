@@ -36,15 +36,20 @@ final class VoiceDictator {
     }
 
     func start(initial: String, onChunk: @escaping (String) -> Void) async {
+        #if targetEnvironment(simulator)
+        state = .unavailable("Voice input needs a real iPhone — Speech Recognition doesn't run in the iOS Simulator. Pair, build to your device, and try again.")
+        return
+        #else
         guard recognizer?.isAvailable == true else {
-            state = .unavailable("Speech recognition isn't available right now.")
+            state = .unavailable("Speech recognition isn't available right now. Check that it's enabled in iOS Settings → Privacy & Security → Speech Recognition.")
             return
         }
         let granted = await Self.requestAuthorization()
         guard granted else {
-            state = .unavailable("Grant Microphone + Speech Recognition in iOS Settings.")
+            state = .unavailable("Grant Microphone + Speech Recognition in iOS Settings → Privacy & Security → Smoothie.")
             return
         }
+        #endif
 
         do {
             try setupAudioSession()

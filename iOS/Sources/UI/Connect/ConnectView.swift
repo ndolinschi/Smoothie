@@ -7,15 +7,7 @@ struct ConnectView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-            // Subtle radial vignette for visual depth under glass elements
-            RadialGradient(
-                colors: [Color.white.opacity(0.05), .clear],
-                center: .top,
-                startRadius: 0,
-                endRadius: 500
-            )
-            .ignoresSafeArea()
+            SmoothieColor.bgPrimary.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 28) {
                 Spacer(minLength: 80)
@@ -23,10 +15,12 @@ struct ConnectView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Smoothie")
                         .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("Pair with your Mac to start.")
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                    Text(pairing.pairings.isEmpty
+                         ? "Pair with your Mac to start."
+                         : "Pair another Mac to add it to the list.")
                         .font(.system(size: 17))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
 
                 if let error = pairing.lastError {
@@ -36,56 +30,25 @@ struct ConnectView: View {
                             .font(.system(size: 13))
                             .multilineTextAlignment(.leading)
                     }
-                    .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
+                    .foregroundStyle(SmoothieColor.statusErr)
                     .padding(12)
-                    .glassEffect(in: .rect(cornerRadius: 14))
+                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
                 }
 
-                VStack(spacing: 12) {
-                    Button {
-                        presentingScanner = true
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Scan QR code")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text("from the Smoothie menu bar on your Mac")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "qrcode.viewfinder")
-                                .font(.system(size: 22, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 18)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(.white)
-                    .foregroundStyle(.black)
+                VStack(spacing: 10) {
+                    pairingButton(
+                        title: "Scan QR code",
+                        subtitle: "from the Smoothie menu bar on your Mac",
+                        systemName: "qrcode.viewfinder",
+                        prominent: true
+                    ) { presentingScanner = true }
 
-                    Button {
-                        presentingManual = true
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Enter host manually")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text("type the host, port and token")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "keyboard")
-                                .font(.system(size: 20, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 18)
-                    }
-                    .buttonStyle(.glass)
-                    .foregroundStyle(.white)
+                    pairingButton(
+                        title: "Enter host manually",
+                        subtitle: "type the host, port and token",
+                        systemName: "keyboard",
+                        prominent: false
+                    ) { presentingManual = true }
                 }
 
                 Spacer()
@@ -93,10 +56,10 @@ struct ConnectView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.shield")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                     Text("Pairing uses a 32-byte token stored on-device. No cloud.")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
                 .padding(.bottom, 30)
             }
@@ -107,9 +70,45 @@ struct ConnectView: View {
         }
         .sheet(isPresented: $presentingManual) {
             ManualPairView()
-                .presentationDetents([.medium])
-                .presentationBackground(.clear)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(20)
         }
+    }
+
+    private func pairingButton(
+        title: String,
+        subtitle: String,
+        systemName: String,
+        prominent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: systemName)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(prominent ? .white : SmoothieColor.textPrimary)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(prominent ? .white : SmoothieColor.textPrimary)
+                    Text(subtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(prominent ? Color.white.opacity(0.75) : SmoothieColor.textSecondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .background(prominent ? SmoothieColor.accent : SmoothieColor.bgCard,
+                        in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
+            .overlay(
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg)
+                    .strokeBorder(prominent ? Color.clear : SmoothieColor.stroke, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -118,21 +117,21 @@ private struct ScannerSheet: View {
     @Environment(PairingStore.self) private var pairing
     @State private var lastSeen: String?
     @State private var accepted = false
+    @State private var failed = false
 
     var body: some View {
         ZStack {
             QRScannerView { text in
                 guard !accepted else { return }
                 lastSeen = text
-                if pairing.saveFromURL(text) {
-                    accepted = true
-                    Task {
-                        let ok = await pairing.verify()
-                        if ok {
-                            dismiss()
-                        } else {
-                            accepted = false
-                        }
+                accepted = true
+                Task {
+                    let ok = await pairing.tryPairFromURL(text)
+                    if ok {
+                        dismiss()
+                    } else {
+                        accepted = false
+                        failed = true
                     }
                 }
             }
@@ -148,8 +147,9 @@ private struct ScannerSheet: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
+                            .background(SmoothieColor.bgGlyph, in: .circle)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
                 }
                 .padding()
                 Spacer()
@@ -157,16 +157,17 @@ private struct ScannerSheet: View {
                     Text("Scan the QR from the Mac menu bar")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
-                    if let last = lastSeen, pairing.lastError != nil {
-                        Text(pairing.lastError ?? "")
+                    if failed, let err = pairing.lastError {
+                        Text(err)
                             .font(.system(size: 12))
-                            .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
+                            .foregroundStyle(SmoothieColor.statusErr)
+                            .multilineTextAlignment(.center)
                     } else if accepted {
                         Text("Got it — verifying…")
                             .font(.system(size: 12))
                             .foregroundStyle(.white.opacity(0.7))
                     } else {
-                        Text("Tap “Show full QR” in the Mac popover for a bigger code.")
+                        Text("Tap \u{201C}Show full QR\u{201D} in the Mac popover for a bigger code.")
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
@@ -174,7 +175,7 @@ private struct ScannerSheet: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
-                .glassEffect(in: .rect(cornerRadius: 16))
+                .background(SmoothieColor.bgCard.opacity(0.85), in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
                 .padding(.bottom, 32)
             }
         }

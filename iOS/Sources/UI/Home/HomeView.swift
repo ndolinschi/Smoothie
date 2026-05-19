@@ -23,6 +23,8 @@ struct HomeView: View {
     @State private var pendingPath: String?
     @State private var selectedSession: SessionDescriptorWire?
     @State private var filter: HomeFilter = .all
+    @State private var presentingPairings = false
+    @State private var presentingAddPair = false
     @AppStorage("smoothie.homeTipDismissed") private var tipDismissed: Bool = false
 
     private var allCount: Int { sessions.count }
@@ -39,101 +41,35 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
-                RadialGradient(
-                    colors: [Color.white.opacity(0.04), .clear],
-                    center: .top,
-                    startRadius: 0,
-                    endRadius: 500
-                )
-                .ignoresSafeArea()
+                SmoothieColor.bgPrimary.ignoresSafeArea()
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if !tipDismissed {
-                            tipBanner
-                        }
-
-                        if !sessions.isEmpty {
-                            sessionsHeader
-                            ForEach(filteredSessions) { s in
-                                Button {
-                                    selectedSession = s
-                                } label: {
-                                    sessionRow(s)
-                                }
-                                .buttonStyle(.plain)
+                            DashedBanner(
+                                title: "Take your sessions on the go",
+                                message: "Tap + to start a new Claude session in any project on \(activeMacLabel).",
+                                linkText: nil,
+                                onLink: nil,
+                                onDismiss: { withAnimation(.easeOut(duration: 0.2)) { tipDismissed = true } }
+                            ) {
+                                Image(systemName: "macbook")
+                                    .font(.system(size: 28))
+                                    .foregroundStyle(SmoothieColor.textTertiary)
+                                    .padding(.trailing, 4)
                             }
-                            if filteredSessions.isEmpty {
-                                Text(filter == .completed
-                                     ? "No completed sessions yet."
-                                     : "Nothing here yet.")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.white.opacity(0.4))
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding(.vertical, 18)
-                            }
+                            .padding(.top, 4)
                         }
-
-                        sectionHeader(sessions.isEmpty ? "NEW SESSION" : "START ANOTHER")
 
                         if loading {
-                            ProgressView().tint(.white.opacity(0.5))
+                            ProgressView()
+                                .tint(SmoothieColor.textSecondary)
                                 .frame(maxWidth: .infinity).padding(.vertical, 40)
                         } else if let loadError {
-                            HStack(spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                Text(loadError).font(.system(size: 13))
-                            }
-                            .foregroundStyle(.red.opacity(0.85))
-                            .padding(12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(in: .rect(cornerRadius: 14))
+                            errorBanner(loadError)
                         } else {
-                            Button {
-                                presentingPicker = true
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 20))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Start a new session")
-                                            .font(.system(size: 15, weight: .semibold))
-                                            .foregroundStyle(.black)
-                                        Text(installedSummary())
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.black.opacity(0.55))
-                                    }
-                                    Spacer()
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                            }
-                            .buttonStyle(.glassProminent)
-                            .tint(.white)
-                            .foregroundStyle(.black)
-
-                            if !recents.paths.isEmpty {
-                                sectionHeader("RECENT PROJECTS")
-                                ForEach(recents.paths, id: \.self) { path in
-                                    Button {
-                                        pendingPath = path
-                                        recents.touch(path)
-                                        presentingNew = true
-                                    } label: {
-                                        recentCard(path: path)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        Button(role: .destructive) {
-                                            recents.remove(path)
-                                        } label: {
-                                            Label("Remove", systemImage: "minus.circle")
-                                        }
-                                    }
-                                }
-                            }
+                            filterRow
+                            sessionGroups
                         }
                     }
                     .padding(.horizontal, 16)
@@ -142,22 +78,24 @@ struct HomeView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Smoothie")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    topBarButton(systemName: "line.3.horizontal", filled: false) {
+                        presentingPairings = true
+                    }
+                }
                 ToolbarItem(placement: .principal) {
-                    Text("Smoothie")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                    Text("Code")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Disconnect", role: .destructive) { pairing.clear() }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(.white.opacity(0.75))
+                    topBarButton(systemName: "plus", filled: true) {
+                        presentingPicker = true
                     }
                 }
             }
@@ -169,7 +107,6 @@ struct HomeView: View {
                 FolderPickerSheet(activeProjects: liveProjects) { path in
                     pendingPath = path
                     presentingPicker = false
-                    // Give the sheet a tick to dismiss before presenting the next one.
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(200))
                         presentingNew = true
@@ -189,173 +126,217 @@ struct HomeView: View {
                 .presentationDetents([.large])
                 .presentationBackground(.clear)
             }
+            .sheet(isPresented: $presentingPairings) {
+                PairingsSheet(
+                    onAddPairing: {
+                        presentingPairings = false
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(200))
+                            presentingAddPair = true
+                        }
+                    },
+                    onDismiss: { presentingPairings = false }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(20)
+            }
+            .fullScreenCover(isPresented: $presentingAddPair) {
+                AddPairingCover(onDismiss: { presentingAddPair = false })
+            }
         }
         .task { await refresh() }
         .refreshable { await refresh() }
-    }
-
-    private func sectionHeader(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(.white.opacity(0.35))
-            .padding(.top, 12)
-            .padding(.leading, 6)
-    }
-
-    /// Header for the Sessions section: title on the left, segmented All /
-    /// Completed capsule on the right. Live counts on each chip.
-    private var sessionsHeader: some View {
-        HStack(spacing: 8) {
-            Text("SESSIONS")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.35))
-            Spacer()
-            HStack(spacing: 0) {
-                filterChip(.all, count: allCount)
-                filterChip(.completed, count: completedCount)
-            }
-            .padding(2)
-            .glassEffect(in: .capsule)
+        .onChange(of: pairing.activeId) { _, _ in
+            Task { await refresh() }
         }
-        .padding(.top, 4)
-        .padding(.leading, 6)
-        .padding(.trailing, 2)
+    }
+
+    // MARK: - Top bar
+
+    private func topBarButton(systemName: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(filled ? SmoothieColor.textPrimary : SmoothieColor.textPrimary)
+                .frame(width: SmoothieMetrics.topCircle, height: SmoothieMetrics.topCircle)
+                .background(
+                    filled ? SmoothieColor.accent : Color.clear,
+                    in: .circle
+                )
+                .overlay(
+                    Circle().strokeBorder(filled ? Color.clear : SmoothieColor.stroke, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Filter row
+
+    private var filterRow: some View {
+        HStack(spacing: 8) {
+            filterChip(.all, count: allCount)
+            filterChip(.completed, count: completedCount)
+            Spacer()
+        }
+        .padding(.top, 2)
     }
 
     private func filterChip(_ f: HomeFilter, count: Int) -> some View {
-        Button {
+        let active = filter == f
+        return Button {
             filter = f
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Text(f.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(active ? SmoothieColor.textPrimary : SmoothieColor.textSecondary)
                 Text("\(count)")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .opacity(0.65)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(active ? SmoothieColor.textPrimary.opacity(0.55) : SmoothieColor.textTertiary)
             }
-            .foregroundStyle(filter == f ? .black : .white.opacity(0.7))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
-            .background(
-                filter == f ? Color.white : Color.clear,
-                in: .capsule
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(active ? SmoothieColor.bgPrimary : Color.clear, in: .capsule)
+            .overlay(
+                Capsule().strokeBorder(active ? SmoothieColor.stroke : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
     }
 
-    /// Dismissible orientation banner shown until the user taps the X. The flag
-    /// persists across launches via @AppStorage.
-    private var tipBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lightbulb.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(.yellow.opacity(0.85))
-            Text("Tip: pull down to refresh · long-press a session to remove it.")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.7))
-                .lineLimit(2)
-            Spacer(minLength: 6)
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { tipDismissed = true }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.35))
+    // MARK: - Session groups
+
+    @ViewBuilder
+    private var sessionGroups: some View {
+        if filteredSessions.isEmpty {
+            emptyState
+        } else {
+            let buckets = bucketed(filteredSessions)
+            ForEach(buckets, id: \.key) { bucket in
+                Text(bucket.key)
+                    .font(.system(size: 13))
+                    .foregroundStyle(SmoothieColor.textSecondary)
+                    .padding(.top, 12)
+                ForEach(bucket.value) { s in
+                    Button { selectedSession = s } label: { taskRow(s) }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                Task { await deleteSession(s) }
+                            } label: {
+                                Label("Remove", systemImage: "minus.circle")
+                            }
+                        }
+                }
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(in: .rect(cornerRadius: 14))
     }
 
-    /// Task-list style row for an active or completed session — circular
-    /// provider icon, project name + relative time, trailing status badge.
-    private func sessionRow(_ s: SessionDescriptorWire) -> some View {
-        HStack(spacing: 12) {
-            ProviderIcon(cli: s.cli, size: 22)
-                .frame(width: 40, height: 40)
-                .background(Color.white.opacity(0.06), in: .circle)
-                .overlay(
-                    Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
-                )
+    private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionDescriptorWire])] {
+        let week = TimeInterval(7 * 86_400)
+        var thisWeek: [SessionDescriptorWire] = []
+        var earlier: [SessionDescriptorWire] = []
+        let now = Date.now
+        for s in ss.sorted(by: { $0.createdAt > $1.createdAt }) {
+            let date = Date(timeIntervalSince1970: TimeInterval(s.createdAt) / 1000.0)
+            if now.timeIntervalSince(date) < week {
+                thisWeek.append(s)
+            } else {
+                earlier.append(s)
+            }
+        }
+        var out: [(String, [SessionDescriptorWire])] = []
+        if !thisWeek.isEmpty { out.append(("This week", thisWeek)) }
+        if !earlier.isEmpty  { out.append(("Earlier", earlier))  }
+        return out
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Text(filter == .completed ? "No completed sessions yet." : "Tap + to start.")
+                .font(.system(size: 14))
+                .foregroundStyle(SmoothieColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+
+    /// REF-4 task row: dashed-circle icon + title + cloud-style project label + relative time.
+    private func taskRow(_ s: SessionDescriptorWire) -> some View {
+        let date = Date(timeIntervalSince1970: TimeInterval(s.createdAt) / 1000.0)
+        return HStack(spacing: 12) {
+            DashedCircleIcon(dotColor: dotColor(for: s.state))
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.projectName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SmoothieColor.textPrimary)
                     .lineLimit(1)
-                Text(rowSublabel(for: s))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .lineLimit(1)
+                    .truncationMode(.tail)
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 10))
+                        .foregroundStyle(SmoothieColor.textSecondary)
+                    Text(shortProject(s.projectPath))
+                        .font(.system(size: 12))
+                        .foregroundStyle(SmoothieColor.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
             Spacer(minLength: 8)
-            StatusBadge(state: s.state)
+            Text(compactTime(date))
+                .font(.system(size: 12))
+                .foregroundStyle(SmoothieColor.textTertiary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(in: .rect(cornerRadius: 14))
-        .contextMenu {
-            Button(role: .destructive) {
-                Task { await deleteSession(s) }
-            } label: {
-                Label("Remove", systemImage: "minus.circle")
-            }
+        .padding(.horizontal, SmoothieMetrics.rowPaddingH)
+        .padding(.vertical, SmoothieMetrics.rowPaddingV)
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
+    }
+
+    private func dotColor(for state: SessionStateWire) -> Color? {
+        switch state {
+        case .thinking:                   return SmoothieColor.statusThinking
+        case .waiting:                    return SmoothieColor.statusWaiting
+        case .done:                       return SmoothieColor.statusDone
+        case .error, .limitReached:       return SmoothieColor.statusErr
+        case .starting:                   return SmoothieColor.textSecondary
         }
     }
 
-    private func rowSublabel(for s: SessionDescriptorWire) -> String {
-        let created = Date(timeIntervalSince1970: TimeInterval(s.createdAt) / 1000.0)
-        let agePart = "Started " + created.relative
-        if let model = s.model, !model.isEmpty {
-            return "\(s.cli.friendlyModelName(model)) · \(agePart)"
+    private func shortProject(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        if path.hasPrefix(home) {
+            let trimmed = String(path.dropFirst(home.count))
+            return "~" + trimmed
         }
-        return "\(s.cli.displayName) · \(agePart)"
+        return path
     }
 
-    private func deleteSession(_ s: SessionDescriptorWire) async {
-        let api = APIClient(store: pairing)
-        _ = try? await api.killSession(sessionId: s.id)
-        await refresh()
+    private func compactTime(_ date: Date) -> String {
+        let interval = Date.now.timeIntervalSince(date)
+        if interval < 60 { return "now" }
+        if interval < 3600 { return "\(Int(interval / 60))m" }
+        if interval < 86_400 { return "\(Int(interval / 3600))h" }
+        if interval < 604_800 { return "\(Int(interval / 86_400))d" }
+        return "\(Int(interval / 604_800))w"
     }
 
-    private func recentCard(path: String) -> some View {
-        let name = (path as NSString).lastPathComponent
-        let isHome = path == NSHomeDirectory()
-        return HStack(spacing: 10) {
-            Image(systemName: isHome ? "house" : "folder")
-                .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.6))
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isHome ? "Home" : name)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white)
-                Text(path)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.25))
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(message).font(.system(size: 13))
         }
+        .foregroundStyle(SmoothieColor.statusErr)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(in: .rect(cornerRadius: 14))
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
     }
 
-    private func installedSummary() -> String {
-        let installed = adapters.filter { $0.installed }
-        if installed.isEmpty { return "no CLIs installed" }
-        return installed.map { $0.cli.displayName }.joined(separator: " · ")
+    // MARK: - Data
+
+    private var activeMacLabel: String {
+        pairing.current?.label ?? "your Mac"
     }
 
     private func refresh() async {
@@ -371,5 +352,40 @@ struct HomeView: View {
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
+    }
+
+    private func deleteSession(_ s: SessionDescriptorWire) async {
+        let api = APIClient(store: pairing)
+        _ = try? await api.killSession(sessionId: s.id)
+        await refresh()
+    }
+}
+
+/// Minimal wrapper that presents ConnectView when adding another Mac. The
+/// cover auto-dismisses when the pairing list count changes, so a successful
+/// pair returns the user straight to HomeView with the new Mac active.
+private struct AddPairingCover: View {
+    @Environment(PairingStore.self) private var pairing
+    @State private var initialCount: Int = 0
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ConnectView()
+            .overlay(alignment: .topTrailing) {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(SmoothieColor.bgGlyph, in: .circle)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+                .padding(.trailing, 12)
+            }
+            .onAppear { initialCount = pairing.pairings.count }
+            .onChange(of: pairing.pairings.count) { _, new in
+                if new > initialCount { onDismiss() }
+            }
     }
 }

@@ -1,68 +1,58 @@
 import SwiftUI
 
-/// Above-the-composer starter row. Three suggestion pills on the left, then a
-/// scroll into the connected-project chip and the active-provider chip. Only
-/// rendered on a brand-new session (no events received yet, no staged
-/// attachments, empty text field).
+/// REF-1 / REF-3 starter row: a `Suggestions` label followed by a vertical
+/// stack of pills. Bracketed words in each suggestion render as coral
+/// inline-code pills inside the pill body.
 struct SuggestionsBar: View {
     let session: SessionDescriptorWire
     let onPick: (String) -> Void
 
-    private var projectLabel: String {
-        (session.projectPath as NSString).lastPathComponent
-    }
-
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Suggestions")
+                .font(.system(size: 13))
+                .foregroundStyle(SmoothieColor.textSecondary)
+                .padding(.leading, 4)
+            VStack(spacing: 6) {
                 ForEach(SmoothieSuggestions.starters(for: session.cli), id: \.self) { s in
                     Button {
-                        onPick(s)
+                        onPick(SmoothieSuggestions.plainText(s))
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkle")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.55))
-                            Text(s)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.85))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .glassEffect(in: .capsule)
+                        suggestionPill(s)
                     }
                     .buttonStyle(.plain)
                 }
-
-                Divider()
-                    .frame(height: 14)
-                    .overlay(Color.white.opacity(0.12))
-                    .padding(.horizontal, 2)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.55))
-                    Text(projectLabel)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassEffect(in: .capsule)
-
-                HStack(spacing: 4) {
-                    ProviderIcon(cli: session.cli, size: 11)
-                    Text(session.cli.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassEffect(in: .capsule)
             }
-            .padding(.horizontal, 4)
         }
+    }
+
+    private func suggestionPill(_ source: String) -> some View {
+        let segments = SmoothieSuggestions.segments(of: source)
+        return HStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                    switch seg {
+                    case .text(let t):
+                        Text(t)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(SmoothieColor.textPrimary)
+                    case .code(let c):
+                        Text(c)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(SmoothieColor.accent)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(SmoothieColor.accentSoft, in: .rect(cornerRadius: 4))
+                    }
+                }
+            }
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SmoothieColor.bgChip, in: .capsule)
     }
 }

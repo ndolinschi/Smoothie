@@ -1,14 +1,11 @@
 import SwiftUI
 
-/// The "+" menu inside MessageInput, inspired by Cursor's "Add agents,
-/// context, tools…" sheet. Renders only the sections the active provider
-/// supports — Claude has reasoning effort, Gemini has modes, OpenCode has
-/// HTTP-routed models, etc.
-///
-/// Model / effort / mode changes lock a session at startup (each CLI starts
-/// with the chosen flags), so picking a new value triggers a confirm-and-
-/// restart flow rather than mutating the live process.
-struct ComposerMenu: View {
+/// Legacy "+" composer menu — superseded by AttachSheet.swift in P16. The
+/// drill-in sheets below (ModelPickerSheet, SlashCommandSheet,
+/// MCPComingSoonSheet) are still presented by AttachSheet via callbacks, so
+/// they live on. Remove this struct in a follow-up cleanup once we're sure
+/// no surface still references it.
+private struct ComposerMenu: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
     let onInsertSlash: (String) -> Void
