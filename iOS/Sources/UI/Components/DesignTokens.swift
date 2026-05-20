@@ -30,6 +30,30 @@ enum SmoothieColor {
     static let statusWaiting  = Color(hex: 0xFB923C)
     static let statusDone     = Color(hex: 0x34D399)
     static let statusErr      = Color(hex: 0xEF4444)
+
+    // MARK: - P24.c additions
+
+    /// Blue used for selection checkmarks on sheet rows (matches the
+    /// reference's Tailwind-blue-600).
+    static let linkBlue       = Color(hex: 0x2563EB)
+
+    /// Tile tints for `SheetRow` glyph backgrounds. Each pairs with a
+    /// foreground token (modeCode / modePlan / accent / statusDone /
+    /// statusErr) but renders the small 32-pt square behind the glyph.
+    static let glyphModeCode  = Color(hex: 0x1F1F2E)
+    static let glyphModePlan  = Color(hex: 0x1F2A3E)
+    static let glyphModeRun   = Color(hex: 0x2E1717)
+    static let glyphAmber     = Color(hex: 0xFBBF24)
+    static let glyphAmberSoft = Color(hex: 0x2A2415)
+    static let glyphGreenSoft = Color(hex: 0x152A22)
+
+    /// Markdown code-block surfaces. `codeBg` for fenced blocks,
+    /// `codeBgDim` for inline `code` spans.
+    static let codeBg         = Color.white.opacity(0.07)
+    static let codeBgDim      = Color.white.opacity(0.04)
+
+    /// Subtle screen veil used by dashed banners / decorative surfaces.
+    static let overlayVeil    = Color.white.opacity(0.02)
 }
 
 enum SmoothieMetrics {

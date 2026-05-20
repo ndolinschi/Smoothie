@@ -156,7 +156,11 @@ struct MarkdownText: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(in: .rect(cornerRadius: 10))
+        .background(SmoothieColor.codeBg, in: .rect(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
     }
 
     enum Block {

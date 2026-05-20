@@ -15,12 +15,10 @@ struct NewSessionView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
-                RadialGradient(
-                    colors: [Color.white.opacity(0.05), .clear],
-                    center: .top, startRadius: 0, endRadius: 500
-                )
-                .ignoresSafeArea()
+                // Flat bgPrimary — the previous radial gradient was a
+                // pre-P16 Liquid-Glass remnant that no longer matches
+                // any other surface in the app.
+                SmoothieColor.bgPrimary.ignoresSafeArea()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
@@ -32,7 +30,7 @@ struct NewSessionView: View {
 
                         section("CLI") {
                             if loading && adapters.isEmpty {
-                                ProgressView().tint(.white.opacity(0.5)).padding(8)
+                                ProgressView().tint(SmoothieColor.textTertiary).padding(8)
                             } else {
                                 VStack(spacing: 8) {
                                     ForEach(adapters) { a in cliRow(a) }
@@ -45,10 +43,14 @@ struct NewSessionView: View {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                 Text(loadError).font(.system(size: 13))
                             }
-                            .foregroundStyle(.red.opacity(0.85))
+                            .foregroundStyle(SmoothieColor.statusErr)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(in: .rect(cornerRadius: 12))
+                            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
+                            )
                         }
                     }
                     .padding(20)
@@ -57,11 +59,11 @@ struct NewSessionView: View {
             }
             .navigationTitle("New session")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }.foregroundStyle(.white.opacity(0.7))
+                    Button("Cancel") { dismiss() }.foregroundStyle(SmoothieColor.textSecondary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: start) {
@@ -91,7 +93,7 @@ struct NewSessionView: View {
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.system(size: 11, weight: .bold)).tracking(0.8)
-                .foregroundStyle(.white.opacity(0.4)).padding(.leading, 6)
+                .foregroundStyle(SmoothieColor.textTertiary).padding(.leading, 6)
             content()
         }
     }
@@ -101,15 +103,15 @@ struct NewSessionView: View {
         return HStack(spacing: 12) {
             Image(systemName: "folder.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SmoothieColor.textSecondary)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SmoothieColor.textPrimary)
                     .font(.system(size: 15, weight: .semibold))
                 Text(path)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(SmoothieColor.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.head)
             }
@@ -117,7 +119,11 @@ struct NewSessionView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(in: .rect(cornerRadius: 14))
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
     }
 
     private func cliRow(_ a: AdapterInfoWire) -> some View {
@@ -133,19 +139,27 @@ struct NewSessionView: View {
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.cli.displayName)
-                        .foregroundStyle(selectable ? .white : .white.opacity(0.4))
+                        .foregroundStyle(selectable ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                         .font(.system(size: 15, weight: .medium))
                     Text(rowSubtitle(installed: installed, version: a.version))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
                 Spacer()
                 if isSelected, selectable {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(SmoothieColor.linkBlue)
                 }
             }
             .padding(14)
-            .glassEffect(in: .rect(cornerRadius: 14))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(
+                        isSelected ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
+                        lineWidth: isSelected ? 1 : 0.5
+                    )
+            )
             .opacity(selectable ? 1 : 0.55)
         }
         .buttonStyle(.plain)

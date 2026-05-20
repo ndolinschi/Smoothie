@@ -31,7 +31,7 @@ struct ModelPickerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                SmoothieColor.bgPrimary.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         searchField
@@ -53,7 +53,7 @@ struct ModelPickerSheet: View {
                         if filtered.isEmpty && !query.isEmpty {
                             Text("No matches.")
                                 .font(.system(size: 13))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(SmoothieColor.textTertiary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 30)
                         }
@@ -64,12 +64,12 @@ struct ModelPickerSheet: View {
             }
             .navigationTitle("Models")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
             }
         }
@@ -78,21 +78,25 @@ struct ModelPickerSheet: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(SmoothieColor.textTertiary)
             TextField("Search models", text: $query)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .foregroundStyle(.white)
+                .foregroundStyle(SmoothieColor.textPrimary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .glassEffect(in: .rect(cornerRadius: 14))
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.system(size: 11, weight: .bold)).tracking(0.8)
-                .foregroundStyle(.white.opacity(0.4)).padding(.leading, 6)
+                .foregroundStyle(SmoothieColor.textTertiary).padding(.leading, 6)
             content()
         }
     }
@@ -184,7 +188,14 @@ struct ModelPickerSheet: View {
                 Spacer()
             }
             .padding(12)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        isCurrent ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
+                        lineWidth: isCurrent ? 1 : 0.5
+                    )
+            )
         }
         .buttonStyle(.plain)
         .disabled(isPicking)
@@ -210,20 +221,24 @@ struct SlashCommandSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                SmoothieColor.bgPrimary.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(SmoothieColor.textTertiary)
                             TextField("Search commands", text: $query)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SmoothieColor.textPrimary)
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 11)
-                        .glassEffect(in: .rect(cornerRadius: 14))
+                        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                        )
 
                         VStack(spacing: 6) {
                             ForEach(filtered) { c in
@@ -234,15 +249,19 @@ struct SlashCommandSheet: View {
                                     HStack(spacing: 10) {
                                         Text(c.name)
                                             .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(SmoothieColor.textPrimary)
                                         Spacer()
                                         Text(c.description)
                                             .font(.system(size: 12))
-                                            .foregroundStyle(.white.opacity(0.55))
+                                            .foregroundStyle(SmoothieColor.textSecondary)
                                             .lineLimit(1)
                                     }
                                     .padding(12)
-                                    .glassEffect(in: .rect(cornerRadius: 12))
+                                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -254,7 +273,7 @@ struct SlashCommandSheet: View {
             }
             .navigationTitle("Commands")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

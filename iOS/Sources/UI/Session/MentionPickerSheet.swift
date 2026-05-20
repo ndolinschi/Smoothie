@@ -25,37 +25,41 @@ struct MentionPickerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                SmoothieColor.bgPrimary.ignoresSafeArea()
                 VStack(spacing: 0) {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(SmoothieColor.textTertiary)
                         TextField("Search files in project", text: $query)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SmoothieColor.textPrimary)
                             .font(.system(.body, design: .monospaced))
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 11)
-                    .glassEffect(in: .rect(cornerRadius: 14))
+                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                    )
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 10)
 
                     if loading {
-                        ProgressView().tint(.white.opacity(0.5))
+                        ProgressView().tint(SmoothieColor.textTertiary)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if let loadError {
                         VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.circle").foregroundStyle(.red)
-                            Text(loadError).font(.system(size: 13)).foregroundStyle(.white.opacity(0.55))
+                            Image(systemName: "exclamationmark.circle").foregroundStyle(SmoothieColor.statusErr)
+                            Text(loadError).font(.system(size: 13)).foregroundStyle(SmoothieColor.textSecondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if filtered.isEmpty {
                         Text(query.isEmpty ? "No files found." : "No matches.")
                             .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(SmoothieColor.textTertiary)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
@@ -71,11 +75,11 @@ struct MentionPickerSheet: View {
             }
             .navigationTitle("Mention file")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }.foregroundStyle(.white.opacity(0.7))
+                    Button("Cancel") { dismiss() }.foregroundStyle(SmoothieColor.textSecondary)
                 }
             }
         }
@@ -90,31 +94,35 @@ struct MentionPickerSheet: View {
             HStack(spacing: 10) {
                 Image(systemName: iconName(for: file.path))
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(SmoothieColor.textSecondary)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(URL(fileURLWithPath: file.path).lastPathComponent)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.textPrimary)
                         .lineLimit(1)
                     Text(file.path)
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
                 Spacer()
                 if isFetching {
-                    ProgressView().controlSize(.small).tint(.white.opacity(0.5))
+                    ProgressView().controlSize(.small).tint(SmoothieColor.textTertiary)
                 } else {
                     Text(formatSize(file.size))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
         .disabled(fetching != nil)

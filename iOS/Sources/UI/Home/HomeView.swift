@@ -206,17 +206,12 @@ struct HomeView: View {
 
     // MARK: - Top bar
 
+    /// Compatibility shim — delegates to the shared
+    /// `SmoothieIconButton`. Kept so existing call sites in this file
+    /// don't need to be migrated in one pass; future surfaces should
+    /// reach for `SmoothieIconButton` directly.
     private func topBarButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SmoothieColor.textPrimary)
-                .frame(width: 36, height: 36)
-                .background(SmoothieColor.bgCard, in: .circle)
-                .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
+        SmoothieIconButton(systemName: systemName, size: 36, action: action)
     }
 
     // MARK: - Filter row

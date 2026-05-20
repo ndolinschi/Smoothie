@@ -303,11 +303,15 @@ struct FolderPickerSheet: View {
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(SmoothieColor.textTertiary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
     }
