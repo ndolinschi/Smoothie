@@ -424,6 +424,32 @@ struct MessageInput: View {
     }
 
     private func insertAtCursor(_ snippet: String) {
+        // Slash commands have special semantics — they replace the field.
+        // The user picking `/clear` from the sheet expects to send just
+        // `/clear`, not `whatever they had typed before` + ` /clear`.
+        // If there's an existing leading `/word`, replace that prefix.
+        // If the field is otherwise non-empty, replace the whole field
+        // (the agent doesn't accept "free text /command" — it's parsed
+        // strictly as the first token).
+        if snippet.hasPrefix("/") {
+            let trimmedField = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedField.hasPrefix("/") {
+                // Replace existing /command prefix up to first whitespace.
+                let withoutLeading = trimmedField.drop(while: { !$0.isWhitespace })
+                text = snippet + String(withoutLeading)
+            } else if trimmedField.isEmpty {
+                text = snippet + " "
+            } else {
+                // Existing user text is incompatible with /command —
+                // assume the user wants to start over with the command.
+                text = snippet + " "
+            }
+            focused = true
+            return
+        }
+
+        // Default behaviour for non-slash snippets (e.g. @mention) is
+        // insert-at-end with surrounding whitespace.
         if text.isEmpty || text.hasSuffix(" ") || text.hasSuffix("\n") {
             text += snippet + " "
         } else {

@@ -85,16 +85,8 @@ struct NewSessionView: View {
 
     private var canStart: Bool {
         guard preselectedPath != nil else { return false }
-        guard isSupported(selectedCLI) else { return false }
         return adapters.first { $0.cli == selectedCLI }?.installed ?? false
     }
-
-    /// Client-side allowlist of CLIs that actually drive an end-to-end
-    /// session through ProcessRegistry today. All three providers are
-    /// supported as of P18 — Claude via ProcessHost, Gemini via
-    /// GeminiOneshotHost with --resume, and OpenCode via OpenCodeServeHost
-    /// over the local `opencode serve` HTTP server.
-    private func isSupported(_ cli: CLIWire) -> Bool { true }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -131,7 +123,7 @@ struct NewSessionView: View {
     private func cliRow(_ a: AdapterInfoWire) -> some View {
         let isSelected = selectedCLI == a.cli
         let installed = a.installed
-        let selectable = installed && isSupported(a.cli)
+        let selectable = installed
         return Button {
             if selectable { selectedCLI = a.cli }
         } label: {
@@ -170,11 +162,10 @@ struct NewSessionView: View {
         loading = true
         do {
             adapters = try await api.adapters()
-            // Prefer a supported, installed CLI; fall back to any installed.
-            if let supportedInstalled = adapters.first(where: { $0.installed && isSupported($0.cli) }) {
-                selectedCLI = supportedInstalled.cli
-            } else if let first = adapters.first(where: { $0.installed }) {
-                selectedCLI = first.cli
+            // Default to the first installed adapter so the user lands
+            // on a selectable row instead of an empty selection state.
+            if let firstInstalled = adapters.first(where: { $0.installed }) {
+                selectedCLI = firstInstalled.cli
             }
         } catch {
             if isCancellation(error) {

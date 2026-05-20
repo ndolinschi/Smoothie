@@ -303,6 +303,16 @@ struct AnyCodable: Codable, Sendable, Hashable {
         value = .null
     }
 
+    /// Convenience for synthesising client-side metadata (e.g. the
+    /// soft-mode-switch divider flag from P24.b B5).
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    init(_ string: String)   { self.value = .string(string) }
+    init(_ int: Int)         { self.value = .int(int) }
+    init(_ bool: Bool)       { self.value = .bool(bool) }
+
     func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
         switch value {

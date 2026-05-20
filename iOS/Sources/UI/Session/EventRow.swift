@@ -1,26 +1,37 @@
 import SwiftUI
 
-/// Locally-injected event content prefix used by SessionLiveStore to render
-/// in-stream dividers (P17 soft mode switching). Keeping it in the content
-/// field avoids extending the wire schema; EventRow checks for this prefix
-/// before falling through to the type switch.
+/// Legacy sentinel-prefix from P17 soft mode switching. Kept so events
+/// still buffered from older builds render correctly; new events use
+/// the safer `metadata["divider"]` flag (P24.b B5) which can't be
+/// hijacked by an agent that happens to echo this literal string.
 fileprivate let dividerSentinel = "__SMOOTHIE_DIVIDER__::"
 
 struct EventRow: View {
     let event: SmoothieEventWire
     @State private var expanded = false
 
-    var body: some View {
+    /// Resolve a divider label from either the new metadata flag or the
+    /// legacy sentinel prefix. Metadata wins when both are set.
+    private var dividerLabel: String? {
+        if let s = event.metadata?["divider"]?.stringValue, !s.isEmpty {
+            return s
+        }
         if event.content.hasPrefix(dividerSentinel) {
-            dividerRow
+            return String(event.content.dropFirst(dividerSentinel.count))
+        }
+        return nil
+    }
+
+    var body: some View {
+        if let label = dividerLabel {
+            dividerRow(label: label)
         } else {
             typedBody
         }
     }
 
-    private var dividerRow: some View {
-        let label = String(event.content.dropFirst(dividerSentinel.count))
-        return HStack(spacing: 10) {
+    private func dividerRow(label: String) -> some View {
+        HStack(spacing: 10) {
             Rectangle()
                 .fill(SmoothieColor.strokeSoft)
                 .frame(height: 0.5)

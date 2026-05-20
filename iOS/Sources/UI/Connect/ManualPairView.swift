@@ -21,9 +21,11 @@ struct ManualPairView: View {
                 SmoothieColor.bgPrimary.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        field(label: "Host", text: $host, placeholder: "100.64.0.10", keyboard: .URL)
+                        field(label: "Host", text: $host, placeholder: "100.64.0.10 (or paste smoothie:// URL)", keyboard: .URL)
                         field(label: "Port", text: $port, placeholder: "7749", keyboard: .numberPad)
                         field(label: "Token", text: $token, placeholder: "base64url from menu bar", keyboard: .asciiCapable)
+                            .onChange(of: host) { _, _ in absorbPastedURLIfPresent() }
+                            .onChange(of: token) { _, _ in absorbPastedURLIfPresent() }
 
                         if let errorText {
                             Text(errorText)
@@ -106,6 +108,27 @@ struct ManualPairView: View {
             } else {
                 errorText = pairing.lastError ?? "Couldn't reach the server."
             }
+        }
+    }
+
+    /// Detect when the user has pasted a full `smoothie://pair?…` URL
+    /// into either the host or the token field and auto-fill the three
+    /// fields from its query params. Way friendlier than asking the
+    /// user to manually split the URL.
+    private func absorbPastedURLIfPresent() {
+        for candidate in [host, token] {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.lowercased().hasPrefix("smoothie://") else { continue }
+            guard let comps = URLComponents(string: trimmed),
+                  comps.host == "pair" else { continue }
+            let items = comps.queryItems ?? []
+            let pastedHost = items.first(where: { $0.name == "host" })?.value
+            let pastedPort = items.first(where: { $0.name == "port" })?.value
+            let pastedToken = items.first(where: { $0.name == "token" })?.value
+            if let h = pastedHost, !h.isEmpty { host = h }
+            if let p = pastedPort, !p.isEmpty { port = p }
+            if let t = pastedToken, !t.isEmpty { token = t }
+            return
         }
     }
 }

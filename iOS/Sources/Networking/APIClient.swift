@@ -11,6 +11,12 @@ struct APIClient {
         case http(Int, String)
         case transport(String)
         case decode(String)
+        /// Daemon-side connection refused / host unreachable. Distinct
+        /// from generic `transport` so the UI can render a more useful
+        /// "Make sure Smoothie is running on your Mac" prompt instead
+        /// of the URLSession default ("The Internet connection appears
+        /// to be offline") which misleads users.
+        case daemonUnreachable(host: String)
 
         var errorDescription: String? {
             switch self {
@@ -18,6 +24,8 @@ struct APIClient {
             case .http(let c, let m):  return "HTTP \(c): \(m)"
             case .transport(let m):    return m
             case .decode(let m):       return "Decode error: \(m)"
+            case .daemonUnreachable(let host):
+                return "Daemon on \(host) isn't responding. Make sure Smoothie is running on your Mac."
             }
         }
     }
@@ -66,6 +74,21 @@ struct APIClient {
         } catch let err as APIError {
             throw err
         } catch {
+            // Distinguish "daemon not running" from generic network
+            // errors so the UI can render an actionable message.
+            // `cannotConnectToHost` / `cannotFindHost` / `timedOut` /
+            // `networkConnectionLost` are the common shapes when the
+            // user has quit Smoothie on the Mac.
+            let nsErr = error as NSError
+            let daemonDown: Set<Int> = [
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorTimedOut,
+                NSURLErrorNetworkConnectionLost,
+            ]
+            if nsErr.domain == NSURLErrorDomain, daemonDown.contains(nsErr.code) {
+                throw APIError.daemonUnreachable(host: pairing.label)
+            }
             throw APIError.transport(error.localizedDescription)
         }
     }

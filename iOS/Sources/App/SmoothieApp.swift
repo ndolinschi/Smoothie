@@ -23,13 +23,26 @@ struct SmoothieApp: App {
         }
     }
 
-    /// `smoothie://session/<id>` deep links — used by local notification taps
-    /// to surface the session that produced the WAITING / DONE event.
+    /// Deep links — three shapes:
+    /// - `smoothie://session/<id>` — local notification taps surfacing
+    ///   the session that produced the WAITING / DONE event.
+    /// - `smoothie://pair?host=…&port=…&token=…` — Mac menubar's "Copy
+    ///   pairing URL" output. Tapping it on the phone pairs in one go.
+    /// - `smoothie://pair?host=…&port=…&token=…&scheme=https` — variant
+    ///   that includes a scheme (Cloudflare-tunnelled deployments).
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == "smoothie" else { return }
-        if url.host == "session" {
+        switch url.host {
+        case "session":
             let id = url.lastPathComponent
             if !id.isEmpty { notifications.pendingSessionId = id }
+        case "pair":
+            // Hand the full URL string to PairingStore so it can parse
+            // host/port/token/scheme query params consistently with the
+            // QR-scanned path.
+            Task { _ = await pairing.tryPairFromURL(url.absoluteString) }
+        default:
+            break
         }
     }
 }

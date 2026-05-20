@@ -66,6 +66,17 @@ struct ConnectionBanner: View {
                 background: SmoothieColor.statusErr.opacity(0.12),
                 indicator: AnyView(staticDot(SmoothieColor.statusErr))
             )
+        case .gone(let reason):
+            // Terminal — session no longer exists on the Mac. We stop
+            // pretending to reconnect and tell the user what happened.
+            return Payload(
+                label: reason,
+                text: SmoothieColor.statusErr,
+                background: SmoothieColor.statusErr.opacity(0.12),
+                indicator: AnyView(Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SmoothieColor.statusErr))
+            )
         case .connected:
             // Show a one-shot "Connected — waiting for the first event"
             // hint when the link is up but the session hasn't streamed

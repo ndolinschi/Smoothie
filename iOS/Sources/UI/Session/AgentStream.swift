@@ -151,6 +151,10 @@ private struct EmptyStreamPlaceholder: View {
             Image(systemName: "xmark.circle")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(SmoothieColor.statusErr)
+        case .gone:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(SmoothieColor.statusErr)
         case .connected:
             switch state {
             case .starting, .thinking:
@@ -176,6 +180,7 @@ private struct EmptyStreamPlaceholder: View {
         case .connecting: return "Connecting to your Mac…"
         case .retrying:   return "Reconnecting"
         case .stopped:    return "Disconnected"
+        case .gone:       return "Session ended on the Mac"
         case .connected:
             switch state {
             case .starting, .thinking: return "Agent is warming up"
@@ -195,6 +200,8 @@ private struct EmptyStreamPlaceholder: View {
             return "Network blip — we'll try again. Your session keeps running on the Mac."
         case .stopped:
             return "Pull down to refresh or open the session again."
+        case .gone(let reason):
+            return reason
         case .connected:
             switch state {
             case .starting, .thinking:

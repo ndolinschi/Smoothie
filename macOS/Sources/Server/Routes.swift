@@ -525,7 +525,13 @@ private let fileListExcludes: Set<String> = [
     ".expo", ".next", ".cache", "dist", "build", ".turbo",
     ".DS_Store", "Pods", ".gradle"
 ]
-private let fileMaxBytes = 100 * 1024
+/// Cap for /projects/file responses. Bumped from 100 KB → 4 MB so
+/// real source files round-trip without aggressive truncation; aligns
+/// with the iOS-side file attach cap in MessageInput.handleImport so
+/// behaviour stays symmetric whether the user attaches via fileImporter
+/// or @-mention. Still well under the 16 MB message-body cap on the
+/// server.
+private let fileMaxBytes = 4 * 1024 * 1024
 private let fileListMaxResults = 1000
 
 @MainActor

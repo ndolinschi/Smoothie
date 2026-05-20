@@ -5,12 +5,22 @@ import UIKit
 /// AVFoundation-powered QR scanner. Calls `onScan(text)` with the decoded
 /// string each time a frame contains a valid QR. The parent view decides
 /// whether to accept or keep scanning.
+///
+/// Surfaces explicit camera-permission state via `onPermissionDenied` so
+/// the parent can show an actionable "Open Settings" card instead of the
+/// silent black-screen failure mode we used to land in when the user had
+/// denied camera access (or hit the OS prompt and tapped Don't Allow).
 struct QRScannerView: UIViewControllerRepresentable {
     let onScan: (String) -> Void
+    /// Fires when the user has denied or restricted camera access. The
+    /// scanner controller will render an empty black view; the parent is
+    /// expected to switch to a friendlier prompt.
+    var onPermissionDenied: (() -> Void)? = nil
 
     func makeUIViewController(context: Context) -> ScannerController {
         let c = ScannerController()
         c.onScan = onScan
+        c.onPermissionDenied = onPermissionDenied
         return c
     }
 
@@ -20,13 +30,14 @@ struct QRScannerView: UIViewControllerRepresentable {
         private let session = AVCaptureSession()
         private var previewLayer: AVCaptureVideoPreviewLayer?
         var onScan: ((String) -> Void)?
+        var onPermissionDenied: (() -> Void)?
         private var lastEmitted: String?
         private var emittedAt: Date = .distantPast
 
         override func viewDidLoad() {
             super.viewDidLoad()
             view.backgroundColor = .black
-            configureSession()
+            ensurePermissionThenConfigure()
         }
 
         override func viewDidAppear(_ animated: Bool) {
@@ -48,10 +59,40 @@ struct QRScannerView: UIViewControllerRepresentable {
             previewLayer?.frame = view.layer.bounds
         }
 
+        /// Resolve the camera-authorization state before touching
+        /// `AVCaptureSession`. Without this, a `denied`/`restricted`
+        /// user lands on a black screen with no preview and no error
+        /// — they don't know whether the scanner is broken or whether
+        /// they need to enable a permission.
+        private func ensurePermissionThenConfigure() {
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                configureSession()
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        if granted {
+                            self.configureSession()
+                        } else {
+                            self.onPermissionDenied?()
+                        }
+                    }
+                }
+            case .denied, .restricted:
+                fallthrough
+            @unknown default:
+                onPermissionDenied?()
+            }
+        }
+
         private func configureSession() {
             guard let device = AVCaptureDevice.default(for: .video),
                   let input = try? AVCaptureDeviceInput(device: device),
-                  session.canAddInput(input) else { return }
+                  session.canAddInput(input) else {
+                onPermissionDenied?()
+                return
+            }
             session.addInput(input)
 
             let output = AVCaptureMetadataOutput()
@@ -64,6 +105,15 @@ struct QRScannerView: UIViewControllerRepresentable {
             layer.videoGravity = .resizeAspectFill
             view.layer.addSublayer(layer)
             previewLayer = layer
+
+            // `viewDidAppear` may have already fired (presented before
+            // permission resolved) — kick the session ourselves so the
+            // preview shows without waiting for another lifecycle pass.
+            if !session.isRunning {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    self?.session.startRunning()
+                }
+            }
         }
 
         func metadataOutput(

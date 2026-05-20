@@ -118,66 +118,144 @@ private struct ScannerSheet: View {
     @State private var lastSeen: String?
     @State private var accepted = false
     @State private var failed = false
+    /// Set when AVCapture reports the user has denied or restricted
+    /// camera access. We render an actionable card with an Open Settings
+    /// link instead of a black screen.
+    @State private var permissionDenied = false
 
     var body: some View {
         ZStack {
-            QRScannerView { text in
-                guard !accepted else { return }
-                lastSeen = text
-                accepted = true
-                Task {
-                    let ok = await pairing.tryPairFromURL(text)
-                    if ok {
-                        dismiss()
-                    } else {
-                        accepted = false
-                        failed = true
+            if permissionDenied {
+                permissionDeniedCard
+            } else {
+                QRScannerView(
+                    onScan: { text in
+                        guard !accepted else { return }
+                        lastSeen = text
+                        accepted = true
+                        Task {
+                            let ok = await pairing.tryPairFromURL(text)
+                            if ok {
+                                dismiss()
+                            } else {
+                                accepted = false
+                                failed = true
+                            }
+                        }
+                    },
+                    onPermissionDenied: {
+                        permissionDenied = true
                     }
+                )
+                .ignoresSafeArea()
+
+                VStack {
+                    HStack {
+                        Spacer()
+                        closeButton
+                    }
+                    .padding()
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Text("Scan the QR from the Mac menu bar")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                        if failed, let err = pairing.lastError {
+                            Text(err)
+                                .font(.system(size: 12))
+                                .foregroundStyle(SmoothieColor.statusErr)
+                                .multilineTextAlignment(.center)
+                        } else if accepted {
+                            Text("Got it — verifying…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.7))
+                        } else {
+                            Text("Tap \u{201C}Show full QR\u{201D} in the Mac popover for a bigger code.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(SmoothieColor.bgCard.opacity(0.85), in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
+                    .padding(.bottom, 32)
                 }
             }
-            .ignoresSafeArea()
+        }
+    }
 
-            VStack {
+    private var closeButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(SmoothieColor.bgGlyph, in: .circle)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var permissionDeniedCard: some View {
+        ZStack {
+            SmoothieColor.bgPrimary.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 16) {
                 HStack {
+                    Image(systemName: "camera.metering.unknown")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.accent)
                     Spacer()
+                    closeButton
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Camera access required")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                    Text("Scanning the QR from the Mac needs the camera. Open Settings → Smoothie and turn Camera on, or enter the pairing details manually.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(SmoothieColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                HStack(spacing: 10) {
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "gear")
+                            Text("Open Settings")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(SmoothieColor.accent, in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(SmoothieColor.bgGlyph, in: .circle)
+                        Text("Use manual entry")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg)
+                                    .strokeBorder(SmoothieColor.stroke, lineWidth: 1)
+                            )
+                            .foregroundStyle(SmoothieColor.textPrimary)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding()
-                Spacer()
-                VStack(spacing: 4) {
-                    Text("Scan the QR from the Mac menu bar")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    if failed, let err = pairing.lastError {
-                        Text(err)
-                            .font(.system(size: 12))
-                            .foregroundStyle(SmoothieColor.statusErr)
-                            .multilineTextAlignment(.center)
-                    } else if accepted {
-                        Text("Got it — verifying…")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.7))
-                    } else {
-                        Text("Tap \u{201C}Show full QR\u{201D} in the Mac popover for a bigger code.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.6))
-                            .multilineTextAlignment(.center)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(SmoothieColor.bgCard.opacity(0.85), in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
-                .padding(.bottom, 32)
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 60)
+            .padding(.bottom, 30)
         }
     }
 }

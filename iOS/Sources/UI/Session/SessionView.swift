@@ -96,10 +96,17 @@ final class SessionLiveStore {
         pendingMode = nil
 
         let label = mode.lowercased() == "plan" ? "plan mode" : "code mode"
+        // Mark the divider via metadata rather than the sentinel-prefix
+        // hack we used in P17. The metadata flag is one we control;
+        // a literal `__SMOOTHIE_DIVIDER__::` in the agent's stream
+        // (e.g. the user asks "echo that string back to me") can no
+        // longer hijack the divider renderer. EventRow checks the
+        // metadata flag first, then falls back to the sentinel for
+        // any events still buffered from before this push.
         let divider = SmoothieEventWire(
             type: .toolResult,
-            content: "__SMOOTHIE_DIVIDER__::\(label)",
-            metadata: nil,
+            content: label,
+            metadata: ["divider": AnyCodable(label)],
             timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
         )
         events.append(divider)
@@ -136,6 +143,15 @@ final class SessionLiveStore {
         case .connecting, .stopped: break
         case .connected:            error = nil
         case .retrying(let s):      error = "Reconnecting in \(s)s…"
+        case .gone(let reason):
+            // SSE landed on a terminal 404/401/410. Flip the visible
+            // session state so the UI shows ERROR rather than the
+            // previous (now-misleading) THINKING / WAITING. The user
+            // sees the gone-reason in the connection banner AND a
+            // matching error event row in the stream — both clear that
+            // the daemon-side session is dead.
+            state = .error
+            error = reason
         }
     }
 }
@@ -180,6 +196,12 @@ struct SessionView: View {
             }
         }
     }
+
+    /// Pairing id this SessionView was opened against. Captured at init
+    /// so we can detect the user removing or switching pairings mid-
+    /// session — SessionView dismisses itself in that case rather than
+    /// continuing to drive a dead daemon.
+    @State private var originPairingId: String?
 
     init(session: SessionDescriptorWire) {
         self.session = session
@@ -361,6 +383,12 @@ struct SessionView: View {
             }
         }
         .onAppear {
+            // Remember which pairing this session belongs to so we can
+            // bail out if it gets removed or switched while we're still
+            // pushed on the stack.
+            if originPairingId == nil {
+                originPairingId = pairing.activeId
+            }
             connectStore()
             Task { await loadFeatures() }
         }
@@ -370,6 +398,17 @@ struct SessionView: View {
         .onChange(of: store?.state) { _, new in
             guard let new else { return }
             handlePotentialNotification(state: new)
+        }
+        .onChange(of: pairing.activeId) { _, new in
+            // User removed the active Mac (or switched to a different
+            // one). The current session lives on the OLD pairing's
+            // daemon — keep driving it would 404. Tear down the live
+            // store and pop back to HomeView.
+            guard let origin = originPairingId else { return }
+            if new == nil || new != origin {
+                store?.disconnect()
+                dismiss()
+            }
         }
         .alert("Kill session?", isPresented: $confirmKill) {
             Button("Kill", role: .destructive) {

@@ -15,6 +15,12 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         case connected
         case retrying(Int)            // seconds until next attempt
         case stopped
+        /// Server responded with a terminal status (404 = session no
+        /// longer exists; 401 = pairing token revoked; 410 = gone).
+        /// Distinct from `.retrying`/`.stopped` so the UI can present
+        /// an actionable banner — and so the client *stops* retrying
+        /// instead of spinning on a dead resource.
+        case gone(reason: String)
     }
 
     private var session: URLSession?
@@ -108,13 +114,38 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
-        if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+        guard let http = response as? HTTPURLResponse else {
+            completionHandler(.cancel)
+            return
+        }
+        switch http.statusCode {
+        case 200:
             backoffStep = 0
             onState(.connected)
             completionHandler(.allow)
-        } else {
+        case 404:
+            // Session id is gone — daemon restarted, user killed it, or
+            // we hit a stale handle. Don't retry; tell the UI.
+            stopAndMarkGone(reason: "The session no longer exists on your Mac. Pull to refresh or start a new one.")
+            completionHandler(.cancel)
+        case 401, 403:
+            stopAndMarkGone(reason: "Pairing token was rejected. Re-pair this Mac from the menubar.")
+            completionHandler(.cancel)
+        case 410:
+            stopAndMarkGone(reason: "Session ended on the Mac.")
+            completionHandler(.cancel)
+        default:
+            // Other non-200s (5xx, etc.) — let the existing retry path
+            // handle it via didCompleteWithError.
             completionHandler(.cancel)
         }
+    }
+
+    /// Mark the connection as terminally gone — flips `stopped` so the
+    /// reconnect timer doesn't fire and emits a `.gone` state.
+    private func stopAndMarkGone(reason: String) {
+        lock.lock(); stopped = true; lock.unlock()
+        onState(.gone(reason: reason))
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
