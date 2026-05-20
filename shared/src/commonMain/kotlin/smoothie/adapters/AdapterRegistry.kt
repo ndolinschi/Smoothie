@@ -19,6 +19,7 @@ class AdapterRegistry {
         register(ClaudeAdapter())
         register(GeminiAdapter())
         register(OpenCodeAdapter())
+        register(AntigravityAdapter())
     }
 
     private fun register(parser: AdapterParser) {

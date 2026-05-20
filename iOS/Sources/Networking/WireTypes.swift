@@ -8,14 +8,16 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
     case claudeCode = "claude_code"
     case gemini
     case openCode = "open_code"
+    case antigravity
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .claudeCode: return "Claude Code"
-        case .gemini:     return "Gemini"
-        case .openCode:   return "OpenCode"
+        case .claudeCode:  return "Claude Code"
+        case .gemini:      return "Gemini"
+        case .openCode:    return "OpenCode"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -44,6 +46,11 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             }
         case .openCode:
             return id
+        case .antigravity:
+            // agy v1.0.0 has no `--model` flag; the active model is picked by
+            // the user's desktop Antigravity profile. We display whatever the
+            // server returned, falling back to a friendly placeholder.
+            return id.isEmpty ? "Antigravity" : id
         }
     }
 }
@@ -231,9 +238,10 @@ struct AnyCodable: Codable, Sendable, Hashable {
 extension CLIWire {
     var snapshotCLI: WidgetSnapshot.WireCLI {
         switch self {
-        case .claudeCode: return .claudeCode
-        case .gemini:     return .gemini
-        case .openCode:   return .openCode
+        case .claudeCode:  return .claudeCode
+        case .gemini:      return .gemini
+        case .openCode:    return .openCode
+        case .antigravity: return .antigravity
         }
     }
 }

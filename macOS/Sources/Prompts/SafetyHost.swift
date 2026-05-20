@@ -52,10 +52,11 @@ final class SafetyHost {
 
     private func folderName(for cli: CLIType) -> String {
         switch cli {
-        case .claudeCode: return "claude-code"
-        case .gemini: return "gemini"
-        case .openCode: return "opencode"
-        default: return cli.name.lowercased()
+        case .claudeCode:  return "claude-code"
+        case .gemini:      return "gemini"
+        case .openCode:    return "opencode"
+        case .antigravity: return "antigravity"
+        default:           return cli.name.lowercased()
         }
     }
 

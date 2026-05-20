@@ -87,6 +87,14 @@ final class ProcessRegistry {
                     executable: exec,
                     cwd: effective.projectPath
                 )
+            } else if effective.cli == CLIType.antigravity {
+                host = AntigravityOneshotHost(
+                    session: session,
+                    executable: exec,
+                    cwd: effective.projectPath,
+                    baseArgs: args,
+                    env: envMap
+                )
             } else {
                 host = try ProcessHost(
                     session: session,

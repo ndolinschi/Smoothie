@@ -198,9 +198,12 @@ struct FolderPickerSheet: View {
         )
     }
 
-    /// Single-tap GitHub-style row. Tap commits the folder; long-press
-    /// reveals a "Browse subfolders…" option via context menu for
-    /// users who need deep navigation.
+    /// Two-target GitHub-style row. **Tapping the row body** commits the
+    /// folder (closes the sheet and starts a session there). **Tapping the
+    /// trailing chevron** drills in so the user can keep exploring without
+    /// committing. The chevron is hidden on the active-session row so the
+    /// blue checkmark gets undivided attention. Long-press still surfaces a
+    /// context menu with the drill-in action as a fallback.
     private func splitRow(
         icon: String,
         iconAlpha: Double,
@@ -210,33 +213,51 @@ struct FolderPickerSheet: View {
         onCommit: @escaping () -> Void,
         onDrill: @escaping () -> Void
     ) -> some View {
-        Button(action: onCommit) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(iconAlpha))
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(sublabel)
-                        .font(.system(size: 12))
-                        .foregroundStyle(SmoothieColor.textTertiary)
-                        .lineLimit(1)
+        HStack(spacing: 4) {
+            // Main row — committing the folder.
+            Button(action: onCommit) {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white.opacity(iconAlpha))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(sublabel)
+                            .font(.system(size: 12))
+                            .foregroundStyle(SmoothieColor.textTertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    if isActive {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x2563EB))
+                    }
                 }
-                Spacer(minLength: 8)
-                if isActive {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x2563EB))
-                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            // Drill-in target — distinct from the row tap so single-tap on the
+            // row keeps the original "select this folder" semantics. Hidden on
+            // the active row to avoid competing with the checkmark.
+            if !isActive {
+                Button(action: onDrill) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Browse subfolders of \(title)")
+            }
         }
-        .buttonStyle(.plain)
         .contextMenu {
             Button {
                 onDrill()

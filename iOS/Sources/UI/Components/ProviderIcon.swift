@@ -6,6 +6,8 @@ import SwiftUI
 /// - Claude — 12 radial spokes in Anthropic's coral
 /// - Gemini — 4-point cushion star with Google's red→yellow→green→blue arc
 /// - OpenCode — a single OpenAI-ish ring placeholder
+/// - Antigravity — upward arrow inside a violet→cyan gradient circle (the
+///   "anti-gravity" metaphor, riffing on the desktop app's violet palette)
 struct ProviderIcon: View {
     let cli: CLIWire
     var size: CGFloat = 18
@@ -13,9 +15,10 @@ struct ProviderIcon: View {
     var body: some View {
         Group {
             switch cli {
-            case .claudeCode: ClaudeMark()
-            case .gemini:     GeminiMark()
-            case .openCode:   OpenCodeMark()
+            case .claudeCode:  ClaudeMark()
+            case .gemini:      GeminiMark()
+            case .openCode:    OpenCodeMark()
+            case .antigravity: AntigravityMark()
             }
         }
         .frame(width: size, height: size)
@@ -144,6 +147,57 @@ private struct GeminiMark: View {
         path.addQuadCurve(to: top,    control: topLeft)
         path.closeSubpath()
         return path
+    }
+}
+
+// MARK: - Antigravity
+
+/// Stylised "upward arrow inside a cushion" — the marketing site uses a
+/// rounded violet→cyan gradient with a thick arrow glyph in the centre. We
+/// approximate it in two layers: a gradient-filled rounded-square plate and
+/// a chunky white triangle pointing up. Distinct from Gemini's four-point
+/// star and Claude's spokes at a glance, which matters because the iOS
+/// home list shows the icons at 18 pt.
+private struct AntigravityMark: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let rect = CGRect(
+                x: (geo.size.width - size) / 2,
+                y: (geo.size.height - size) / 2,
+                width: size,
+                height: size
+            )
+            ZStack {
+                // Rounded-square plate with the official violet→cyan gradient
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color(red: 0.43, green: 0.21, blue: 0.85), location: 0.00),  // deep violet
+                                .init(color: Color(red: 0.55, green: 0.40, blue: 0.95), location: 0.45),  // light violet
+                                .init(color: Color(red: 0.27, green: 0.70, blue: 0.95), location: 1.00),  // cyan
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: rect.width, height: rect.height)
+
+                // White upward triangle — the "anti-gravity" arrow
+                Path { path in
+                    let cx = rect.midX
+                    let cy = rect.midY
+                    let half = size * 0.28
+                    let height = size * 0.34
+                    path.move(to: CGPoint(x: cx, y: cy - height / 2))
+                    path.addLine(to: CGPoint(x: cx + half, y: cy + height / 2))
+                    path.addLine(to: CGPoint(x: cx - half, y: cy + height / 2))
+                    path.closeSubpath()
+                }
+                .fill(Color.white)
+            }
+        }
     }
 }
 

@@ -12,6 +12,7 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
         case claudeCode = "claude_code"
         case gemini
         case openCode = "open_code"
+        case antigravity
     }
 
     public let sessionId: String?

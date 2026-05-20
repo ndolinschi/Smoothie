@@ -25,6 +25,12 @@ enum SmoothieSuggestions {
                 "Run the [test] suite and report failures",
                 "Show me the current project [status]",
             ]
+        case .antigravity:
+            return [
+                "Explore this repo and propose a [roadmap]",
+                "Add a [skill] for our deploy workflow",
+                "Wire up a new MCP server for [GitHub]",
+            ]
         }
     }
 

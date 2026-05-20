@@ -116,19 +116,21 @@ struct SessionWidgetView: View {
 
     private var cliLabel: String {
         switch snapshot.cli {
-        case .claudeCode: return "Claude"
-        case .gemini:     return "Gemini"
-        case .openCode:   return "OpenCode"
-        case .none:       return "Smoothie"
+        case .claudeCode:  return "Claude"
+        case .gemini:      return "Gemini"
+        case .openCode:    return "OpenCode"
+        case .antigravity: return "Antigravity"
+        case .none:        return "Smoothie"
         }
     }
 
     private var providerSymbol: String {
         switch snapshot.cli {
-        case .claudeCode: return "rays"
-        case .gemini:     return "sparkles"
-        case .openCode:   return "terminal.fill"
-        case .none:       return "circle.dotted"
+        case .claudeCode:  return "rays"
+        case .gemini:      return "sparkles"
+        case .openCode:    return "terminal.fill"
+        case .antigravity: return "arrow.up.circle.fill"
+        case .none:        return "circle.dotted"
         }
     }
 
