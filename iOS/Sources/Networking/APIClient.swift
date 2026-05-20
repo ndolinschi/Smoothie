@@ -31,6 +31,11 @@ struct APIClient {
     }
 
     // MARK: - Generic helpers
+    //
+    // Helpers are `internal` (default) so per-domain extension files
+    // (APIClient+Sessions, APIClient+Projects, APIClient+Pairing) can
+    // call them. Each extension only sees the typed endpoint surface
+    // for its domain; transport + decode live here.
 
     @discardableResult
     func get(_ path: String) async throws -> Data {
@@ -93,141 +98,19 @@ struct APIClient {
         }
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decode(error.localizedDescription)
         }
     }
-
-    // MARK: - Typed endpoints
-
-    func health() async throws -> Data { try await get("/health") }
-
-    /// Greeting metadata for the dashboard home (username, full name,
-    /// hostname). Pulled once on HomeView appear; cached client-side
-    /// since the values don't change between launches.
-    func me() async throws -> MeWire {
-        let data = try await get("/me")
-        return try decode(MeWire.self, from: data)
-    }
-
-    func adapters() async throws -> [AdapterInfoWire] {
-        let data = try await get("/adapters")
-        return try decode([AdapterInfoWire].self, from: data)
-    }
-
-    func projects() async throws -> [ProjectWire] {
-        let data = try await get("/projects")
-        return try decode([ProjectWire].self, from: data)
-    }
-
-    func browse(path: String? = nil) async throws -> BrowseResponseWire {
-        let p: String
-        if let path {
-            p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
-        } else {
-            p = ""
-        }
-        let route = p.isEmpty ? "/browse" : "/browse?path=\(p)"
-        let data = try await get(route)
-        return try decode(BrowseResponseWire.self, from: data)
-    }
-
-    func projectFiles(path: String, query: String = "") async throws -> [FileEntryWire] {
-        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let data = try await get("/projects/files?path=\(p)&q=\(q)")
-        return try decode([FileEntryWire].self, from: data)
-    }
-
-    func fileContent(path: String) async throws -> FileContentWire {
-        let p = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
-        let data = try await get("/projects/file?path=\(p)")
-        return try decode(FileContentWire.self, from: data)
-    }
-
-    func sessions() async throws -> [SessionDescriptorWire] {
-        let data = try await get("/sessions")
-        return try decode([SessionDescriptorWire].self, from: data)
-    }
-
-    func createSession(_ req: CreateSessionRequestWire) async throws -> SessionDescriptorWire {
-        let data = try await post("/sessions", json: req)
-        return try decode(SessionDescriptorWire.self, from: data)
-    }
-
-    func sendMessage(sessionId: String, content: String) async throws {
-        struct Body: Encodable { let content: String }
-        _ = try await post("/sessions/\(sessionId)/message", json: Body(content: content))
-    }
-
-    /// Send a turn that may include image attachments. Images travel in the
-    /// JSON envelope as `{mimeType, base64}` entries; the macOS server
-    /// decodes them and ProcessHost (Claude only) wraps them in content
-    /// blocks on the way to stream-json stdin. Other providers reject with
-    /// HTTP 415.
-    func sendMessage(sessionId: String, content: String, images: [StagedImage]) async throws {
-        if images.isEmpty {
-            try await sendMessage(sessionId: sessionId, content: content)
-            return
-        }
-        struct ImagePayload: Encodable { let mimeType: String; let base64: String }
-        struct Body: Encodable {
-            let content: String
-            let images: [ImagePayload]
-        }
-        let payload = Body(
-            content: content,
-            images: images.map { ImagePayload(mimeType: $0.mimeType, base64: $0.base64) }
-        )
-        _ = try await post("/sessions/\(sessionId)/message", json: payload)
-    }
-
-    @discardableResult
-    func killSession(sessionId: String) async throws -> Bool {
-        let data = try await delete("/sessions/\(sessionId)")
-        struct R: Decodable { let terminated: Bool }
-        return (try? decode(R.self, from: data).terminated) ?? false
-    }
-
-    /// Cancel the in-flight turn without killing the session. Per-CLI
-    /// semantics: Claude → SIGINT (process keeps running); Gemini →
-    /// terminate current one-shot spawn; OpenCode → opencode `/abort`.
-    @discardableResult
-    func abortSession(sessionId: String) async throws -> Bool {
-        struct EmptyBody: Encodable {}
-        let data = try await post("/sessions/\(sessionId)/abort", json: EmptyBody())
-        struct R: Decodable { let aborted: Bool }
-        return (try? decode(R.self, from: data).aborted) ?? false
-    }
-
-    /// Hand off the active session to the Mac's Terminal.app. Daemon
-    /// kills its wrapped subprocess and runs osascript to open Terminal
-    /// with the provider's resume command. Returns the exact command
-    /// the daemon spawned (e.g. `claude --resume <id>`) so the iOS view
-    /// can show it in the "Continued in Terminal" banner.
-    @discardableResult
-    func openTerminal(sessionId: String) async throws -> String {
-        struct EmptyBody: Encodable {}
-        let data = try await post("/sessions/\(sessionId)/open-terminal", json: EmptyBody())
-        struct R: Decodable {
-            let openedInTerminal: Bool
-            let command: String
-        }
-        let decoded = try decode(R.self, from: data)
-        return decoded.command
-    }
-
-    func streamURL(sessionId: String) -> URL? {
-        guard let p = store.current else { return nil }
-        return p.baseURL.appendingPathComponent("sessions/\(sessionId)/stream")
-    }
 }
 
-/// Type-erases any Encodable for the generic `post` helper.
-private struct AnyEncodable: Encodable {
+/// Type-erases any Encodable for the generic `post` helper. Lives in
+/// this file rather than its own so existing call sites don't need
+/// import gymnastics.
+struct AnyEncodable: Encodable {
     let base: any Encodable
     init(_ base: any Encodable) { self.base = base }
     func encode(to encoder: any Encoder) throws { try base.encode(to: encoder) }
