@@ -20,6 +20,7 @@ import smoothie.model.CLIType
 import smoothie.model.CreateSessionRequest
 import smoothie.model.EventType
 import smoothie.model.SessionDescriptor
+import smoothie.model.SessionOrigin
 import smoothie.model.SessionState
 import smoothie.model.SmoothieEvent
 import smoothie.util.nowEpochMillis
@@ -51,6 +52,23 @@ class Session(
     val state: StateFlow<SessionState> = _state.asStateFlow()
     val liveEvents: SharedFlow<SmoothieEvent> = _live.asSharedFlow()
 
+    /// Provider-side conversation id. Set initially from the
+    /// `CreateSessionRequest.providerSessionId` (for resume flows) and
+    /// updated by the host after the first event surfaces a real one
+    /// from the CLI's output stream. All mutations go through the mutex
+    /// via `setProviderSessionId` or `ingestParsed`, so no volatile
+    /// marker is needed; reads from non-mutex callers (Swift hosts) are
+    /// a single pointer load.
+    private var _providerSessionId: String? = request.providerSessionId
+    val providerSessionId: String? get() = _providerSessionId
+
+    /// Allow the host layer to update the provider session id once the
+    /// adapter has parsed it from the CLI's first event (Claude's
+    /// stream-json `init`, Gemini's first JSONL frame, etc.).
+    fun setProviderSessionId(id: String?) {
+        _providerSessionId = id
+    }
+
     suspend fun snapshot(): List<SmoothieEvent> = mutex.withLock { _events.toList() }
 
     suspend fun descriptor(): SessionDescriptor = mutex.withLock {
@@ -64,6 +82,8 @@ class Session(
             mode = request.mode,
             state = _state.value,
             createdAt = createdAt,
+            providerSessionId = _providerSessionId,
+            origin = SessionOrigin.SMOOTHIE,
         )
     }
 
@@ -88,6 +108,10 @@ class Session(
                 }
                 updateStateForEvent(event)
             }
+            // Pick up the parser's most recently seen provider session id
+            // (Claude system.init, Gemini init, etc.) so the descriptor
+            // returned to iOS carries the resume id once it's known.
+            parser.lastSessionId?.let { _providerSessionId = it }
         }
         for (event in parsed) _live.emit(event)
         return parsed

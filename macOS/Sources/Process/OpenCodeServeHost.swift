@@ -42,6 +42,12 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     /// produce duplicate TOOL_USE rows.
     private var emittedToolParts: Set<String> = []
 
+    /// Deadman timer that fires `markError` if `opencode serve` never
+    /// prints the "listening on" log line. Without this we used to hang
+    /// at `.starting` forever — common cause is the user hasn't run
+    /// `opencode auth login` yet, in which case the server exits silently.
+    private var portTimeoutTask: Task<Void, Never>?
+
     var isRunning: Bool { process?.isRunning ?? false }
 
     init(session: Session, executable: String, cwd: String) {
@@ -82,6 +88,22 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         self.logStdout = outPipe
         self.logStderr = errPipe
         try proc.run()
+
+        // 10s deadman timer: if opencode serve hasn't printed the
+        // "listening on" line by now AND we haven't created an opencode
+        // session, surface a clear error to the iOS app instead of leaving
+        // it stuck in `.starting`.
+        let weakRef = WeakOCBox(self)
+        portTimeoutTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self = weakRef.value else { return }
+            if self.port == nil && self.ocSessionId == nil {
+                try? await self.session.markError(message:
+                    "OpenCode server didn't bind a port within 10s. " +
+                    "Run `opencode auth login` and confirm a model is configured, then try again.")
+                self.terminate()
+            }
+        }
     }
 
     func write(_ content: String) async throws {
@@ -95,6 +117,8 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     }
 
     func terminate() {
+        portTimeoutTask?.cancel()
+        portTimeoutTask = nil
         if let port, let id = ocSessionId {
             var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(id)/abort")!)
             req.httpMethod = "POST"
@@ -138,6 +162,9 @@ final class OpenCodeServeHost: NSObject, SessionHost {
                 if let captured = match.split(separator: ":").last,
                    let p = Int(captured) {
                     port = p
+                    // Server is up — cancel the deadman timer.
+                    portTimeoutTask?.cancel()
+                    portTimeoutTask = nil
                     Task { @MainActor in await self.connectOnceReady() }
                 }
             }
@@ -160,6 +187,11 @@ final class OpenCodeServeHost: NSObject, SessionHost {
             struct CreateResp: Decodable { let id: String }
             let resp = try JSONDecoder().decode(CreateResp.self, from: data)
             ocSessionId = resp.id
+            // Surface the opencode session id so the iOS descriptor carries
+            // it. Used by the "Open in Terminal" handoff so a fresh
+            // `opencode` invocation can reference the same conversation
+            // (no `--resume` flag today; we just open the project cwd).
+            session.setProviderSessionId(id: resp.id)
         } catch {
             try? await session.markError(message: "opencode session create failed: \(error.localizedDescription)")
             return

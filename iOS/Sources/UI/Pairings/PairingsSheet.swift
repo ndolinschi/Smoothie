@@ -8,6 +8,8 @@ struct PairingsSheet: View {
     let onAddPairing: () -> Void
     let onDismiss: () -> Void
 
+    @State private var confirmingRemoval: PairingStore.Pairing?
+
     var body: some View {
         SmoothieBottomSheet(title: "Paired Macs", onDismiss: onDismiss) {
             if pairing.pairings.isEmpty {
@@ -26,12 +28,22 @@ struct PairingsSheet: View {
                         onDismiss()
                     }
                     .contextMenu {
-                        if pairing.pairings.count > 1 {
-                            Button(role: .destructive) {
-                                pairing.remove(id: mac.id)
-                            } label: {
-                                Label("Remove this Mac", systemImage: "trash")
-                            }
+                        // Always allow removing — even the last paired
+                        // Mac. The audit flagged that gating on `count
+                        // > 1` left users stuck if they wanted to fully
+                        // start over (e.g. selling the iPhone). Routing
+                        // already falls back to ConnectView when
+                        // `pairing.current == nil`, so the sheet
+                        // naturally closes and the pairing flow opens.
+                        Button(role: .destructive) {
+                            confirmingRemoval = mac
+                        } label: {
+                            Label(
+                                pairing.pairings.count == 1
+                                    ? "Disconnect this Mac"
+                                    : "Remove this Mac",
+                                systemImage: "trash"
+                            )
                         }
                     }
                 }
@@ -46,6 +58,26 @@ struct PairingsSheet: View {
             ) {
                 onAddPairing()
             }
+        }
+        .confirmationDialog(
+            confirmingRemoval.map { "Disconnect \($0.label)?" } ?? "Disconnect",
+            isPresented: Binding(
+                get: { confirmingRemoval != nil },
+                set: { if !$0 { confirmingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: confirmingRemoval
+        ) { mac in
+            Button("Disconnect", role: .destructive) {
+                pairing.remove(id: mac.id)
+                // If that was the only Mac, the routing in SmoothieApp
+                // flips to ConnectView automatically. Close the sheet
+                // either way.
+                onDismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { mac in
+            Text("Removes the bearer token from this iPhone. Sessions running on \(mac.label) keep running — re-pair to reconnect.")
         }
     }
 

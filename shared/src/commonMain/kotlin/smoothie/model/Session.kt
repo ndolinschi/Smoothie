@@ -13,6 +13,17 @@ enum class SessionState {
 }
 
 @Serializable
+enum class SessionOrigin {
+    /// Spawned by Smoothie's daemon — the host is alive in our process tree.
+    SMOOTHIE,
+    /// Discovered from a CLI's on-disk history (Claude `~/.claude/projects/`,
+    /// Gemini `~/.gemini/sessions/`, etc.). The user started this in Terminal.
+    /// Driving it requires resuming via the provider's `--resume <id>` flag,
+    /// at which point the descriptor flips to `SMOOTHIE`.
+    TERMINAL,
+}
+
+@Serializable
 data class SessionDescriptor(
     val id: String,
     val projectPath: String,
@@ -23,6 +34,12 @@ data class SessionDescriptor(
     val mode: String?,
     val state: SessionState,
     val createdAt: Long,
+    /// Provider-side conversation id (Claude `session_id`, Gemini
+    /// `session_id`, OpenCode `session.id`). `null` for providers that
+    /// don't expose one or before the first event arrives. Used by the
+    /// iPhone↔Terminal handoff and Terminal-session discovery.
+    val providerSessionId: String? = null,
+    val origin: SessionOrigin = SessionOrigin.SMOOTHIE,
 )
 
 @Serializable
@@ -32,6 +49,12 @@ data class CreateSessionRequest(
     val model: String? = null,
     val reasoningEffort: String? = null,
     val mode: String? = null,
+    /// When set, the host injects the provider's resume flag so the new
+    /// subprocess picks up an existing conversation (Claude `--resume`,
+    /// Gemini `--resume`, Antigravity `-c`). Used both by the
+    /// iPhone-take-back-from-Terminal flow and by Terminal-session
+    /// discovery → resume.
+    val providerSessionId: String? = null,
 )
 
 @Serializable

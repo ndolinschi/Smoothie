@@ -25,7 +25,8 @@ struct StatusBadge: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .glassEffect(in: .capsule)
+            .background(SmoothieColor.bgCard, in: .capsule)
+            .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
         }
     }
 

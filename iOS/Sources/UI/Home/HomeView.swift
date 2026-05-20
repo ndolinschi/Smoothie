@@ -14,8 +14,18 @@ enum HomeFilter: Hashable {
 struct HomeView: View {
     @Environment(PairingStore.self) private var pairing
     @Environment(RecentsStore.self) private var recents
+    /// Set by SmoothieApp when a `smoothie://session/<id>` deep link fires
+    /// from a notification tap. HomeView resolves the id against the live
+    /// `/sessions` list and pushes SessionView via its own NavigationStack.
+    @Binding var deepLinkedSessionId: String?
+
+    init(deepLinkedSessionId: Binding<String?> = .constant(nil)) {
+        self._deepLinkedSessionId = deepLinkedSessionId
+    }
+
     @State private var sessions: [SessionDescriptorWire] = []
     @State private var adapters: [AdapterInfoWire] = []
+    @State private var me: MeWire?
     @State private var loading = true
     @State private var loadError: String?
     @State private var presentingPicker = false
@@ -76,9 +86,17 @@ struct HomeView: View {
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
                     } else {
-                        filterRow
+                        // Claude Code-inspired dashboard header: greeting,
+                        // 4 stat tiles, activity heatmap. Hidden during
+                        // the initial fetch so the skeleton state is
+                        // just a spinner.
+                        DashboardHeader(me: me, sessions: sessions, adapters: adapters)
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                            .listRowSeparator(.hidden)
+                        filterRow
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
                         sessionListContent
                     }
@@ -158,7 +176,31 @@ struct HomeView: View {
         .task { await refresh() }
         .refreshable { await refresh() }
         .onChange(of: pairing.activeId) { _, _ in
+            // Clear any pushed session — switching Mac means the SSE stream
+            // would 404 if we kept the previous session on screen. Also
+            // refresh the list under the new Mac's adapters / sessions.
+            selectedSession = nil
             Task { await refresh() }
+        }
+        .onChange(of: deepLinkedSessionId) { _, new in
+            guard let id = new, !id.isEmpty else { return }
+            // Consume the binding so we don't re-trigger on view re-render.
+            deepLinkedSessionId = nil
+            Task { await resolveAndPush(sessionId: id) }
+        }
+    }
+
+    /// Resolve a notification-tapped session id against the live list and
+    /// push SessionView via the local NavigationStack. Silently no-ops if
+    /// the session was already killed.
+    private func resolveAndPush(sessionId id: String) async {
+        if let cached = sessions.first(where: { $0.id == id }) {
+            selectedSession = cached
+            return
+        }
+        let api = APIClient(store: pairing)
+        if let descriptor = try? await api.sessions().first(where: { $0.id == id }) {
+            selectedSession = descriptor
         }
     }
 
@@ -239,35 +281,49 @@ struct HomeView: View {
                             }
                     }
                 } header: {
-                    Text(bucket.key)
-                        .font(.system(size: 13))
-                        .foregroundStyle(SmoothieColor.textSecondary)
-                        .textCase(nil)
-                        .padding(.top, 12)
-                        .padding(.leading, 0)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 4, trailing: 16))
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(SmoothieColor.textTertiary)
+                        Text(bucket.key)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(SmoothieColor.textSecondary)
+                        Text("\(bucket.value.count)")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(SmoothieColor.textTertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(SmoothieColor.bgChip, in: .capsule)
+                        Spacer(minLength: 0)
+                    }
+                    .textCase(nil)
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 4, trailing: 16))
                 }
             }
         }
     }
 
+    /// Group sessions by their project (last path component) — mirrors
+    /// the left-rail layout in Claude Code desktop. Within each project
+    /// group, sessions are sorted by most-recent first. Projects
+    /// themselves are ordered by their most-recent session's timestamp
+    /// so the project you just touched bubbles to the top.
     private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionDescriptorWire])] {
-        let week = TimeInterval(7 * 86_400)
-        var thisWeek: [SessionDescriptorWire] = []
-        var earlier: [SessionDescriptorWire] = []
-        let now = Date.now
-        for s in ss.sorted(by: { $0.createdAt > $1.createdAt }) {
-            let date = Date(timeIntervalSince1970: TimeInterval(s.createdAt) / 1000.0)
-            if now.timeIntervalSince(date) < week {
-                thisWeek.append(s)
-            } else {
-                earlier.append(s)
+        let sorted = ss.sorted(by: { $0.createdAt > $1.createdAt })
+        var grouped: [String: [SessionDescriptorWire]] = [:]
+        var firstSeen: [String: Int64] = [:]
+        for s in sorted {
+            grouped[s.projectName, default: []].append(s)
+            // First time we see a project in the sorted-desc list = most
+            // recent activity. Locked in via `default` semantics.
+            if firstSeen[s.projectName] == nil {
+                firstSeen[s.projectName] = s.createdAt
             }
         }
-        var out: [(String, [SessionDescriptorWire])] = []
-        if !thisWeek.isEmpty { out.append(("This week", thisWeek)) }
-        if !earlier.isEmpty  { out.append(("Earlier", earlier))  }
-        return out
+        let orderedKeys = grouped.keys.sorted {
+            (firstSeen[$0] ?? 0) > (firstSeen[$1] ?? 0)
+        }
+        return orderedKeys.map { (key: $0, value: grouped[$0] ?? []) }
     }
 
     private var emptyState: some View {
@@ -385,6 +441,12 @@ struct HomeView: View {
                 return
             }
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+        // `/me` is a nicety for the dashboard greeting — failures don't
+        // block the page; we just keep the previous (or nil) value so
+        // the header falls back to a generic "What's up next?".
+        if let fetched = try? await api.me() {
+            me = fetched
         }
         loading = false
     }

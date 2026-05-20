@@ -45,13 +45,19 @@ final class AntigravityOneshotHost: SessionHost {
         executable: String,
         cwd: String,
         baseArgs: [String],
-        env: [String: String]
+        env: [String: String],
+        resumeExisting: Bool = false
     ) {
         self.session = session
         self.executable = executable
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
+        // When resumeExisting=true, the first turn already adds `-c` so
+        // agy picks up the most-recent conversation in the cwd. Used by
+        // the Terminal-session resume flow (agy doesn't expose a per-id
+        // resume in `-p`; we rely on cwd-based threading).
+        self.hasCompletedFirstTurn = resumeExisting
     }
 
     func start() throws {

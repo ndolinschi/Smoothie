@@ -4,6 +4,20 @@ import Foundation
 /// Kept separate from `Shared` framework types because Kotlin's K/N exports
 /// aren't Codable from Swift's perspective.
 
+struct MeWire: Codable, Sendable, Equatable {
+    let username: String
+    let fullName: String
+    let hostname: String
+
+    /// Short greeting handle — uses the first word of fullName when
+    /// available (so "Nichita Dolinschi" → "Nichita"), falling back to
+    /// the POSIX username (`ndolinschi`) if the full name is empty.
+    var greetingName: String {
+        let first = fullName.split(separator: " ").first.map(String.init)
+        return first?.isEmpty == false ? first! : username
+    }
+}
+
 enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
     case claudeCode = "claude_code"
     case gemini
@@ -83,8 +97,33 @@ struct SmoothieEventWire: Codable, Sendable, Identifiable {
     let content: String
     let metadata: [String: AnyCodable]?
     let timestamp: Int64
+    /// Client-stamped UUID — guarantees `ForEach`/`LazyVStack` row identity
+    /// even when two events share the same `(timestamp, type, content)`
+    /// tuple (e.g. two near-simultaneous `thinking: "starting"` events).
+    /// Wire-side this field is absent; the custom CodingKeys below makes
+    /// the decoder skip it and the default value stays UUID-fresh per
+    /// decoded instance.
+    var clientId: String = UUID().uuidString
 
-    var id: String { "\(timestamp)-\(type.rawValue)-\(content.prefix(40))" }
+    private enum CodingKeys: String, CodingKey {
+        case type, content, metadata, timestamp
+    }
+
+    var id: String { clientId }
+
+    /// Convenience initializer for client-synthesised events (mode-switch
+    /// dividers, etc.) that aren't decoded from the wire.
+    init(type: EventTypeWire, content: String, metadata: [String: AnyCodable]?, timestamp: Int64) {
+        self.type = type
+        self.content = content
+        self.metadata = metadata
+        self.timestamp = timestamp
+    }
+}
+
+enum SessionOriginWire: String, Codable, Sendable {
+    case smoothie
+    case terminal
 }
 
 struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
@@ -97,6 +136,50 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
     let mode: String?
     let state: SessionStateWire
     let createdAt: Int64
+    /// Provider-side conversation id (Claude/Gemini `session_id`, OpenCode
+    /// `session.id`). Decoded from the server; nil for newly-created
+    /// sessions before the first event lands, or for providers like
+    /// Antigravity that don't expose one.
+    let providerSessionId: String?
+    /// Tags Terminal-discovered sessions (vs Smoothie-spawned). The
+    /// HomeView surfaces a small Terminal badge on `.terminal` rows.
+    let origin: SessionOriginWire
+
+    /// Custom decoder so older daemons (pre-P22) that don't emit the new
+    /// fields still parse — both default to nil / `.smoothie`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        projectPath = try c.decode(String.self, forKey: .projectPath)
+        projectName = try c.decode(String.self, forKey: .projectName)
+        cli = try c.decode(CLIWire.self, forKey: .cli)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        reasoningEffort = try c.decodeIfPresent(String.self, forKey: .reasoningEffort)
+        mode = try c.decodeIfPresent(String.self, forKey: .mode)
+        state = try c.decode(SessionStateWire.self, forKey: .state)
+        createdAt = try c.decode(Int64.self, forKey: .createdAt)
+        providerSessionId = try c.decodeIfPresent(String.self, forKey: .providerSessionId)
+        origin = (try c.decodeIfPresent(SessionOriginWire.self, forKey: .origin)) ?? .smoothie
+    }
+
+    init(
+        id: String, projectPath: String, projectName: String, cli: CLIWire,
+        model: String?, reasoningEffort: String?, mode: String?,
+        state: SessionStateWire, createdAt: Int64,
+        providerSessionId: String? = nil, origin: SessionOriginWire = .smoothie
+    ) {
+        self.id = id
+        self.projectPath = projectPath
+        self.projectName = projectName
+        self.cli = cli
+        self.model = model
+        self.reasoningEffort = reasoningEffort
+        self.mode = mode
+        self.state = state
+        self.createdAt = createdAt
+        self.providerSessionId = providerSessionId
+        self.origin = origin
+    }
 
     /// Return a copy with `mode` swapped. Used by the soft mode-switch path
     /// (P17) so the composer chip flips instantly without a session restart.
@@ -104,7 +187,8 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
         SessionDescriptorWire(
             id: id, projectPath: projectPath, projectName: projectName, cli: cli,
             model: model, reasoningEffort: reasoningEffort, mode: newMode,
-            state: state, createdAt: createdAt
+            state: state, createdAt: createdAt,
+            providerSessionId: providerSessionId, origin: origin
         )
     }
 }
@@ -141,13 +225,18 @@ struct CreateSessionRequestWire: Codable, Sendable {
     let model: String?
     let reasoningEffort: String?
     let mode: String?
+    /// When set, the host injects the provider's resume flag so the new
+    /// subprocess picks up an existing conversation. Used by the
+    /// Terminal-session → iPhone resume flow.
+    let providerSessionId: String?
 
-    init(projectPath: String, cli: CLIWire, model: String? = nil, reasoningEffort: String? = nil, mode: String? = nil) {
+    init(projectPath: String, cli: CLIWire, model: String? = nil, reasoningEffort: String? = nil, mode: String? = nil, providerSessionId: String? = nil) {
         self.projectPath = projectPath
         self.cli = cli
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.mode = mode
+        self.providerSessionId = providerSessionId
     }
 }
 

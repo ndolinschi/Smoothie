@@ -72,14 +72,19 @@ struct MessageInput: View {
         .padding(.bottom, 14)
         .background(SmoothieColor.bgPrimary)
         .overlay(
+            // Use the live sessionState (driven by SSE) — session.state is a
+            // snapshot of the descriptor at view-mount time and never moves,
+            // so reading it here meant the waiting-pulse hairline + the
+            // auto-focus below never fired in practice.
             Rectangle()
-                .fill(session.state == .waiting ? SmoothieColor.statusWaiting.opacity(0.55) : SmoothieColor.strokeSoft)
+                .fill(sessionState == .waiting ? SmoothieColor.statusWaiting.opacity(0.55) : SmoothieColor.strokeSoft)
                 .frame(height: 0.5),
             alignment: .top
         )
         .animation(.easeOut(duration: 0.18), value: showSuggestions)
         .animation(.easeInOut(duration: 0.18), value: voice.isListening)
-        .onChange(of: session.state) { _, new in
+        .animation(.easeInOut(duration: 0.25), value: sessionState)
+        .onChange(of: sessionState) { _, new in
             if new == .waiting { focused = true }
         }
         .sheet(isPresented: $showingMention) {
@@ -454,7 +459,12 @@ struct MessageInput: View {
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             do {
                 let raw = try Data(contentsOf: url)
-                let maxBytes = 100 * 1024
+                // 4 MB cap — the server-side message body limit is 16 MB
+                // and 100 KB (our previous cap) silently truncated normal
+                // source files. 4 MB comfortably holds even large
+                // generated files while keeping the stream-json payload
+                // sane.
+                let maxBytes = 4 * 1024 * 1024
                 let truncated = raw.count > maxBytes
                 let slice = truncated ? raw.prefix(maxBytes) : raw
                 guard let body = String(data: slice, encoding: .utf8) else {

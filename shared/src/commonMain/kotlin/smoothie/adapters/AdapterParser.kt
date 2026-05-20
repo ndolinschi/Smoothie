@@ -46,4 +46,11 @@ interface AdapterParser {
 
     /** Sniff if a specific event signals the agent has hit its rate limit. */
     fun isLimitReached(event: SmoothieEvent): Boolean = false
+
+    /** Provider-side conversation id once the parser has seen it on the
+     *  wire (Claude's `system.init.session_id`, Gemini's first JSONL
+     *  frame, etc.). `null` until parsed or for providers that don't
+     *  surface one. `Session` polls this after each ingest and plumbs it
+     *  into `SessionDescriptor.providerSessionId`. */
+    val lastSessionId: String? get() = null
 }

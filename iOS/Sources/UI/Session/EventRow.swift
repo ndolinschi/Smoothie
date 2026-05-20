@@ -75,7 +75,11 @@ struct EventRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .glassEffect(in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
+            )
         }
     }
 
@@ -140,7 +144,8 @@ struct EventRow: View {
                 .foregroundStyle(tint)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .glassEffect(in: .capsule)
+                .background(SmoothieColor.bgCard, in: .capsule)
+                .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
             }
             .buttonStyle(.plain)
 

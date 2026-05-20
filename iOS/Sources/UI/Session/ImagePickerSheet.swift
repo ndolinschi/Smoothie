@@ -135,12 +135,24 @@ extension StagedImage {
     /// Compress, resize, base64-encode. Returns nil if the image can't be
     /// rendered as JPEG. Cap long edge at 1600 px so the payload stays
     /// reasonable; for retina photos this drops a typical 4 MB image to
-    /// ~300 KB, well under any wire limit.
+    /// ~300 KB. We then enforce a hard ceiling of 2 MB per image post-JPEG
+    /// — high-detail screenshots can still exceed that at quality 0.85, in
+    /// which case we step quality down until it fits or we hit 0.40 (any
+    /// lower starts visibly mushing text).
     @MainActor
     static func build(from image: UIImage, suggestedName: String) -> StagedImage? {
         let maxEdge: CGFloat = 1600
+        let maxBytes = 2 * 1024 * 1024
         let resized = image.resizedToMaxEdge(maxEdge)
-        guard let data = resized.jpegData(compressionQuality: 0.85) else { return nil }
+
+        var quality: CGFloat = 0.85
+        guard var data = resized.jpegData(compressionQuality: quality) else { return nil }
+        while data.count > maxBytes && quality > 0.40 {
+            quality -= 0.15
+            guard let stepped = resized.jpegData(compressionQuality: quality) else { break }
+            data = stepped
+        }
+
         let base64 = data.base64EncodedString()
         let thumb = resized.resizedToMaxEdge(120)
         let name = suggestedName.split(separator: "/").last.map(String.init) ?? "image"

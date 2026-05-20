@@ -228,16 +228,38 @@ enum SyntaxHighlighter {
 
     // MARK: - Regex helper
 
+    /// Cache for compiled `NSRegularExpression` instances keyed by the
+    /// pattern string. `NSRegularExpression` compilation is allocation-
+    /// heavy (NFA build) and we previously re-built the same regexes on
+    /// every highlight call — for a long streaming answer with multiple
+    /// code blocks that meant thousands of pointless compiles per second.
+    /// Cache is bounded only by the number of unique patterns we use
+    /// (~20 across all languages); no eviction needed. NSCache itself is
+    /// thread-safe at the API level (Apple's docs), so the `nonisolated`
+    /// flag suppresses the Swift 6 strict-concurrency warning without
+    /// changing behaviour.
+    nonisolated(unsafe) private static let regexCache = NSCache<NSString, NSRegularExpression>()
+
+    private static func cachedRegex(_ pattern: String) -> NSRegularExpression? {
+        let key = pattern as NSString
+        if let cached = regexCache.object(forKey: key) {
+            return cached
+        }
+        guard let compiled = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.dotMatchesLineSeparators]
+        ) else { return nil }
+        regexCache.setObject(compiled, forKey: key)
+        return compiled
+    }
+
     private static func applyRegex(
         _ pattern: String,
         color: UIColor,
         ns: NSMutableAttributedString,
         source: String
     ) {
-        guard let regex = try? NSRegularExpression(
-            pattern: pattern,
-            options: [.dotMatchesLineSeparators]
-        ) else { return }
+        guard let regex = cachedRegex(pattern) else { return }
         let full = NSRange(source.startIndex..<source.endIndex, in: source)
         regex.enumerateMatches(in: source, options: [], range: full) { match, _, _ in
             guard let r = match?.range else { return }

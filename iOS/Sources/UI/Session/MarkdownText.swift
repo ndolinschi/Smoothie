@@ -8,13 +8,35 @@ import SwiftUI
 struct MarkdownText: View {
     let content: String
 
+    /// Cache the parsed blocks so a streaming agent's per-token content
+    /// update doesn't re-tokenise the entire string on every body redraw.
+    /// We key the cache by the content string itself — Swift's `String`
+    /// hashing is cheap and Equatable check short-circuits the rare case
+    /// where the same content arrives twice.
+    @State private var cachedBlocks: [Block] = []
+    @State private var cachedContent: String = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+            ForEach(Array(currentBlocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { refreshBlocksIfNeeded() }
+        .onChange(of: content) { _, _ in refreshBlocksIfNeeded() }
+    }
+
+    /// Read-through accessor — falls back to a fresh parse if `.onAppear`
+    /// hasn't fired yet (first render). Subsequent renders use the cache.
+    private var currentBlocks: [Block] {
+        cachedContent == content ? cachedBlocks : Self.parseBlocks(content)
+    }
+
+    private func refreshBlocksIfNeeded() {
+        guard cachedContent != content else { return }
+        cachedBlocks = Self.parseBlocks(content)
+        cachedContent = content
     }
 
     @ViewBuilder
@@ -147,7 +169,11 @@ struct MarkdownText: View {
         case rule
     }
 
-    private var blocks: [Block] {
+    /// Parse the markdown body into structural blocks. Lifted out of the
+    /// instance so it can be called from `currentBlocks` (computed) AND
+    /// `refreshBlocksIfNeeded` (cache primer) without re-entering SwiftUI's
+    /// dependency graph through `self`.
+    static func parseBlocks(_ content: String) -> [Block] {
         var out: [Block] = []
         var paragraph: [String] = []
         var bullets: [String] = []
@@ -212,19 +238,19 @@ struct MarkdownText: View {
                 continue
             }
 
-            if let (level, headingText) = parseHeading(trimmed) {
+            if let (level, headingText) = Self.parseHeading(trimmed) {
                 flushAllExcept()
                 out.append(.heading(headingText, level))
                 continue
             }
 
-            if let bullet = parseBullet(trimmed) {
+            if let bullet = Self.parseBullet(trimmed) {
                 flushAllExcept(.bullets)
                 bullets.append(bullet)
                 continue
             }
 
-            if let (_, numItem) = parseNumbered(trimmed) {
+            if let (_, numItem) = Self.parseNumbered(trimmed) {
                 flushAllExcept(.numbered)
                 numbered.append(numItem)
                 continue
@@ -254,7 +280,7 @@ struct MarkdownText: View {
 
     private enum BlockKind { case none, paragraph, bullets, numbered, quote }
 
-    private func parseHeading(_ s: String) -> (Int, String)? {
+    fileprivate static func parseHeading(_ s: String) -> (Int, String)? {
         var level = 0
         for char in s {
             if char == "#" { level += 1 } else { break }
@@ -266,7 +292,7 @@ struct MarkdownText: View {
         return (level, rest.trimmingCharacters(in: .whitespaces))
     }
 
-    private func parseBullet(_ s: String) -> String? {
+    fileprivate static func parseBullet(_ s: String) -> String? {
         let bullets = ["- ", "* ", "+ ", "• "]
         for b in bullets where s.hasPrefix(b) {
             return String(s.dropFirst(b.count)).trimmingCharacters(in: .whitespaces)
@@ -274,7 +300,7 @@ struct MarkdownText: View {
         return nil
     }
 
-    private func parseNumbered(_ s: String) -> (Int, String)? {
+    fileprivate static func parseNumbered(_ s: String) -> (Int, String)? {
         guard let firstSpace = s.firstIndex(of: " ") else { return nil }
         let prefix = s[s.startIndex..<firstSpace]
         guard prefix.hasSuffix(".") else { return nil }

@@ -81,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SafetyHost.shared.loadPrompts()
+        // Sweep up orphans from prior `kill -9` events. macOS doesn't give us
+        // PR_SET_PDEATHSIG, and Xcode debug stops leave subprocesses
+        // re-parented to launchd. Match by the exact spawn signatures we use
+        // so we don't touch anything the user runs themselves.
+        Self.killOrphanSubprocesses()
         if let boot = AppDelegate.bootstrap {
             Task { @MainActor in
                 await AdapterProbe.probeAll(into: boot.registry)
@@ -89,12 +94,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private static func killOrphanSubprocesses() {
+        // Each pattern is matched against the full argv. Kept narrow so we
+        // only hit subprocesses spawned by a previous Smoothie daemon — never
+        // the user's own `opencode`, `claude`, etc. that they might run by
+        // hand in a terminal.
+        let patterns = [
+            "opencode serve --port 0 --print-logs",
+            "claude -p --output-format stream-json --input-format stream-json",
+        ]
+        for pattern in patterns {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            task.arguments = ["-9", "-f", pattern]
+            task.standardOutput = Pipe()
+            task.standardError = Pipe()
+            do { try task.run(); task.waitUntilExit() } catch { /* best-effort */ }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        Task { @MainActor in
-            if let boot = AppDelegate.bootstrap {
-                await boot.processes.terminateAll()
-                boot.server.stop()
-            }
+        // AppKit doesn't wait for async Tasks here — we'd return before the
+        // SIGTERM was sent and orphan our subprocesses (we hit this with
+        // stale `opencode serve` workers piling up across debug sessions).
+        // Send SIGTERM synchronously first, then schedule the rest of
+        // cleanup best-effort.
+        if let boot = AppDelegate.bootstrap {
+            boot.processes.terminateAllSync()
+            boot.server.stop()
         }
     }
 }

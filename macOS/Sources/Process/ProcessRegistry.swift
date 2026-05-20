@@ -70,6 +70,14 @@ final class ProcessRegistry {
         let args = parser.launchArguments(request: effective, systemPromptText: systemPrompt)
         let envMap = Self.mapFromKotlin(parser.launchEnvironment())
 
+        // Track the partially-constructed host outside the `do` so the
+        // catch block can tear it down — previously a failed `start()`
+        // (e.g. an OpenCodeServeHost that spawned `opencode serve` but
+        // couldn't open the SSE) would leave the child process orphaned
+        // and re-parented to launchd. We hit this with ~13 zombie
+        // `opencode serve` workers across debug sessions.
+        var partialHost: (any SessionHost)?
+
         do {
             let host: any SessionHost
             if effective.cli == CLIType.gemini, let geminiParser = parser as? GeminiAdapter {
@@ -88,12 +96,17 @@ final class ProcessRegistry {
                     cwd: effective.projectPath
                 )
             } else if effective.cli == CLIType.antigravity {
+                // If the request carries a providerSessionId (Terminal
+                // session resume), seed the host's continue-mode flag so
+                // the first turn already adds `-c`.
+                let resume = (effective.providerSessionId?.isEmpty == false)
                 host = AntigravityOneshotHost(
                     session: session,
                     executable: exec,
                     cwd: effective.projectPath,
                     baseArgs: args,
-                    env: envMap
+                    env: envMap,
+                    resumeExisting: resume
                 )
             } else {
                 host = try ProcessHost(
@@ -104,10 +117,31 @@ final class ProcessRegistry {
                     environment: envMap
                 )
             }
+            partialHost = host
             try host.start()
             hosts[session.id] = host
             activeCount = hosts.count
+
+            // Inject a synthetic "starting" event right after the
+            // process launches so the iOS empty-state placeholder
+            // dismisses immediately instead of waiting 5-15 s for the
+            // CLI to print its own init line. The thinking pulse takes
+            // over while the real init is still loading. Without this,
+            // the user sees the static "Agent is warming up…" card for
+            // the full provider warmup window and assumes the app is
+            // hung.
+            let resumeLabel = effective.providerSessionId?.isEmpty == false ? " (resuming)" : ""
+            let projectName = (effective.projectPath as NSString).lastPathComponent
+            let bootMessage = "Spawning \(effective.cli.displayName) in \(projectName)\(resumeLabel)…"
+            let bootEvent = SmoothieEvent(
+                type: .thinking,
+                content: bootMessage,
+                metadata: nil,
+                timestamp: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+            try? await session.injectEvent(event: bootEvent)
         } catch {
+            partialHost?.terminate()
             try? await session.markError(message: "spawn failed: \(error.localizedDescription)")
             _ = try? await manager.remove(id: session.id)
             throw SpawnError.launchFailed(error.localizedDescription)
@@ -136,6 +170,19 @@ final class ProcessRegistry {
         }
         hosts.removeAll()
         activeCount = 0
+    }
+
+    /// Synchronous SIGTERM to every spawned child. Used from
+    /// `applicationWillTerminate` where AppKit doesn't wait for our async
+    /// Task to finish — async cleanup would race with process exit and leak
+    /// children to launchd (we hit this with stale `opencode serve` workers
+    /// piling up). The Kotlin SessionManager bookkeeping isn't touched here
+    /// because the daemon is shutting down anyway; the next start probes
+    /// fresh state.
+    func terminateAllSync() {
+        for host in hosts.values {
+            host.terminate()
+        }
     }
 
     // MARK: - Helpers

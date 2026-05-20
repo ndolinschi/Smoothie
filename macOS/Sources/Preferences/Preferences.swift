@@ -99,7 +99,8 @@ final class Preferences {
             cli: request.cli,
             model: model,
             reasoningEffort: request.reasoningEffort,
-            mode: request.mode
+            mode: request.mode,
+            providerSessionId: request.providerSessionId
         )
     }
 

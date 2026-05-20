@@ -65,8 +65,15 @@ struct NewSessionView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: start) {
-                        Text(starting ? "Starting…" : "Start")
-                            .fontWeight(.semibold)
+                        HStack(spacing: 6) {
+                            if starting {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(.white)
+                            }
+                            Text(starting ? "Starting…" : "Start")
+                                .fontWeight(.semibold)
+                        }
                     }
                     .disabled(!canStart || starting)
                     .foregroundStyle(canStart ? .white : .white.opacity(0.3))

@@ -6,7 +6,15 @@ import WidgetKit
 final class SessionLiveStore {
     private(set) var events: [SmoothieEventWire] = []
     private(set) var state: SessionStateWire
-    private(set) var connected: Bool = false
+    /// Live SSE connection state — drives the connection banner. Starts at
+    /// `.connecting` so the user sees feedback the moment SessionView mounts
+    /// rather than a blank period before the first `urlSession` callback.
+    private(set) var connection: SSEClient.State = .connecting
+    /// True once we've seen at least one event arrive from the server — used
+    /// by AgentStream to switch from "waiting for first reply…" placeholder
+    /// to the real stream view.
+    private(set) var hasReceivedEvent: Bool = false
+    /// Surfaced inside the banner when reconnect attempts fail.
     private(set) var error: String?
     /// Mode switch requested by the user. Flushed when state leaves
     /// `.thinking` so the divider appears AFTER the in-flight turn rather
@@ -16,6 +24,12 @@ final class SessionLiveStore {
     private var sse: SSEClient?
     private var api: APIClient?
     let session: SessionDescriptorWire
+
+    /// Convenience flag (kept for the existing StatusBadge call sites).
+    var connected: Bool {
+        if case .connected = connection { return true }
+        return false
+    }
 
     init(session: SessionDescriptorWire) {
         self.session = session
@@ -44,6 +58,7 @@ final class SessionLiveStore {
 
     private func ingest(_ event: SmoothieEventWire) {
         events.append(event)
+        hasReceivedEvent = true
         if events.count > 2000 {
             events.removeFirst(events.count - 2000)
         }
@@ -116,11 +131,11 @@ final class SessionLiveStore {
     }
 
     private func update(connectionState: SSEClient.State) {
+        connection = connectionState
         switch connectionState {
-        case .connecting:        connected = false
-        case .connected:         connected = true; error = nil
-        case .retrying(let s):   connected = false; error = "Reconnecting in \(s)s…"
-        case .stopped:           connected = false
+        case .connecting, .stopped: break
+        case .connected:            error = nil
+        case .retrying(let s):      error = "Reconnecting in \(s)s…"
         }
     }
 }
@@ -199,7 +214,18 @@ struct SessionView: View {
             SmoothieColor.bgPrimary.ignoresSafeArea()
             if let store {
                 VStack(spacing: 8) {
-                    AgentStream(events: store.events)
+                    ConnectionBanner(
+                        connection: store.connection,
+                        state: store.state,
+                        hasReceivedEvent: store.hasReceivedEvent
+                    )
+                    .animation(.easeInOut(duration: 0.2), value: store.connected)
+                    .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
+                    AgentStream(
+                        events: store.events,
+                        connection: store.connection,
+                        state: store.state
+                    )
                     if !store.events.isEmpty {
                         ActionChipsRow(
                             events: store.events,
@@ -278,6 +304,12 @@ struct SessionView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        Task { await handoffToTerminal() }
+                    } label: {
+                        Label("Open in Terminal on Mac", systemImage: "terminal")
+                    }
+                    Divider()
                     Button(role: .destructive) {
                         confirmKill = true
                     } label: {
@@ -377,6 +409,27 @@ struct SessionView: View {
         }
     }
 
+    /// Hand the active session off to the Mac's Terminal.app. The daemon
+    /// kills its subprocess and runs `osascript` so the user can keep
+    /// typing in Terminal. We disconnect the SSE first so late frames
+    /// don't show up after we've moved on, then pop back to HomeView —
+    /// the session shows up as `done` on the next refresh, and the user
+    /// can resume from there.
+    private func handoffToTerminal() async {
+        let api = APIClient(store: pairing)
+        store?.disconnect()
+        do {
+            _ = try await api.openTerminal(sessionId: currentSession.id)
+        } catch {
+            switchError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // Re-connect so the user isn't stranded on a dead SSE if the
+            // handoff failed (e.g. user denied Terminal automation perm).
+            store?.connect(api: api)
+            return
+        }
+        dismiss()
+    }
+
     private func handlePotentialNotification(state: SessionStateWire) {
         guard scenePhase != .active else {
             lastNotifiedState = state
@@ -458,8 +511,18 @@ struct SessionView: View {
             return providerChanged ? nil : currentSession.mode
         }()
 
-        // Kill the old process in the background — we don't wait.
+        // Snapshot the previous store so we can resume it on failure (don't
+        // strand the user on a stopped stream if create fails).
+        let previousStore = store
         let oldId = currentSession.id
+
+        // Stop the old SSE FIRST so late URLSession callbacks can't slip
+        // events into a store we're about to replace. We previously did
+        // this in the wrong order; events that arrived during the
+        // await-createSession window were attributed to the old store and
+        // then discarded, which was OK but caused brief duplicate rows on
+        // slower networks.
+        previousStore?.disconnect()
         Task.detached { _ = try? await api.killSession(sessionId: oldId) }
 
         do {
@@ -471,9 +534,6 @@ struct SessionView: View {
                 mode: mode
             )
             let new = try await api.createSession(req)
-            // Atomically swap. Until this point the user keeps seeing the
-            // previous session's events; the new SSE picks up immediately.
-            store?.disconnect()
             currentSession = new
             let s = SessionLiveStore(session: new)
             s.connect(api: api)
@@ -481,6 +541,9 @@ struct SessionView: View {
             await loadFeatures()
         } catch {
             switchError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // Failure: reconnect the previous session's SSE so the user
+            // can keep typing without losing the live link.
+            previousStore?.connect(api: api)
         }
     }
 }

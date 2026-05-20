@@ -82,6 +82,14 @@ struct APIClient {
 
     func health() async throws -> Data { try await get("/health") }
 
+    /// Greeting metadata for the dashboard home (username, full name,
+    /// hostname). Pulled once on HomeView appear; cached client-side
+    /// since the values don't change between launches.
+    func me() async throws -> MeWire {
+        let data = try await get("/me")
+        return try decode(MeWire.self, from: data)
+    }
+
     func adapters() async throws -> [AdapterInfoWire] {
         let data = try await get("/adapters")
         return try decode([AdapterInfoWire].self, from: data)
@@ -170,6 +178,23 @@ struct APIClient {
         let data = try await post("/sessions/\(sessionId)/abort", json: EmptyBody())
         struct R: Decodable { let aborted: Bool }
         return (try? decode(R.self, from: data).aborted) ?? false
+    }
+
+    /// Hand off the active session to the Mac's Terminal.app. Daemon
+    /// kills its wrapped subprocess and runs osascript to open Terminal
+    /// with the provider's resume command. Returns the exact command
+    /// the daemon spawned (e.g. `claude --resume <id>`) so the iOS view
+    /// can show it in the "Continued in Terminal" banner.
+    @discardableResult
+    func openTerminal(sessionId: String) async throws -> String {
+        struct EmptyBody: Encodable {}
+        let data = try await post("/sessions/\(sessionId)/open-terminal", json: EmptyBody())
+        struct R: Decodable {
+            let openedInTerminal: Bool
+            let command: String
+        }
+        let decoded = try decode(R.self, from: data)
+        return decoded.command
     }
 
     func streamURL(sessionId: String) -> URL? {

@@ -37,6 +37,13 @@ class ClaudeAdapter : AdapterParser {
     }
     private val buffer = StringBuilder()
 
+    /// Captured from the first `system` event with `subtype = init`. The
+    /// macOS host plumbs this through `Session.setProviderSessionId` so the
+    /// descriptor returned to iOS carries the resume id (used by the
+    /// "Open in Terminal" handoff and Terminal-session resume).
+    override var lastSessionId: String? = null
+        private set
+
     override fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
         buffer.append(stdoutBytes.decodeToString())
         val events = mutableListOf<SmoothieEvent>()
@@ -83,6 +90,12 @@ class ClaudeAdapter : AdapterParser {
             // via the system prompt.
             "--dangerously-skip-permissions",
         )
+        // Resume an existing Claude conversation when the request carries
+        // a provider session id — used by the "take back from Terminal"
+        // and Terminal-session-discovery flows.
+        request.providerSessionId?.takeIf { it.isNotBlank() }?.let {
+            args += listOf("--resume", it)
+        }
         request.model?.let { args += listOf("--model", it) }
         request.reasoningEffort?.let { args += listOf("--effort", it) }
         systemPromptText?.takeIf { it.isNotBlank() }?.let {
@@ -113,6 +126,11 @@ class ClaudeAdapter : AdapterParser {
             "system" -> {
                 val subtype = obj["subtype"]?.jsonPrimitive?.contentOrNull
                 if (subtype == "init") {
+                    // Capture the provider session id so the host can plumb
+                    // it through to `SessionDescriptor.providerSessionId`.
+                    obj["session_id"]?.jsonPrimitive?.contentOrNull?.let {
+                        lastSessionId = it
+                    }
                     SmoothieEvent(EventType.THINKING, "starting", null, now)
                 } else null
             }

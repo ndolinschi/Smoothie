@@ -48,7 +48,7 @@ class GeminiAdapter : AdapterParser {
 
     /// Captured the first time we see an `init` event. The macOS host can
     /// thread this back as `--resume <id>` once multi-turn lands.
-    var lastSessionId: String? = null
+    override var lastSessionId: String? = null
         private set
 
     override fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
@@ -82,6 +82,13 @@ class GeminiAdapter : AdapterParser {
             "--include-directories", request.projectPath,
             "--skip-trust",
         )
+        // Resume an existing Gemini conversation when the request carries a
+        // provider session id (Terminal-session-discovery / take-back flow).
+        // After the first turn the host swaps to its captured
+        // `parser.lastSessionId`.
+        request.providerSessionId?.takeIf { it.isNotBlank() }?.let {
+            args += listOf("--resume", it)
+        }
         request.model?.let { args += listOf("--model", it) }
         when (request.mode) {
             "yolo" -> args += listOf("--yolo")

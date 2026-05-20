@@ -37,15 +37,17 @@ struct SmoothieApp: App {
 private struct RootView: View {
     @ObservedObject var notifications: NotificationRouter
     @Environment(PairingStore.self) private var pairing
-    @State private var deepLinkedSession: SessionDescriptorWire?
+    @State private var deepLinkedSessionId: String?
 
     var body: some View {
         Group {
             if pairing.current != nil {
-                HomeView()
-                    .navigationDestination(item: $deepLinkedSession) { s in
-                        SessionView(session: s)
-                    }
+                // HomeView owns its own NavigationStack; pass the deep-link
+                // binding in so the navigation push happens INSIDE that
+                // stack. Previous wiring attached `.navigationDestination`
+                // outside the stack — SwiftUI silently dropped the route and
+                // notification taps went nowhere.
+                HomeView(deepLinkedSessionId: $deepLinkedSessionId)
             } else {
                 ConnectView()
             }
@@ -53,18 +55,7 @@ private struct RootView: View {
         .onChange(of: notifications.pendingSessionId) { _, new in
             guard let id = new else { return }
             notifications.pendingSessionId = nil
-            Task { await resolveSession(id: id) }
-        }
-    }
-
-    /// Resolve a deep-linked session id to its descriptor via /sessions, then
-    /// trigger the navigation destination. Silently fails if the session no
-    /// longer exists (e.g. already killed).
-    private func resolveSession(id: String) async {
-        let api = APIClient(store: pairing)
-        guard let list = try? await api.sessions() else { return }
-        if let descriptor = list.first(where: { $0.id == id }) {
-            deepLinkedSession = descriptor
+            deepLinkedSessionId = id
         }
     }
 }

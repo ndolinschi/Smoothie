@@ -33,6 +33,22 @@ enum Routes {
             jsonResponse("{\"paired\":true}")
         }
 
+        // Pulled by iOS HomeView to greet the user by name ("Hi Nichita")
+        // and show the Mac's hostname under the dashboard. fullName comes
+        // from NSFullUserName (the macOS account's "real name"); username
+        // is the POSIX login; hostname is the Bonjour-friendly machine
+        // name. All three are safe to display — no secrets here.
+        group.get("/me") { _, _ -> Response in
+            let username = NSUserName()
+            let fullName = NSFullUserName()
+            let hostname = Host.current().localizedName ?? username
+            var parts: [String] = []
+            parts.append("\"username\":\(jsonString(username))")
+            parts.append("\"fullName\":\(jsonString(fullName))")
+            parts.append("\"hostname\":\(jsonString(hostname))")
+            return jsonResponse("{" + parts.joined(separator: ",") + "}")
+        }
+
         group.get("/adapters") { _, _ -> Response in
             let infos = handle.registry.all()
             return jsonResponse(encodeAdapterList(infos))
@@ -135,6 +151,56 @@ enum Routes {
             }.value
             if !ok { return errorResponse(.notFound, "session not found") }
             return jsonResponse("{\"aborted\":true}")
+        }
+
+        // Hand the active session off to a Terminal window. Daemon kills
+        // its subprocess and runs osascript so the user can keep typing in
+        // Terminal via the provider's resume flag (`claude --resume <id>`,
+        // `gemini --resume <id>`, `agy -c`, `opencode`). After this the
+        // session is marked done on the daemon; iPhone can "take back"
+        // control later by creating a fresh session with the same
+        // providerSessionId.
+        group.post("/sessions/:id/open-terminal") { _, context -> Response in
+            guard let id = context.parameters.get("id") else {
+                return errorResponse(.badRequest, "missing id")
+            }
+            let result: Result<String, Error> = await Task { @MainActor in
+                guard let host = handle.processes.host(forSessionId: id) else {
+                    return .failure(NSError(domain: "Smoothie", code: 404,
+                        userInfo: [NSLocalizedDescriptionKey: "session not found"]))
+                }
+                let session = host.session
+                let descriptor: SessionDescriptor
+                do {
+                    descriptor = try await session.descriptor()
+                } catch {
+                    return .failure(error)
+                }
+                let cmd = TerminalHandoff.resumeCommand(
+                    cli: descriptor.cli,
+                    providerSessionId: descriptor.providerSessionId
+                )
+                // Graceful abort first (Claude SIGINT, Gemini one-shot
+                // exit), then terminate so the next process the user
+                // spawns from Terminal owns the conversation alone.
+                await host.abort()
+                try? await Task.sleep(for: .milliseconds(500))
+                _ = await handle.processes.terminate(id: id)
+                do {
+                    try TerminalHandoff.openInTerminal(cwd: descriptor.projectPath, command: cmd)
+                } catch {
+                    return .failure(error)
+                }
+                return .success(cmd)
+            }.value
+            switch result {
+            case .success(let cmd):
+                return jsonResponse("{\"openedInTerminal\":true,\"command\":\(jsonString(cmd))}")
+            case .failure(let err):
+                let nsErr = err as NSError
+                let code: HTTPResponse.Status = nsErr.code == 404 ? .notFound : .internalServerError
+                return errorResponse(code, nsErr.localizedDescription)
+            }
         }
 
         group.post("/sessions/:id/message") { request, context -> Response in
@@ -275,6 +341,12 @@ func encodeSession(_ d: SessionDescriptor) -> String {
     if let mode = d.mode { keys.append("\"mode\":\(jsonString(mode))") } else { keys.append("\"mode\":null") }
     keys.append("\"state\":\"\(d.state.name.lowercased())\"")
     keys.append("\"createdAt\":\(d.createdAt)")
+    if let pid = d.providerSessionId {
+        keys.append("\"providerSessionId\":\(jsonString(pid))")
+    } else {
+        keys.append("\"providerSessionId\":null")
+    }
+    keys.append("\"origin\":\"\(d.origin.name.lowercased())\"")
     return "{" + keys.joined(separator: ",") + "}"
 }
 
@@ -546,12 +618,14 @@ func decodeCreate(_ data: Data) -> CreateSessionRequest? {
     let model = obj["model"] as? String
     let reasoning = obj["reasoningEffort"] as? String
     let mode = obj["mode"] as? String
+    let providerSessionId = obj["providerSessionId"] as? String
     return CreateSessionRequest(
         projectPath: projectPath,
         cli: cli,
         model: model,
         reasoningEffort: reasoning,
-        mode: mode
+        mode: mode,
+        providerSessionId: providerSessionId
     )
 }
 
