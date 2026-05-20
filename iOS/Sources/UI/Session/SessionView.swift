@@ -139,6 +139,7 @@ struct SessionView: View {
     @State private var lastNotifiedState: SessionStateWire?
     @State private var showingModeSheet = false
     @State private var showingDiffSheet = false
+    @State private var showingModelSheet = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -177,6 +178,22 @@ struct SessionView: View {
         return "\(currentSession.cli.displayName) · \(modeLabel)"
     }
 
+    /// Friendly model name (e.g. `sonnet` → `Claude Sonnet 4.6`). Falls
+    /// back to the CLI's display name when the session has no explicit
+    /// model set.
+    private var modelChipLabel: String {
+        if let model = currentSession.model, !model.isEmpty {
+            return currentSession.cli.friendlyModelName(model)
+        }
+        return currentSession.cli.displayName
+    }
+
+    /// Lowercase mode token for the cloud chip below the model.
+    private var modeChipLabel: String {
+        (currentSession.mode ?? "default")
+            .replacingOccurrences(of: "_", with: " ")
+    }
+
     var body: some View {
         ZStack {
             SmoothieColor.bgPrimary.ignoresSafeArea()
@@ -198,7 +215,7 @@ struct SessionView: View {
                         sessionState: store.state,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
-                            await sendMessage(composed)
+                            await sendMessage(composed, images: attachments.images)
                         },
                         onAbort: { Task { await abortTurn() } },
                         onSwitchModel: { m in await applyRestart(.model(m)) },
@@ -218,16 +235,41 @@ struct SessionView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 2) {
-                    Text(currentSession.projectName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(SmoothieColor.textPrimary)
-                        .lineLimit(1)
+                VStack(spacing: 4) {
+                    Button {
+                        showingModelSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(modelChipLabel)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(SmoothieColor.textPrimary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(SmoothieColor.textSecondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                     HStack(spacing: 6) {
-                        Text(toolbarSubtitle)
-                            .font(.system(size: 12))
-                            .foregroundStyle(SmoothieColor.textSecondary)
-                            .lineLimit(1)
+                        Button {
+                            showingModeSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "cloud")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(SmoothieColor.textSecondary)
+                                Text(modeChipLabel)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(SmoothieColor.textSecondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3)
+                            .overlay(
+                                Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                            )
+                        }
+                        .buttonStyle(.plain)
                         if let store, store.state != .done, store.state != .error {
                             StatusBadge(state: store.state, connected: store.connected)
                         }
@@ -272,6 +314,19 @@ struct SessionView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+        }
+        .sheet(isPresented: $showingModelSheet) {
+            if let f = features {
+                ModelPickerSheet(
+                    currentModel: currentSession.model,
+                    currentEffort: currentSession.reasoningEffort,
+                    features: f,
+                    onPickModel: { m in await applyRestart(.model(m)) },
+                    onPickEffort: { e in await applyRestart(.effort(e)) }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationBackground(.clear)
+            }
         }
         .onAppear {
             connectStore()
@@ -350,10 +405,14 @@ struct SessionView: View {
         store?.queueModeChange(mode)
     }
 
-    private func sendMessage(_ content: String) async {
+    private func sendMessage(_ content: String, images: [StagedImage] = []) async {
         let api = APIClient(store: pairing)
         do {
-            try await api.sendMessage(sessionId: currentSession.id, content: content)
+            try await api.sendMessage(
+                sessionId: currentSession.id,
+                content: content,
+                images: images
+            )
         } catch {
             // SSE error event surfaces server-side failures
         }

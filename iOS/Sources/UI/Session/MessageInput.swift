@@ -37,6 +37,7 @@ struct MessageInput: View {
     @State private var importError: String?
     @State private var voice = VoiceDictator()
     @State private var voiceError: String?
+    @State private var pendingImagePickerSource: ImagePickerSheet.Source?
     @FocusState private var focused: Bool
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -61,6 +62,7 @@ struct MessageInput: View {
             if voice.isListening {
                 voiceComposerRow
             } else {
+                projectRow
                 textField
                 actionsRow
             }
@@ -91,6 +93,8 @@ struct MessageInput: View {
             AttachSheet(
                 session: session,
                 features: features,
+                onTakePhoto:   { pendingImagePickerSource = .camera },
+                onChoosePhoto: { pendingImagePickerSource = .library },
                 onMentionFile: { showingMention = true },
                 onAttachFile:  { showingImporter = true },
                 onOpenSkills:  { showingSkills = true },
@@ -101,6 +105,16 @@ struct MessageInput: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+        }
+        .sheet(item: $pendingImagePickerSource) { source in
+            ImagePickerSheet(
+                source: source,
+                onPicked: { staged in
+                    attachments.append(.image(staged))
+                    pendingImagePickerSource = nil
+                },
+                onCancel: { pendingImagePickerSource = nil }
+            )
         }
         .sheet(isPresented: $showingSkills) {
             if let f = features {
@@ -156,6 +170,17 @@ struct MessageInput: View {
     }
 
     // MARK: - Rows
+
+    /// REF-1's "connected repo" row — sits between attachments / suggestions
+    /// and the text field. Single tappable chip showing the current project;
+    /// no `+` to its left (that lives in the bottom actionsRow per the
+    /// user's preference for a compact bottom).
+    private var projectRow: some View {
+        HStack(spacing: 8) {
+            RepoChip(projectPath: session.projectPath, isGit: true)
+            Spacer(minLength: 0)
+        }
+    }
 
     private var textField: some View {
         TextField(
@@ -262,34 +287,65 @@ struct MessageInput: View {
         }
     }
 
+    @ViewBuilder
     private func attachmentChip(_ att: StagedAttachment) -> some View {
+        switch att {
+        case .file(let f):  fileChip(f)
+        case .image(let i): imageChip(i)
+        }
+    }
+
+    private func fileChip(_ f: StagedFile) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "paperclip")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(SmoothieColor.textSecondary)
-            Text(att.name)
+            Text(f.name)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(SmoothieColor.textPrimary)
                 .lineLimit(1)
-            if att.truncated {
+            if f.truncated {
                 Text("(trimmed)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(SmoothieColor.textTertiary)
             }
-            Button {
-                attachments.removeAll { $0.id == att.id }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(SmoothieColor.textTertiary)
-                    .padding(.leading, 2)
-            }
-            .buttonStyle(.plain)
+            removeButton(id: f.id)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(SmoothieColor.bgCard, in: .capsule)
         .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+    }
+
+    private func imageChip(_ i: StagedImage) -> some View {
+        HStack(spacing: 6) {
+            Image(uiImage: i.thumbnail)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            Text(i.name)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(SmoothieColor.textPrimary)
+                .lineLimit(1)
+            removeButton(id: i.id)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(SmoothieColor.bgCard, in: .capsule)
+        .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+    }
+
+    private func removeButton(id: UUID) -> some View {
+        Button {
+            attachments.removeAll { $0.id == id }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(SmoothieColor.textTertiary)
+                .padding(.leading, 2)
+        }
+        .buttonStyle(.plain)
     }
 
     /// Full-width glass capsule shown in place of the standard composer while
@@ -372,14 +428,18 @@ struct MessageInput: View {
     }
 
     private func stage(file entry: FileEntryWire, content: FileContentWire, asMention: Bool) {
-        let att = StagedAttachment(
+        let f = StagedFile(
             name: (entry.path as NSString).lastPathComponent,
             relativePath: entry.path,
             content: content.content,
             truncated: content.truncated
         )
-        if !attachments.contains(where: { $0.relativePath == att.relativePath }) {
-            attachments.append(att)
+        let pathAlreadyStaged = attachments.contains { existing in
+            if case .file(let other) = existing { return other.relativePath == f.relativePath }
+            return false
+        }
+        if !pathAlreadyStaged {
+            attachments.append(.file(f))
         }
         if asMention {
             insertAtCursor("@\(entry.path)")
@@ -401,13 +461,13 @@ struct MessageInput: View {
                     importError = "Not a text file."
                     return
                 }
-                let att = StagedAttachment(
+                let f = StagedFile(
                     name: url.lastPathComponent,
                     relativePath: url.lastPathComponent,
                     content: body,
                     truncated: truncated
                 )
-                attachments.append(att)
+                attachments.append(.file(f))
             } catch {
                 importError = error.localizedDescription
             }

@@ -141,8 +141,11 @@ enum Routes {
             guard let id = context.parameters.get("id") else {
                 return errorResponse(.badRequest, "missing id")
             }
-            let body = try await readBody(request, max: 1024 * 1024)
-            guard let content = decodeContent(body) else {
+            // Bumped from 1 MB to 16 MB so a couple of JPEGs fit in the
+            // base64 payload alongside the user's text.
+            let body = try await readBody(request, max: 16 * 1024 * 1024)
+            let (content, images) = decodeMessageBody(body)
+            guard let content else {
                 return errorResponse(.badRequest, "missing content")
             }
             do {
@@ -151,7 +154,11 @@ enum Routes {
                         return .failure(NSError(domain: "Smoothie", code: 404, userInfo: [NSLocalizedDescriptionKey: "session not found"]))
                     }
                     do {
-                        try await host.write(content)
+                        if images.isEmpty {
+                            try await host.write(content)
+                        } else {
+                            try await host.write(text: content, images: images)
+                        }
                         return .success(())
                     } catch {
                         return .failure(error)
@@ -160,7 +167,11 @@ enum Routes {
                 switch result {
                 case .success: return jsonResponse("{\"status\":\"ok\"}")
                 case .failure(let err):
-                    let status: HTTPResponse.Status = (err as NSError).code == 404 ? .notFound : .internalServerError
+                    let nsError = err as NSError
+                    let status: HTTPResponse.Status
+                    if nsError.code == 404 { status = .notFound }
+                    else if nsError.code == 415 { status = .unsupportedMediaType }
+                    else { status = .internalServerError }
                     return errorResponse(status, err.localizedDescription)
                 }
             }
@@ -547,6 +558,26 @@ func decodeCreate(_ data: Data) -> CreateSessionRequest? {
 func decodeContent(_ data: Data) -> String? {
     guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
     return obj["content"] as? String
+}
+
+/// Decode the POST /sessions/:id/message body into the text content + any
+/// inline image attachments. Body shape:
+///   { "content": "<text>", "images": [{ "mimeType": "image/jpeg",
+///     "base64": "..." }, ...] }
+/// Older clients still send just `content` — `images` is optional.
+func decodeMessageBody(_ data: Data) -> (content: String?, images: [ImageAttachment]) {
+    guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return (nil, [])
+    }
+    let content = obj["content"] as? String
+    let imagesRaw = obj["images"] as? [[String: Any]] ?? []
+    let images: [ImageAttachment] = imagesRaw.compactMap { entry in
+        guard let mime = entry["mimeType"] as? String,
+              let b64 = entry["base64"] as? String,
+              !mime.isEmpty, !b64.isEmpty else { return nil }
+        return ImageAttachment(mimeType: mime, base64: b64)
+    }
+    return (content, images)
 }
 
 func parseCLIType(_ raw: String) -> CLIType? {

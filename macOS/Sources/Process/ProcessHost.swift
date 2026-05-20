@@ -83,6 +83,52 @@ final class ProcessHost: SessionHost {
         try stdinPipe.fileHandleForWriting.write(contentsOf: data)
     }
 
+    /// Claude-specific override that handles image attachments by emitting
+    /// a stream-json `user` message with mixed text + image content blocks.
+    /// When `images` is empty we still go through the K/N parser via
+    /// `write(_:)` so the encoding stays canonical.
+    func write(text: String, images: [ImageAttachment]) async throws {
+        if images.isEmpty {
+            try await write(text)
+            return
+        }
+        guard process.isRunning else { return }
+        try? await session.noteUserMessageSent()
+        let payload = Self.encodeClaudeMessageWithImages(text: text, images: images)
+        let data = Data(payload.utf8)
+        try stdinPipe.fileHandleForWriting.write(contentsOf: data)
+    }
+
+    /// Build Claude's stream-json `user` message with mixed content blocks
+    /// (text first, then images). Mirrors the shape K/N ClaudeAdapter would
+    /// produce — keeping the encoder here on the Swift side avoids round-
+    /// tripping image base64 payloads through the K/N bridge.
+    private static func encodeClaudeMessageWithImages(text: String, images: [ImageAttachment]) -> String {
+        var content: [[String: Any]] = []
+        if !text.isEmpty {
+            content.append(["type": "text", "text": text])
+        }
+        for image in images {
+            content.append([
+                "type": "image",
+                "source": [
+                    "type": "base64",
+                    "media_type": image.mimeType,
+                    "data": image.base64,
+                ]
+            ])
+        }
+        let payload: [String: Any] = [
+            "type": "user",
+            "message": ["role": "user", "content": content]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let str = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return str + "\n"
+    }
+
     func terminate() {
         guard process.isRunning else { return }
         process.terminate()

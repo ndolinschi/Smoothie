@@ -39,9 +39,11 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Used to scan a pairing QR code shown by the Smoothie menubar app on your Mac.</string>
+	<string>Used to scan a pairing QR code from the Smoothie menubar app, and to attach photos to your messages.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to record short voice input that's transcribed into your message.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used to attach photos from your library to your message for the agent to analyze.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Smoothie transcribes your voice into the message field locally.</string>
 	<key>UIApplicationSceneManifest</key>

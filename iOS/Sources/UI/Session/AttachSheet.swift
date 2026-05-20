@@ -6,6 +6,8 @@ import SwiftUI
 struct AttachSheet: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
+    let onTakePhoto: () -> Void
+    let onChoosePhoto: () -> Void
     let onMentionFile: () -> Void
     let onAttachFile: () -> Void
     let onOpenSkills: () -> Void
@@ -15,6 +17,26 @@ struct AttachSheet: View {
 
     var body: some View {
         SmoothieBottomSheet(title: "Add to message", onDismiss: onDismiss) {
+            SheetRow(
+                glyph: "camera",
+                glyphColor: SmoothieColor.accent,
+                glyphBackground: SmoothieColor.accentSoft,
+                title: "Take Photo",
+                subtitle: "Use the camera and attach the capture"
+            ) {
+                onTakePhoto()
+                onDismiss()
+            }
+            SheetRow(
+                glyph: "photo",
+                glyphColor: Color(hex: 0xFBBF24),
+                glyphBackground: Color(hex: 0x2A2415),
+                title: "Choose Photo",
+                subtitle: "Pick an image from your library"
+            ) {
+                onChoosePhoto()
+                onDismiss()
+            }
             SheetRow(
                 glyph: "at",
                 glyphColor: SmoothieColor.modeCode,

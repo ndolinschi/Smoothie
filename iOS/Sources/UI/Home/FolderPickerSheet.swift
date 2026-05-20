@@ -34,34 +34,26 @@ struct FolderPickerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
-                RadialGradient(
-                    colors: [Color.white.opacity(0.05), .clear],
-                    center: .top,
-                    startRadius: 0,
-                    endRadius: 500
-                )
-                .ignoresSafeArea()
+                SmoothieColor.bgSheet.ignoresSafeArea()
 
                 VStack(spacing: 0) {
+                    contentForCurrentMode
                     searchBar
                         .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                        .padding(.top, 10)
                         .padding(.bottom, 12)
-
-                    contentForCurrentMode
-                }
-
-                if case .browsing(let path) = mode {
-                    VStack {
-                        Spacer()
-                        useThisFolderBar(path: path)
-                    }
+                        .background(
+                            // Hairline above the sticky bottom search.
+                            Rectangle()
+                                .fill(SmoothieColor.strokeSoft)
+                                .frame(height: 0.5),
+                            alignment: .top
+                        )
                 }
             }
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(SmoothieColor.bgSheet, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -73,13 +65,13 @@ struct FolderPickerSheet: View {
                                 Image(systemName: "chevron.left")
                                 Text("Up")
                             }
-                            .foregroundStyle(.white.opacity(0.75))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                         }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Cancel") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
             }
         }
@@ -96,24 +88,27 @@ struct FolderPickerSheet: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(SmoothieColor.textTertiary)
             TextField(searchPlaceholder, text: $query)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .foregroundStyle(.white)
-                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(SmoothieColor.textPrimary)
             if !query.isEmpty {
                 Button {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .glassEffect(in: .rect(cornerRadius: 14))
+        .background(SmoothieColor.bgCard, in: .capsule)
+        .overlay(
+            Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
     }
 
     private var searchPlaceholder: String {
@@ -203,8 +198,9 @@ struct FolderPickerSheet: View {
         )
     }
 
-    /// Two-tap-target glass row: body commits the folder, trailing chevron
-    /// drills in. Mirrors the reference's repository-chooser layout.
+    /// Single-tap GitHub-style row. Tap commits the folder; long-press
+    /// reveals a "Browse subfolders…" option via context menu for
+    /// users who need deep navigation.
     private func splitRow(
         icon: String,
         iconAlpha: Double,
@@ -214,60 +210,55 @@ struct FolderPickerSheet: View {
         onCommit: @escaping () -> Void,
         onDrill: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: 0) {
-            Button(action: onCommit) {
-                HStack(spacing: 12) {
-                    Image(systemName: icon)
-                        .font(.system(size: 15))
-                        .foregroundStyle(.white.opacity(iconAlpha))
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        Text(sublabel)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    if isActive {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
+        Button(action: onCommit) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(iconAlpha))
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(sublabel)
+                        .font(.system(size: 12))
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                        .lineLimit(1)
                 }
-                .padding(.leading, 12)
-                .padding(.vertical, 10)
-                .padding(.trailing, 4)
-                .contentShape(Rectangle())
+                Spacer(minLength: 8)
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x2563EB))
+                }
             }
-            .buttonStyle(.plain)
-
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 0.5, height: 28)
-
-            Button(action: onDrill) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .frame(width: 40, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
-        .glassEffect(in: .rect(cornerRadius: 12))
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                onDrill()
+            } label: {
+                Label("Browse subfolders…", systemImage: "chevron.right")
+            }
+        }
     }
 
-    /// "Opened 2h ago" if the path is in Recents; else "git" / "no-git" derived
-    /// from the wire metadata when available; else the absolute path truncated.
+    /// GitHub-style sublabel: pulls the Mac account name from the path so
+    /// `/Users/ndolinschi/Documents/Apps/Gin` becomes the visible owner
+    /// `ndolinschi`, mirroring the reference's `ndolinschi/Gin` shape.
+    /// Falls back to parent folder name when the path doesn't start with
+    /// `/Users/<name>/…`.
     private func sublabel(for path: String, isGit: Bool?) -> String {
-        if let date = recents.lastOpened(path) {
-            return "Opened " + date.relative
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        if parts.count >= 2, parts[0] == "Users" {
+            return String(parts[1])
         }
-        if let isGit { return isGit ? "git" : "no-git" }
+        if parts.count >= 2 {
+            return String(parts[parts.count - 2])
+        }
         return path
     }
 
@@ -327,7 +318,7 @@ struct FolderPickerSheet: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 110)   // leave space for the floating bar
+                    .padding(.bottom, 24)
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -341,72 +332,15 @@ struct FolderPickerSheet: View {
     }
 
     private func browseEntryRow(_ entry: BrowseEntryWire) -> some View {
-        Button {
-            Task { await navigate(to: entry.path) }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: entry.isGit ? "point.3.connected.trianglepath.dotted" : "folder")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(entry.isGit ? 0.85 : 0.55))
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.name)
-                        .foregroundStyle(.white)
-                        .font(.system(size: 15, weight: .medium))
-                        .lineLimit(1)
-                    Text(entry.path)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .glassEffect(in: .rect(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func useThisFolderBar(path: String) -> some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5)
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Use this folder")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                    Text(path)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-                Spacer()
-                Button {
-                    choose(path)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Pick")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.white)
-                .foregroundStyle(.black)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-        }
+        splitRow(
+            icon: entry.isGit ? "point.3.connected.trianglepath.dotted" : "folder",
+            iconAlpha: entry.isGit ? 0.85 : 0.55,
+            title: entry.name,
+            sublabel: sublabel(for: entry.path, isGit: entry.isGit),
+            isActive: activeProjects.contains(entry.path),
+            onCommit: { choose(entry.path) },
+            onDrill: { Task { await navigate(to: entry.path) } }
+        )
     }
 
     // MARK: - Section header

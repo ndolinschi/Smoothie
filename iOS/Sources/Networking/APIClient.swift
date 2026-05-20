@@ -132,6 +132,28 @@ struct APIClient {
         _ = try await post("/sessions/\(sessionId)/message", json: Body(content: content))
     }
 
+    /// Send a turn that may include image attachments. Images travel in the
+    /// JSON envelope as `{mimeType, base64}` entries; the macOS server
+    /// decodes them and ProcessHost (Claude only) wraps them in content
+    /// blocks on the way to stream-json stdin. Other providers reject with
+    /// HTTP 415.
+    func sendMessage(sessionId: String, content: String, images: [StagedImage]) async throws {
+        if images.isEmpty {
+            try await sendMessage(sessionId: sessionId, content: content)
+            return
+        }
+        struct ImagePayload: Encodable { let mimeType: String; let base64: String }
+        struct Body: Encodable {
+            let content: String
+            let images: [ImagePayload]
+        }
+        let payload = Body(
+            content: content,
+            images: images.map { ImagePayload(mimeType: $0.mimeType, base64: $0.base64) }
+        )
+        _ = try await post("/sessions/\(sessionId)/message", json: payload)
+    }
+
     @discardableResult
     func killSession(sessionId: String) async throws -> Bool {
         let data = try await delete("/sessions/\(sessionId)")
