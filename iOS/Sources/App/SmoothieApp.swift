@@ -5,6 +5,7 @@ import Shared
 struct SmoothieApp: App {
     @State private var pairing = PairingStore()
     @State private var recents = RecentsStore()
+    @State private var sessionMeta = SessionMetaStore()
     @StateObject private var notifications = NotificationRouter()
 
     var body: some Scene {
@@ -12,6 +13,7 @@ struct SmoothieApp: App {
             RootView(notifications: notifications)
                 .environment(pairing)
                 .environment(recents)
+                .environment(sessionMeta)
                 // P27.d — the .preferredColorScheme(.dark) lock was
                 // removed; surfaces and text read system-adaptive
                 // tokens from DesignTokens. The Settings store (P27.f)
