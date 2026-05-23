@@ -179,7 +179,13 @@ struct NewSessionView: View {
             // one-shot host works but isn't ready for end users. The
             // CLIWire case stays so existing Antigravity sessions still
             // render correctly elsewhere in the app.
-            adapters = try await api.adapters().filter { $0.cli != .antigravity }
+            // `.unknown` is the forward-compat fallback for CLIs this
+            // iOS build doesn't know about — also filtered out so the
+            // user can't try to start a session for a provider we
+            // can't represent.
+            adapters = try await api.adapters().filter {
+                $0.cli != .antigravity && $0.cli != .unknown
+            }
             // Default to the first installed adapter so the user lands
             // on a selectable row instead of an empty selection state.
             if let firstInstalled = adapters.first(where: { $0.installed }) {

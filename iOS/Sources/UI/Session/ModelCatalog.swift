@@ -69,6 +69,8 @@ enum ModelCatalog {
             if model.contains("haiku") || model.contains("mini") { return .fast }
             if model.contains("opus") || model.contains("gpt-5") { return .slow }
             return .medium
+        case .unknown:
+            return .medium
         }
     }
 

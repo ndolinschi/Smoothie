@@ -279,8 +279,11 @@ struct AgentView: View {
         let api = APIClient(store: pairing)
         do {
             // Mirror HomeView's filter — agy is hidden across iOS until
-            // its host story firms up.
-            sessions = (try await api.sessions()).filter { $0.cli != .antigravity }
+            // its host story firms up; `.unknown` covers forward-compat
+            // CLIs this build doesn't recognise.
+            sessions = (try await api.sessions()).filter {
+                $0.cli != .antigravity && $0.cli != .unknown
+            }
             loadError = nil
         } catch {
             if !isCancellation(error) {

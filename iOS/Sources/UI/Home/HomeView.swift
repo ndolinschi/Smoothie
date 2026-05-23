@@ -573,8 +573,14 @@ struct HomeView: View {
             // CLI picker. Existing agy sessions stay alive on the daemon
             // but won't surface here. Reach them from the Mac menubar
             // popover if you need to kill them.
-            sessions = (try await s).filter { $0.cli != .antigravity }
-            adapters = try await a.filter { $0.cli != .antigravity }
+            // `.unknown` filters daemon-newer CLIs the iOS build doesn't
+            // recognise — same belt-and-suspenders as NewSessionView.
+            sessions = (try await s).filter {
+                $0.cli != .antigravity && $0.cli != .unknown
+            }
+            adapters = try await a.filter {
+                $0.cli != .antigravity && $0.cli != .unknown
+            }
         } catch {
             if isCancellation(error) {
                 loading = false

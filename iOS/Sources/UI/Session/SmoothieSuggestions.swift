@@ -43,6 +43,12 @@ enum SmoothieSuggestions {
                 "Explain what this [function] does",
                 "Add error handling around the [main] entry point",
             ]
+        case .unknown:
+            return [
+                "What's the [project] about?",
+                "Find every [TODO] in the codebase",
+                "Show me the [recent] changes",
+            ]
         }
     }
 

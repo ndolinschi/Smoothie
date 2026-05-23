@@ -25,8 +25,28 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
     case antigravity
     case codex
     case cursor
+    /// Forward-compat slot — a daemon newer than this iOS build can
+    /// ship CLIs the app doesn't know about (e.g. when the user upgrades
+    /// the Mac side first). Without this fallback, decoding a single
+    /// unknown `cli` value would throw `DecodingError.dataCorrupted`
+    /// and the whole `/adapters` / `/sessions` response would be
+    /// rejected, leaving the app stuck on a "Decode error" banner.
+    /// We surface unknown entries as a single sentinel case and filter
+    /// them out of the user-visible CLI lists.
+    case unknown
 
     var id: String { rawValue }
+
+    /// CaseIterable returns user-pickable CLIs only — the `.unknown`
+    /// fallback shouldn't appear in adapter / picker lists.
+    static var allCases: [CLIWire] {
+        [.claudeCode, .gemini, .openCode, .antigravity, .codex, .cursor]
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = CLIWire(rawValue: raw) ?? .unknown
+    }
 
     var displayName: String {
         switch self {
@@ -36,6 +56,7 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
         case .antigravity: return "Antigravity"
         case .codex:       return "Codex"
         case .cursor:      return "Cursor"
+        case .unknown:     return "Unknown CLI"
         }
     }
 
@@ -86,6 +107,8 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             case "gpt-5-codex":   return "GPT-5 Codex"
             default:              return id
             }
+        case .unknown:
+            return id.isEmpty ? "Unknown" : id
         }
     }
 
@@ -122,7 +145,7 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             case "gpt-5-codex":   return "OpenAI coding variant via Cursor"
             default:              return nil
             }
-        case .openCode, .antigravity:
+        case .openCode, .antigravity, .unknown:
             return nil
         }
     }
@@ -488,6 +511,7 @@ extension CLIWire {
         case .antigravity: return .antigravity
         case .codex:       return .codex
         case .cursor:      return .cursor
+        case .unknown:     return .claudeCode  // safe fallback for widget snapshots
         }
     }
 }

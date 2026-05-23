@@ -23,9 +23,33 @@ struct ProviderIcon: View {
             case .antigravity: AntigravityMark()
             case .codex:       CodexMark()
             case .cursor:      CursorMark()
+            case .unknown:     UnknownCliMark()
             }
         }
         .frame(width: size, height: size)
+    }
+}
+
+/// Fallback mark for `CLIWire.unknown` — a daemon-newer-than-iOS CLI
+/// that this build hasn't been taught about. Renders as a question
+/// mark inside a neutral square so the row reads "we don't recognise
+/// this provider" without blowing up the layout.
+private struct UnknownCliMark: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            ZStack {
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(Color(white: 0.18))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                    )
+                Image(systemName: "questionmark")
+                    .font(.system(size: size * 0.45, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
     }
 }
 
