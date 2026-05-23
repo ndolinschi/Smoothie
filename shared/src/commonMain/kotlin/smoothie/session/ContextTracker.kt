@@ -53,6 +53,8 @@ class ContextTracker(private val cli: CLIType) {
             CLIType.GEMINI      -> 1_000_000
             CLIType.OPEN_CODE   -> 200_000
             CLIType.ANTIGRAVITY -> 0          // unknown → iOS hides ring
+            CLIType.CODEX       -> 256_000    // gpt-5-codex window per OpenAI docs
+            CLIType.CURSOR      -> 200_000    // proxies underlying model; safe default
         }
 
     /** Add an emitted event's content to the conversation bucket. Called

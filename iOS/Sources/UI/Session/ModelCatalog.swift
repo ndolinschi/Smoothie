@@ -58,6 +58,17 @@ enum ModelCatalog {
             return .medium
         case .antigravity:
             return .medium               // single profile, no real tier
+        case .codex:
+            // Codex's `gpt-5-codex` is the flagship; older variants are
+            // mid-tier. No explicit haiku/fast variant exposed today.
+            if model.contains("gpt-5-codex") { return .slow }
+            if model.contains("gpt-4.1") { return .medium }
+            return .medium
+        case .cursor:
+            if model.contains("auto") { return .medium }
+            if model.contains("haiku") || model.contains("mini") { return .fast }
+            if model.contains("opus") || model.contains("gpt-5") { return .slow }
+            return .medium
         }
     }
 

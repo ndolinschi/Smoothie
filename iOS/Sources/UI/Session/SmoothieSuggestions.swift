@@ -31,6 +31,18 @@ enum SmoothieSuggestions {
                 "Add a [skill] for our deploy workflow",
                 "Wire up a new MCP server for [GitHub]",
             ]
+        case .codex:
+            return [
+                "Run the [test] suite and fix the first failure",
+                "Refactor this module to use [async/await]",
+                "Generate a [README] section for the public API",
+            ]
+        case .cursor:
+            return [
+                "Implement the next [TODO] in this file",
+                "Explain what this [function] does",
+                "Add error handling around the [main] entry point",
+            ]
         }
     }
 

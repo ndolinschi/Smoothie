@@ -21,6 +21,8 @@ struct ProviderIcon: View {
             case .gemini:      GeminiMark()
             case .openCode:    OpenCodeMark()
             case .antigravity: AntigravityMark()
+            case .codex:       CodexMark()
+            case .cursor:      CursorMark()
             }
         }
         .frame(width: size, height: size)
@@ -237,6 +239,99 @@ private struct OpenCodeMark: View {
                     with: .color(.white),
                     style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
                 )
+            }
+        }
+    }
+}
+
+// MARK: - Codex
+
+/// OpenAI Codex mark — black rounded square with a centered white
+/// asterisk-like burst. Matches OpenAI's monochrome wordmark colour
+/// without bundling the actual logotype.
+private struct CodexMark: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let rect = CGRect(
+                x: (geo.size.width - size) / 2,
+                y: (geo.size.height - size) / 2,
+                width: size,
+                height: size
+            )
+            ZStack {
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(Color(white: 0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                    )
+                    .frame(width: rect.width, height: rect.height)
+                // Six-spoke burst, OpenAI-flavoured.
+                Canvas { ctx, canvasSize in
+                    let cx = rect.midX
+                    let cy = rect.midY
+                    let r = size * 0.32
+                    let stroke = size * 0.08
+                    for i in 0..<6 {
+                        let angle = Double(i) * .pi / 3.0
+                        var path = Path()
+                        path.move(to: CGPoint(x: cx, y: cy))
+                        path.addLine(to: CGPoint(
+                            x: cx + r * cos(angle),
+                            y: cy + r * sin(angle)
+                        ))
+                        ctx.stroke(
+                            path,
+                            with: .color(.white),
+                            style: StrokeStyle(lineWidth: stroke, lineCap: .round)
+                        )
+                    }
+                    _ = canvasSize
+                }
+                .frame(width: rect.width, height: rect.height)
+            }
+        }
+    }
+}
+
+// MARK: - Cursor
+
+/// Cursor mark — black rounded square with a stylised diagonal arrow
+/// (the editor's cursor mascot). Mono palette so it sits next to the
+/// other marks without fighting them.
+private struct CursorMark: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let rect = CGRect(
+                x: (geo.size.width - size) / 2,
+                y: (geo.size.height - size) / 2,
+                width: size,
+                height: size
+            )
+            ZStack {
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(Color(white: 0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                    )
+                    .frame(width: rect.width, height: rect.height)
+                // Diagonal cursor arrow filled in white.
+                Path { path in
+                    let inset = size * 0.20
+                    let topLeft = CGPoint(x: rect.minX + inset, y: rect.minY + inset)
+                    let bottomLeft = CGPoint(x: rect.minX + inset, y: rect.maxY - inset)
+                    let bottomRight = CGPoint(x: rect.maxX - inset, y: rect.maxY - inset * 0.55)
+                    let mid = CGPoint(x: rect.midX, y: rect.midY)
+                    path.move(to: topLeft)
+                    path.addLine(to: bottomRight)
+                    path.addLine(to: mid)
+                    path.addLine(to: bottomLeft)
+                    path.closeSubpath()
+                }
+                .fill(Color.white)
             }
         }
     }

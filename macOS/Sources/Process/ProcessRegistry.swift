@@ -108,6 +108,22 @@ final class ProcessRegistry {
                     env: envMap,
                     resumeExisting: resume
                 )
+            } else if effective.cli == CLIType.codex {
+                host = CodexOneshotHost(
+                    session: session,
+                    executable: exec,
+                    cwd: effective.projectPath,
+                    baseArgs: args,
+                    env: envMap
+                )
+            } else if effective.cli == CLIType.cursor {
+                host = CursorACPHost(
+                    session: session,
+                    executable: exec,
+                    cwd: effective.projectPath,
+                    baseArgs: args,
+                    env: envMap
+                )
             } else {
                 host = try ProcessHost(
                     session: session,

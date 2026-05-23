@@ -120,6 +120,8 @@ struct SessionWidgetView: View {
         case .gemini:      return "Gemini"
         case .openCode:    return "OpenCode"
         case .antigravity: return "Antigravity"
+        case .codex:       return "Codex"
+        case .cursor:      return "Cursor"
         case .none:        return "Smoothie"
         }
     }
@@ -130,6 +132,8 @@ struct SessionWidgetView: View {
         case .gemini:      return "sparkles"
         case .openCode:    return "terminal.fill"
         case .antigravity: return "arrow.up.circle.fill"
+        case .codex:       return "asterisk"
+        case .cursor:      return "cursorarrow"
         case .none:        return "circle.dotted"
         }
     }

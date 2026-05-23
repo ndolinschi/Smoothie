@@ -20,6 +20,8 @@ class AdapterRegistry {
         register(GeminiAdapter())
         register(OpenCodeAdapter())
         register(AntigravityAdapter())
+        register(CodexAdapter())
+        register(CursorAdapter())
     }
 
     private fun register(parser: AdapterParser) {

@@ -23,6 +23,8 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
     case gemini
     case openCode = "open_code"
     case antigravity
+    case codex
+    case cursor
 
     var id: String { rawValue }
 
@@ -32,6 +34,8 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
         case .gemini:      return "Gemini"
         case .openCode:    return "OpenCode"
         case .antigravity: return "Antigravity"
+        case .codex:       return "Codex"
+        case .cursor:      return "Cursor"
         }
     }
 
@@ -68,6 +72,20 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             // the user's desktop Antigravity profile. We display whatever the
             // server returned, falling back to a friendly placeholder.
             return id.isEmpty ? "Antigravity" : id
+        case .codex:
+            switch id.lowercased() {
+            case "gpt-5-codex":   return "GPT-5 Codex"
+            case "gpt-4.1-codex": return "GPT-4.1 Codex"
+            default:              return id
+            }
+        case .cursor:
+            switch id.lowercased() {
+            case "auto":          return "Auto"
+            case "sonnet-4.5":    return "Sonnet 4.5"
+            case "gpt-5":         return "GPT-5"
+            case "gpt-5-codex":   return "GPT-5 Codex"
+            default:              return id
+            }
         }
     }
 
@@ -89,6 +107,20 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             case "gemini-3-flash-preview": return "Fast preview model"
             case "gemini-3.1-flash-lite":  return "Lightest, fastest"
             default:                       return nil
+            }
+        case .codex:
+            switch id.lowercased() {
+            case "gpt-5-codex":   return "OpenAI's coding-tuned flagship"
+            case "gpt-4.1-codex": return "Older, cheaper Codex variant"
+            default:              return nil
+            }
+        case .cursor:
+            switch id.lowercased() {
+            case "auto":          return "Cursor picks the right model per turn"
+            case "sonnet-4.5":    return "Anthropic Sonnet 4.5 via Cursor"
+            case "gpt-5":         return "OpenAI flagship via Cursor"
+            case "gpt-5-codex":   return "OpenAI coding variant via Cursor"
+            default:              return nil
             }
         case .openCode, .antigravity:
             return nil
@@ -454,6 +486,8 @@ extension CLIWire {
         case .gemini:      return .gemini
         case .openCode:    return .openCode
         case .antigravity: return .antigravity
+        case .codex:       return .codex
+        case .cursor:      return .cursor
         }
     }
 }
