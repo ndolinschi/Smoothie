@@ -230,13 +230,13 @@ struct SessionView: View {
                         Label("Kill session", systemImage: "stop.circle")
                     }
                 } label: {
+                    // P27.g — flat ellipsis glyph to match the rest of
+                    // the toolbar's flat icon-button language.
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(SmoothieColor.textPrimary)
                         .frame(width: 36, height: 36)
-                        .background(SmoothieColor.bgCard, in: .circle)
-                        .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
-                        .contentShape(Circle())
+                        .contentShape(Rectangle())
                 }
             }
         }

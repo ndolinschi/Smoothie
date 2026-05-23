@@ -24,15 +24,15 @@ struct SmoothieIconButton: View {
 
     var body: some View {
         Button(action: action) {
+            // P27.g — the inner bgCard circle + soft-stroke border was
+            // creating a "button-inside-a-button" look against the
+            // toolbar's own background. Flattened to a plain glyph with
+            // the 44pt hit target preserved.
             Image(systemName: systemName)
-                .font(.system(size: size * 0.4, weight: weight))
+                .font(.system(size: size * 0.42, weight: weight))
                 .foregroundStyle(foreground)
                 .frame(width: size, height: size)
-                .background(SmoothieColor.bgCard, in: .circle)
-                .overlay(
-                    Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                )
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
