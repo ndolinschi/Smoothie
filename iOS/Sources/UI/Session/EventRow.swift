@@ -98,6 +98,10 @@ struct EventRow: View {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
             )
+        case .contextUpdate:
+            // Side-channel event consumed by SessionLiveStore — never
+            // belongs in the visible stream.
+            EmptyView()
         case .unknown:
             // Forward-compat: a newer daemon emitted an event type this
             // build doesn't know. Render nothing rather than crashing;

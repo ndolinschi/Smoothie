@@ -64,7 +64,7 @@ struct AgentStream: View {
     private var hasVisibleEvents: Bool {
         events.contains { event in
             switch event.type {
-            case .waiting, .done, .unknown:
+            case .waiting, .done, .unknown, .contextUpdate:
                 return false
             case .message, .thinking, .toolUse, .toolResult, .fileEdit, .error, .limitReached:
                 // toolResult dividers (metadata.divider) are technically

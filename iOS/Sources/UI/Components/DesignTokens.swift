@@ -88,6 +88,10 @@ enum SmoothieMetrics {
     /// than `rowPadding*` because the card already has a visible border.
     static let toolCardPaddingH: CGFloat = 14
     static let toolCardPaddingV: CGFloat = 12
+
+    /// Height of the bottom-pinned `StatusFooter` strip — matches the
+    /// design spec JSON.
+    static let footerHeight: CGFloat = 44
 }
 
 extension Color {

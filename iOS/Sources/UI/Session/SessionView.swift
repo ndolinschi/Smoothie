@@ -17,6 +17,9 @@ struct SessionView: View {
     @State private var lastNotifiedState: SessionStateWire?
     @State private var showingModeSheet = false
     @State private var showingDiffSheet = false
+    /// Drives the bottom-sheet presentation of `ContextBudgetPanel`
+    /// from the StatusFooter percent-ring tap.
+    @State private var showingBudget = false
     @State private var showingModelSheet = false
 
     enum SwitchTarget: Identifiable, Equatable {
@@ -104,6 +107,11 @@ struct SessionView: View {
                             onDiffTap: { showingDiffSheet = true }
                         )
                     }
+                    StatusFooter(
+                        branchLabel: (currentSession.projectPath as NSString).lastPathComponent,
+                        snapshot: store.contextSnapshot,
+                        onTapBudget: { showingBudget = true }
+                    )
                     MessageInput(
                         session: currentSession,
                         features: features,
@@ -202,6 +210,13 @@ struct SessionView: View {
                         .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
                         .contentShape(Circle())
                 }
+            }
+        }
+        .sheet(isPresented: $showingBudget) {
+            if let store, let snap = store.contextSnapshot {
+                ContextBudgetPanel(snapshot: snap, onDismiss: { showingBudget = false })
+                    .presentationDetents([.medium, .large])
+                    .presentationBackground(.clear)
             }
         }
         .sheet(isPresented: $showingModeSheet) {

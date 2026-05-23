@@ -101,6 +101,12 @@ enum EventTypeWire: String, Codable, Sendable {
     case fileEdit = "file_edit"
     case waiting, done, error
     case limitReached = "limit_reached"
+    /// Phase 2 of the Cursor redesign — daemon emits these to update the
+    /// token budget bar in the iOS status footer. The payload (JSON
+    /// ContextSnapshot) rides in `event.metadata`; the visible event
+    /// stream filter in `AgentStream` treats these as invisible so the
+    /// agent transcript stays clean.
+    case contextUpdate = "context_update"
     /// Same forward-compat fallback as `SessionStateWire.unknown` — a
     /// new event type from a newer daemon decodes as `.unknown` instead
     /// of crashing the whole event stream parser.
@@ -110,6 +116,35 @@ enum EventTypeWire: String, Codable, Sendable {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = EventTypeWire(rawValue: raw) ?? .unknown
     }
+}
+
+/// Per-category breakdown of how much of the model's context window is
+/// occupied. Phase 2 of the Cursor redesign exposes this as the
+/// segmented bar + collapsible list in `ContextBudgetPanel`. Daemon
+/// emits this either via `GET /sessions/:id/context` (pull, used on
+/// mount) or via SSE `context_update` events (push, debounced ~500ms).
+struct ContextSnapshotWire: Codable, Sendable, Hashable {
+    /// Sum of every category. Reported separately so the daemon can
+    /// account for tokenizer overhead the per-category counts don't see.
+    let total: Int
+    /// Model's hard context window cap. `0` means "unknown" — the iOS
+    /// footer hides the percent ring in that case rather than dividing
+    /// by zero.
+    let max: Int
+    /// Ordered breakdown — daemon owns the canonical order so the
+    /// segmented bar always reads the same way across iOS / Mac.
+    let breakdown: [ContextCategoryWire]
+}
+
+struct ContextCategoryWire: Codable, Sendable, Hashable, Identifiable {
+    /// Stable id matching the category color map in
+    /// `ContextBudgetBar` (system_prompt / tool_definitions / rules /
+    /// skills / mcp / subagent_definitions / conversation).
+    let id: String
+    /// Human label rendered in the list — daemon picks the wording so we
+    /// don't drift between platforms.
+    let label: String
+    let tokens: Int
 }
 
 struct SmoothieEventWire: Codable, Sendable, Identifiable {

@@ -35,6 +35,11 @@ final class SessionLiveStore {
     /// the lifetime of the session.
     var expandedCardIds: Set<String> = []
     var expandedResultIds: Set<String> = []
+    /// Latest token-budget snapshot the daemon pushed via SSE
+    /// `context_update` events. `nil` means the daemon hasn't told us
+    /// yet (or this build is older than the daemon endpoint) — the
+    /// status footer hides the percent ring in that case.
+    private(set) var contextSnapshot: ContextSnapshotWire?
     /// Mode switch requested by the user. Flushed when state leaves
     /// `.thinking` so the divider appears AFTER the in-flight turn rather
     /// than interrupting it.
@@ -75,6 +80,28 @@ final class SessionLiveStore {
         sse = nil
     }
 
+    /// Decode the JSON snapshot the daemon stuffed into a
+    /// `context_update` event's `metadata` payload and publish it as
+    /// `contextSnapshot` for the status footer to read. Tolerant of
+    /// missing / malformed payloads — a bad snapshot just leaves the
+    /// previous good one in place rather than crashing the SSE stream.
+    private func applyContextUpdate(_ event: SmoothieEventWire) {
+        guard let metadata = event.metadata,
+              let snapshotValue = metadata["snapshot"]
+        else { return }
+        // metadata is [String: AnyCodable] — round-trip via JSON to
+        // decode the nested ContextSnapshotWire without writing a
+        // bespoke decoder.
+        do {
+            let data = try JSONEncoder().encode(snapshotValue)
+            let snapshot = try JSONDecoder().decode(ContextSnapshotWire.self, from: data)
+            self.contextSnapshot = snapshot
+        } catch {
+            // Bad payload — silently keep the previous snapshot.
+            _ = error
+        }
+    }
+
     /// Force a fresh SSE connection from scratch. Used by the
     /// ConnectionBanner's "Reconnect" button so the user can bypass the
     /// retry backoff after a transient blip, or take a manual stab at
@@ -91,6 +118,14 @@ final class SessionLiveStore {
     }
 
     private func ingest(_ event: SmoothieEventWire) {
+        // Side-channel: context_update events carry the latest token
+        // budget snapshot in metadata and DO NOT belong in the visible
+        // event ring. Decode, update the published snapshot, return.
+        if event.type == .contextUpdate {
+            applyContextUpdate(event)
+            hasReceivedEvent = true
+            return
+        }
         events.append(event)
         hasReceivedEvent = true
         if events.count > 2000 {
@@ -123,6 +158,11 @@ final class SessionLiveStore {
         case .limitReached: state = .limitReached
         case .message, .thinking, .toolUse, .toolResult, .fileEdit:
             state = .thinking
+        case .contextUpdate:
+            // Already handled via applyContextUpdate before reaching
+            // this switch — including the case here just keeps the
+            // exhaustive-switch compiler happy.
+            break
         case .unknown:
             // Forward-compat: unrecognised event from a newer daemon —
             // don't move the state machine, just keep the event in the
