@@ -46,6 +46,10 @@ struct HomeView: View {
     /// removed in the same phase.
     @State private var presentingSettings = false
     @State private var presentingAddPair = false
+    /// Drives the push to AgentView from the toolbar grid button. The
+    /// new dashboard renders inside HomeView's NavigationStack so the
+    /// back-swipe returns to the session list without rebuilding it.
+    @State private var presentingAgents = false
     @AppStorage("smoothie.homeTipDismissed") private var tipDismissed: Bool = false
 
     private var allCount: Int { sessions.count }
@@ -147,13 +151,24 @@ struct HomeView: View {
                         .foregroundStyle(SmoothieColor.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    topBarButton(systemName: "plus") {
-                        presentingPicker = true
+                    HStack(spacing: 6) {
+                        // Agent View — compact dashboard of every live
+                        // session. Pushes via NavigationStack so the
+                        // back swipe returns straight to the list.
+                        topBarButton(systemName: "square.grid.2x2") {
+                            presentingAgents = true
+                        }
+                        topBarButton(systemName: "plus") {
+                            presentingPicker = true
+                        }
                     }
                 }
             }
             .navigationDestination(item: $selectedSession) { s in
                 SessionView(session: s)
+            }
+            .navigationDestination(isPresented: $presentingAgents) {
+                AgentView()
             }
             .sheet(isPresented: $presentingPicker) {
                 let liveProjects = sessions.filter { !$0.state.isCompleted }.map(\.projectPath)
