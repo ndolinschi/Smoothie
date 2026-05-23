@@ -151,16 +151,19 @@ struct HomeView: View {
                         .foregroundStyle(SmoothieColor.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 6) {
-                        // Agent View — compact dashboard of every live
-                        // session. Pushes via NavigationStack so the
-                        // back swipe returns straight to the list.
-                        topBarButton(systemName: "square.grid.2x2") {
-                            presentingAgents = true
-                        }
-                        topBarButton(systemName: "plus") {
-                            presentingPicker = true
-                        }
+                    // Agent View — compact dashboard of every live
+                    // session. Pushes via NavigationStack so the back
+                    // swipe returns straight to the list. Lives in its
+                    // own ToolbarItem because SwiftUI on iOS 26
+                    // collapses HStack-grouped items in `.topBarTrailing`
+                    // down to a single visible glyph.
+                    topBarButton(systemName: "square.grid.2x2") {
+                        presentingAgents = true
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    topBarButton(systemName: "plus") {
+                        presentingPicker = true
                     }
                 }
             }
