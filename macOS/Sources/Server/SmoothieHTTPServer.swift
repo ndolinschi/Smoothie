@@ -131,9 +131,31 @@ struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
         next: (Request, Context) async throws -> Response
     ) async throws -> Response {
         let header = request.headers[.authorization]
-        guard let header, header == "Bearer \(token)" else {
+        guard let header, Self.constantTimeEqual(header, "Bearer \(token)") else {
             return errorResponse(.unauthorized, "unauthorized")
         }
         return try await next(request, context)
+    }
+
+    /// Constant-time byte comparison. The naive `==` on `String` short-
+    /// circuits on the first mismatching byte, which leaks the prefix
+    /// length of the correct token to a network observer measuring
+    /// response timing. On Tailscale we trust the peer link, but the
+    /// pairing token is the single source of authority on the daemon —
+    /// a tampered Tailscale node or a localhost-bound malicious app
+    /// shouldn't be able to brute-force the bearer one byte at a time.
+    static func constantTimeEqual(_ a: String, _ b: String) -> Bool {
+        let lhs = Array(a.utf8)
+        let rhs = Array(b.utf8)
+        // Always walk `max(lhs.count, rhs.count)` so a length mismatch
+        // doesn't itself become a timing oracle.
+        let length = max(lhs.count, rhs.count)
+        var diff: UInt8 = lhs.count == rhs.count ? 0 : 1
+        for i in 0..<length {
+            let l: UInt8 = i < lhs.count ? lhs[i] : 0
+            let r: UInt8 = i < rhs.count ? rhs[i] : 0
+            diff |= (l ^ r)
+        }
+        return diff == 0
     }
 }

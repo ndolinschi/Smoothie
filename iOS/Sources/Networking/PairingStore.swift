@@ -26,13 +26,26 @@ final class PairingStore {
         var scheme: String
 
         var baseURL: URL {
-            // For `https` tunnels (Cloudflare), drop the explicit port if it's
-            // the default 443 so URLSession picks the right port and SNI
-            // hostname without surprises.
-            if scheme == "https" && (port == 443 || port == 0) {
-                return URL(string: "https://\(host)")!
+            // Build via URLComponents so a malformed `host` (whitespace,
+            // unicode, IPv6 bracket mismatch) can't crash the app via
+            // force-unwrap. The previous `URL(string: ...)!` form was a
+            // real reachable crash path — APIClient calls `baseURL` on
+            // every request and a single bad pairing blob would tear
+            // the process down. If construction does fail, fall back to
+            // an obviously-invalid host so the next request raises a
+            // transport error the connection banner can surface, rather
+            // than killing the app.
+            var components = URLComponents()
+            components.scheme = scheme
+            components.host = host
+            // For `https` tunnels (Cloudflare), drop the explicit port if
+            // it's the default 443 so URLSession picks the right port and
+            // SNI hostname without surprises.
+            if !(scheme == "https" && (port == 443 || port == 0)) {
+                components.port = port
             }
-            return URL(string: "\(scheme)://\(host):\(port)")!
+            return components.url
+                ?? URL(string: "http://smoothie-invalid-host.local")!
         }
 
         init(label: String, host: String, port: Int, token: String, scheme: String = "http") {

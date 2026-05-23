@@ -3,7 +3,9 @@ import SwiftUI
 /// Branded glyph for each CLI. SwiftUI-drawn so we don't bundle / license
 /// the vendors' actual marks, but the shapes intentionally echo them:
 ///
-/// - Claude — 12 radial spokes in Anthropic's coral
+/// - Claude — 12 radial spokes (shape carries the brand recognition; P25
+///   retired the coral fill in favour of white@0.85 to match the new
+///   mono palette)
 /// - Gemini — 4-point cushion star with Google's red→yellow→green→blue arc
 /// - OpenCode — a single OpenAI-ish ring placeholder
 /// - Antigravity — upward arrow inside a violet→cyan gradient circle (the
@@ -47,7 +49,7 @@ struct ProviderChip: View {
 
 private struct ClaudeMark: View {
     private let spokeCount = 12
-    private let coral = Color(red: 0.85, green: 0.46, blue: 0.34)
+    private let spokeColor = Color.white.opacity(0.85)
 
     var body: some View {
         Canvas { ctx, size in
@@ -84,7 +86,7 @@ private struct ClaudeMark: View {
                 path.addLine(to: p3)
                 path.addLine(to: p4)
                 path.closeSubpath()
-                ctx.fill(path, with: .color(coral))
+                ctx.fill(path, with: .color(spokeColor))
             }
             // Tiny core to fill the gap between spokes
             let coreRadius = innerRadius * 1.6
@@ -94,7 +96,7 @@ private struct ClaudeMark: View {
                 width: coreRadius * 2,
                 height: coreRadius * 2
             ))
-            ctx.fill(core, with: .color(coral))
+            ctx.fill(core, with: .color(spokeColor))
         }
     }
 }

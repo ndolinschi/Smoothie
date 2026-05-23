@@ -28,6 +28,18 @@ final class SessionLiveStore {
     private(set) var hasReceivedEvent: Bool = false
     /// Surfaced inside the banner when reconnect attempts fail.
     private(set) var error: String?
+    /// Per-tool-card expansion bookkeeping. The card itself can't own this
+    /// state — it sits inside `LazyVStack` and gets recycled when scrolled
+    /// off-screen, which would otherwise reset the expanded chevron every
+    /// time. Keying by event id keeps the state stable across recycles for
+    /// the lifetime of the session.
+    var expandedCardIds: Set<String> = []
+    var expandedResultIds: Set<String> = []
+    /// Latest token-budget snapshot the daemon pushed via SSE
+    /// `context_update` events. `nil` means the daemon hasn't told us
+    /// yet (or this build is older than the daemon endpoint) — the
+    /// status footer hides the percent ring in that case.
+    private(set) var contextSnapshot: ContextSnapshotWire?
     /// Mode switch requested by the user. Flushed when state leaves
     /// `.thinking` so the divider appears AFTER the in-flight turn rather
     /// than interrupting it.
@@ -68,11 +80,75 @@ final class SessionLiveStore {
         sse = nil
     }
 
+    /// Decode the JSON snapshot the daemon stuffed into a
+    /// `context_update` event's `metadata` payload and publish it as
+    /// `contextSnapshot` for the status footer to read. Tolerant of
+    /// missing / malformed payloads — a bad snapshot just leaves the
+    /// previous good one in place rather than crashing the SSE stream.
+    private func applyContextUpdate(_ event: SmoothieEventWire) {
+        guard let metadata = event.metadata,
+              let snapshotValue = metadata["snapshot"]
+        else { return }
+        // metadata is [String: AnyCodable] — round-trip via JSON to
+        // decode the nested ContextSnapshotWire without writing a
+        // bespoke decoder.
+        do {
+            let data = try JSONEncoder().encode(snapshotValue)
+            let snapshot = try JSONDecoder().decode(ContextSnapshotWire.self, from: data)
+            self.contextSnapshot = snapshot
+        } catch {
+            // Bad payload — silently keep the previous snapshot.
+            _ = error
+        }
+    }
+
+    /// Force a fresh SSE connection from scratch. Used by the
+    /// ConnectionBanner's "Reconnect" button so the user can bypass the
+    /// retry backoff after a transient blip, or take a manual stab at
+    /// recovery after a `.gone` (which usually reproduces the gone state,
+    /// but at least gives the user agency over the link).
+    func reconnect() {
+        guard let api else { return }
+        // Reset transient surfaces so the banner doesn't show stale
+        // "retrying in 7s" copy from the prior client.
+        error = nil
+        connection = .connecting
+        disconnect()
+        connect(api: api)
+    }
+
     private func ingest(_ event: SmoothieEventWire) {
+        // Side-channel: context_update events carry the latest token
+        // budget snapshot in metadata and DO NOT belong in the visible
+        // event ring. Decode, update the published snapshot, return.
+        if event.type == .contextUpdate {
+            applyContextUpdate(event)
+            hasReceivedEvent = true
+            return
+        }
         events.append(event)
         hasReceivedEvent = true
         if events.count > 2000 {
-            events.removeFirst(events.count - 2000)
+            var cutCount = events.count - 2000
+            // Extend the cut forward through any leading `.toolResult`
+            // events — without this, naïve `removeFirst(N)` can leave a
+            // toolResult at the new head without its paired toolUse,
+            // which `AgentStream.collapse` then renders as a phantom
+            // free-floating result block. By including those orphans in
+            // the cut, the next-most-recent toolUse becomes the new
+            // head of the ring.
+            while cutCount < events.count, events[cutCount].type == .toolResult {
+                cutCount += 1
+            }
+            let removed = events[..<cutCount]
+            // Free any expand-state bookkeeping for cards that just left
+            // the visible window so the per-id sets don't grow unbounded
+            // over a very long session.
+            for e in removed {
+                expandedCardIds.remove(e.clientId)
+                expandedResultIds.remove(e.clientId)
+            }
+            events.removeFirst(cutCount)
         }
         let priorState = state
         switch event.type {
@@ -82,6 +158,16 @@ final class SessionLiveStore {
         case .limitReached: state = .limitReached
         case .message, .thinking, .toolUse, .toolResult, .fileEdit:
             state = .thinking
+        case .contextUpdate:
+            // Already handled via applyContextUpdate before reaching
+            // this switch — including the case here just keeps the
+            // exhaustive-switch compiler happy.
+            break
+        case .unknown:
+            // Forward-compat: unrecognised event from a newer daemon —
+            // don't move the state machine, just keep the event in the
+            // ring so any subsequent recognised event flows through.
+            break
         }
         if state != priorState {
             publishWidgetSnapshot()

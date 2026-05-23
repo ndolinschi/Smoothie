@@ -96,13 +96,24 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
 enum SessionStateWire: String, Codable, Sendable {
     case starting, thinking, waiting, done, error
     case limitReached = "limit_reached"
+    /// Fallback for state strings introduced by a newer daemon that this
+    /// iOS build doesn't recognise yet. The default `String`-backed
+    /// `Codable` synthesis would throw on decode and crash the SSE
+    /// pipeline; a tolerant decoder lets the app keep ticking and just
+    /// render the session in an unknown-but-non-fatal pose.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionStateWire(rawValue: raw) ?? .unknown
+    }
 
     /// Treated as completed in the HomeView filter — the agent isn't going to
     /// produce more events without a manual restart.
     var isCompleted: Bool {
         switch self {
         case .done, .error, .limitReached: return true
-        case .starting, .thinking, .waiting: return false
+        case .starting, .thinking, .waiting, .unknown: return false
         }
     }
 }
@@ -114,6 +125,50 @@ enum EventTypeWire: String, Codable, Sendable {
     case fileEdit = "file_edit"
     case waiting, done, error
     case limitReached = "limit_reached"
+    /// Phase 2 of the Cursor redesign — daemon emits these to update the
+    /// token budget bar in the iOS status footer. The payload (JSON
+    /// ContextSnapshot) rides in `event.metadata`; the visible event
+    /// stream filter in `AgentStream` treats these as invisible so the
+    /// agent transcript stays clean.
+    case contextUpdate = "context_update"
+    /// Same forward-compat fallback as `SessionStateWire.unknown` — a
+    /// new event type from a newer daemon decodes as `.unknown` instead
+    /// of crashing the whole event stream parser.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = EventTypeWire(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Per-category breakdown of how much of the model's context window is
+/// occupied. Phase 2 of the Cursor redesign exposes this as the
+/// segmented bar + collapsible list in `ContextBudgetPanel`. Daemon
+/// emits this either via `GET /sessions/:id/context` (pull, used on
+/// mount) or via SSE `context_update` events (push, debounced ~500ms).
+struct ContextSnapshotWire: Codable, Sendable, Hashable {
+    /// Sum of every category. Reported separately so the daemon can
+    /// account for tokenizer overhead the per-category counts don't see.
+    let total: Int
+    /// Model's hard context window cap. `0` means "unknown" — the iOS
+    /// footer hides the percent ring in that case rather than dividing
+    /// by zero.
+    let max: Int
+    /// Ordered breakdown — daemon owns the canonical order so the
+    /// segmented bar always reads the same way across iOS / Mac.
+    let breakdown: [ContextCategoryWire]
+}
+
+struct ContextCategoryWire: Codable, Sendable, Hashable, Identifiable {
+    /// Stable id matching the category color map in
+    /// `ContextBudgetBar` (system_prompt / tool_definitions / rules /
+    /// skills / mcp / subagent_definitions / conversation).
+    let id: String
+    /// Human label rendered in the list — daemon picks the wording so we
+    /// don't drift between platforms.
+    let label: String
+    let tokens: Int
 }
 
 struct SmoothieEventWire: Codable, Sendable, Identifiable {
@@ -378,6 +433,7 @@ extension SessionStateWire {
         case .done:         return .done
         case .error:        return .error
         case .limitReached: return .limitReached
+        case .unknown:      return .starting
         }
     }
 }

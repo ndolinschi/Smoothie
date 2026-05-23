@@ -38,7 +38,7 @@ struct StatusBadge: View {
 
     private var palette: Palette? {
         switch state {
-        case .starting, .done, .waiting:
+        case .starting, .done, .waiting, .unknown:
             return nil
         case .thinking:
             return Palette(label: "thinking", dot: .blue, text: .blue)
@@ -62,6 +62,7 @@ extension SessionStateWire {
         case .done:         return .white.opacity(0.4)
         case .error:        return .red
         case .limitReached: return .red
+        case .unknown:      return .white.opacity(0.4)
         }
     }
 }

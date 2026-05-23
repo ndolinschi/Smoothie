@@ -43,12 +43,9 @@ struct MarkdownText: View {
     private func blockView(_ block: Block) -> some View {
         switch block {
         case .paragraph(let text):
-            inlineMarkdown(text)
-                .font(.system(size: 15))
-                .foregroundStyle(.white)
-                .lineSpacing(3)
+            InlineMarkdownFlow(raw: text, font: .system(size: 15), lineSpacing: 3, textColor: .white)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
         case .heading(let text, let level):
             inlineMarkdown(text)
                 .font(.system(size: headingSize(level), weight: .bold))
@@ -61,12 +58,9 @@ struct MarkdownText: View {
                         Text("•")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.6))
-                        inlineMarkdown(item)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .lineSpacing(2)
+                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: .white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -78,12 +72,9 @@ struct MarkdownText: View {
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.55))
                             .frame(minWidth: 18, alignment: .trailing)
-                        inlineMarkdown(item)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .lineSpacing(2)
+                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: .white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -92,11 +83,8 @@ struct MarkdownText: View {
                 Rectangle()
                     .fill(Color.white.opacity(0.25))
                     .frame(width: 2)
-                inlineMarkdown(text)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .italic()
-                    .lineSpacing(2)
+                InlineMarkdownFlow(raw: text, font: .system(size: 14), lineSpacing: 2, textColor: .white.opacity(0.75), italic: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
             .padding(.vertical, 2)

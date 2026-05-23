@@ -665,6 +665,7 @@ func parseCLIType(_ raw: String) -> CLIType? {
     case "claude", "claude_code", "claude-code", "claudecode": return .claudeCode
     case "gemini":                                              return .gemini
     case "opencode", "open_code", "open-code":                  return .openCode
+    case "antigravity", "agy":                                  return .antigravity
     default:                                                    return nil
     }
 }

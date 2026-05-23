@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import smoothie.adapters.AdapterParser
 import smoothie.model.CLIType
 import smoothie.model.CreateSessionRequest
@@ -46,6 +49,7 @@ class Session(
         replay = 0,
         extraBufferCapacity = 1024,
     )
+    private val contextTracker = ContextTracker(request.cli)
 
     val cli: CLIType get() = request.cli
     val projectPath: String get() = request.projectPath
@@ -100,6 +104,7 @@ class Session(
 
     private suspend fun ingestParsed(parsed: List<SmoothieEvent>): List<SmoothieEvent> {
         if (parsed.isEmpty()) return parsed
+        val snapshotForUpdate: ContextSnapshot
         mutex.withLock {
             for (event in parsed) {
                 _events += event
@@ -107,14 +112,90 @@ class Session(
                     _events.subList(0, _events.size - eventCap).clear()
                 }
                 updateStateForEvent(event)
+                addToConversationIfContentful(event)
             }
             // Pick up the parser's most recently seen provider session id
             // (Claude system.init, Gemini init, etc.) so the descriptor
             // returned to iOS carries the resume id once it's known.
             parser.lastSessionId?.let { _providerSessionId = it }
+            // Capture the snapshot INSIDE the lock — emitting the
+            // CONTEXT_UPDATE then happens outside so we don't re-enter
+            // the mutex (kotlinx.coroutines `Mutex` is not re-entrant
+            // and would deadlock the suspending caller).
+            snapshotForUpdate = contextTracker.snapshot()
         }
         for (event in parsed) _live.emit(event)
+        // After publishing the visible events, fire one trailing
+        // CONTEXT_UPDATE so iOS's status footer percent ring stays in
+        // sync. No debouncing in v1 — bursty streams will fire many
+        // updates but the iOS side just overwrites the snapshot.
+        emitContextUpdateWithSnapshot(snapshotForUpdate)
         return parsed
+    }
+
+    /** Charge an event's content against the conversation budget when
+     *  it actually carries text the model will see again. WAITING /
+     *  DONE / ERROR / LIMIT_REACHED / CONTEXT_UPDATE are state /
+     *  side-channel signals — they don't enter the model's context. */
+    private fun addToConversationIfContentful(event: SmoothieEvent) {
+        when (event.type) {
+            EventType.MESSAGE, EventType.THINKING, EventType.TOOL_USE,
+            EventType.TOOL_RESULT, EventType.FILE_EDIT -> {
+                contextTracker.addConversation(event.content)
+            }
+            EventType.WAITING, EventType.DONE, EventType.ERROR,
+            EventType.LIMIT_REACHED, EventType.CONTEXT_UPDATE -> Unit
+        }
+    }
+
+    /** Emit a CONTEXT_UPDATE event with an already-captured snapshot.
+     *  Callers must capture the snapshot under the mutex themselves
+     *  (the kotlinx.coroutines Mutex isn't re-entrant). Side-channel
+     *  only — does NOT push into `_events`; iOS's SessionLiveStore
+     *  filters CONTEXT_UPDATE before the visible event ring.
+     *
+     *  Builds the JsonObject by hand instead of going through
+     *  `kotlinx.serialization`'s reflection-less serializer. The earlier
+     *  approach silently no-op'd on Kotlin/Native — the daemon log
+     *  showed zero context_update events on the SSE stream even though
+     *  `_live.emit` for normal events was working. Manual construction
+     *  side-steps whatever the issue was.
+     */
+    private suspend fun emitContextUpdateWithSnapshot(snapshot: ContextSnapshot) {
+        val breakdownArray = JsonArray(snapshot.breakdown.map { cat ->
+            JsonObject(mapOf(
+                "id" to JsonPrimitive(cat.id),
+                "label" to JsonPrimitive(cat.label),
+                "tokens" to JsonPrimitive(cat.tokens),
+            ))
+        })
+        val snapshotJson = JsonObject(mapOf(
+            "total" to JsonPrimitive(snapshot.total),
+            "max" to JsonPrimitive(snapshot.max),
+            "breakdown" to breakdownArray,
+        ))
+        val event = SmoothieEvent(
+            type = EventType.CONTEXT_UPDATE,
+            content = "",
+            metadata = mapOf("snapshot" to snapshotJson),
+            timestamp = nowEpochMillis(),
+        )
+        _live.emit(event)
+    }
+
+    /** Read the current token-budget snapshot. Used by the HTTP
+     *  `/sessions/:id/context` route so a freshly-mounted iOS session
+     *  can fetch initial state without waiting for the next ingest. */
+    suspend fun contextSnapshot(): ContextSnapshot = mutex.withLock { contextTracker.snapshot() }
+
+    /** Seed the system-prompt category from the macOS spawn path. */
+    suspend fun seedSystemPrompt(text: String) {
+        val snapshotForUpdate: ContextSnapshot
+        mutex.withLock {
+            contextTracker.seedSystemPrompt(text)
+            snapshotForUpdate = contextTracker.snapshot()
+        }
+        emitContextUpdateWithSnapshot(snapshotForUpdate)
     }
 
     /** Swift-friendly subscription: invokes [onEvent] for every live event
@@ -144,11 +225,15 @@ class Session(
 
     /** Inject a synthetic event (e.g. when Swift side detects process exit). */
     suspend fun injectEvent(event: SmoothieEvent) {
+        val snapshotForUpdate: ContextSnapshot
         mutex.withLock {
             _events += event
             updateStateForEvent(event)
+            addToConversationIfContentful(event)
+            snapshotForUpdate = contextTracker.snapshot()
         }
         _live.emit(event)
+        emitContextUpdateWithSnapshot(snapshotForUpdate)
     }
 
     /** Mark the session ended (process exited cleanly). */
@@ -171,6 +256,7 @@ class Session(
             EventType.LIMIT_REACHED -> _state.update { SessionState.LIMIT_REACHED }
             EventType.MESSAGE, EventType.THINKING, EventType.TOOL_USE,
             EventType.TOOL_RESULT, EventType.FILE_EDIT -> _state.update { SessionState.THINKING }
+            EventType.CONTEXT_UPDATE -> Unit // side-channel; never moves state
         }
     }
 }

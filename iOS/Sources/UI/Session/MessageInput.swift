@@ -43,6 +43,11 @@ struct MessageInput: View {
     @State private var voiceError: String?
     @State private var pendingImagePickerSource: ImagePickerSheet.Source?
     @FocusState private var focused: Bool
+    /// Used to stop dictation when the app goes to the background. Without
+    /// this, the `AVAudioSession` stays in `.record` mode across launches
+    /// and blocks other apps' audio playback until the user manually
+    /// toggles the mic off.
+    @Environment(\.scenePhase) private var scenePhase
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool { !sending && (!trimmed.isEmpty || !attachments.isEmpty) }
@@ -78,10 +83,12 @@ struct MessageInput: View {
         .overlay(
             // Use the live sessionState (driven by SSE) — session.state is a
             // snapshot of the descriptor at view-mount time and never moves,
-            // so reading it here meant the waiting-pulse hairline + the
-            // auto-focus below never fired in practice.
+            // so reading it here meant the waiting hairline + the auto-focus
+            // below never fired in practice. P25: was `statusWaiting` (orange)
+            // → switched to `activeBorder` (white@30%) to fit the mono palette
+            // without reintroducing a coral/orange leftover.
             Rectangle()
-                .fill(sessionState == .waiting ? SmoothieColor.statusWaiting.opacity(0.55) : SmoothieColor.strokeSoft)
+                .fill(sessionState == .waiting ? SmoothieColor.activeBorder : SmoothieColor.strokeSoft)
                 .frame(height: 0.5),
             alignment: .top
         )
@@ -89,7 +96,32 @@ struct MessageInput: View {
         .animation(.easeInOut(duration: 0.18), value: voice.isListening)
         .animation(.easeInOut(duration: 0.25), value: sessionState)
         .onChange(of: sessionState) { _, new in
-            if new == .waiting { focused = true }
+            // Auto-focus the composer when the agent is ready — BUT only
+            // when there's no sheet already presented. Without the guard,
+            // a `.waiting` transition arriving while AttachSheet /
+            // ImagePicker / MentionPicker is open steals focus back to
+            // the text field and dismisses the iOS keyboard mid-tap.
+            // Removed `&& !showingModels` after the merge — model picker
+            // moved to SessionView's toolbar (showingModelDropdown /
+            // showingModelSheet) so this composer-local state var no
+            // longer exists.
+            let noSheetUp = !showingAttach
+                && !showingImporter
+                && !showingMention
+                && !showingSkills
+                && !showingMCP
+                && pendingImagePickerSource == nil
+            if new == .waiting && noSheetUp { focused = true }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Release the mic + speech recognizer when iOS sends us to
+            // the background. Otherwise a long dictation session left
+            // running while the user switches apps holds the
+            // AVAudioSession in `.record` mode and stops everything
+            // else (Music, podcasts, FaceTime) from playing audio.
+            if phase == .background && voice.isListening {
+                voice.stop()
+            }
         }
         .sheet(isPresented: $showingMention) {
             MentionPickerSheet(projectPath: session.projectPath) { entry, content in
@@ -204,7 +236,11 @@ struct MessageInput: View {
 
     private var textField: some View {
         TextField(
-            isFreshSession ? "Code anything…" : "Add feedback…",
+            // Keep the merged-in placeholder set — the parallel branch
+            // landed on "Ask Claude…" / "Message…" after the earlier
+            // sim feedback flagged "Add feedback…" as confusing for a
+            // brand-new session. Plays nicer across non-Claude CLIs too.
+            isFreshSession ? "Ask Claude…" : "Message…",
             text: $text,
             axis: .vertical
         )
@@ -222,6 +258,15 @@ struct MessageInput: View {
     }
 
     private var actionsRow: some View {
+        // P25.g/h consolidation (origin/main): the leading "+" + the
+        // composer-level ModelChip were both removed. Attach is now a
+        // single entry via the trailing paperclip → AttachSheet, and
+        // model picking lives in the toolbar title dropdown
+        // (showingModelDropdown). My earlier composer ModelChip work
+        // (p25.b) is superseded — the toolbar dropdown is always
+        // visible and shows the friendly model name. ModelChip /
+        // ModelCatalog files stay in the repo as building blocks for
+        // a future inline-overlay dropdown if we revisit.
         HStack(spacing: SmoothieMetrics.space12) {
             ModeChip(mode: session.mode) {
                 onTapMode()
@@ -279,7 +324,7 @@ struct MessageInput: View {
             Button(action: send) {
                 Image(systemName: sending ? "ellipsis" : "arrow.up")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(canSend ? SmoothieColor.onAccent : .white.opacity(0.4))
                     .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
                     .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
             }

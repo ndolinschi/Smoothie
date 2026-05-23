@@ -60,7 +60,7 @@ struct DashboardHeader: View {
 
             // GitHub-style heatmap — sessions started per day over the
             // last 12 weeks. Empty days stay neutral; busier days deepen
-            // toward the coral accent.
+            // monochromatically (P25 mono palette).
             ActivityHeatmap(buckets: stats.weeklyBuckets, weeks: 12)
                 .padding(.top, 4)
 

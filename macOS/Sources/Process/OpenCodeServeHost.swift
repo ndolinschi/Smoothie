@@ -119,8 +119,8 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     func terminate() {
         portTimeoutTask?.cancel()
         portTimeoutTask = nil
-        if let port, let id = ocSessionId {
-            var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(id)/abort")!)
+        if let port, let id = ocSessionId, let url = abortURL(port: port, sessionId: id) {
+            var req = URLRequest(url: url)
             req.httpMethod = "POST"
             Task.detached { _ = try? await URLSession.shared.data(for: req) }
         }
@@ -142,10 +142,27 @@ final class OpenCodeServeHost: NSObject, SessionHost {
     /// Abort just the in-flight turn — opencode keeps its server up and the
     /// session record. The next `write(_:)` re-uses the same session id.
     func abort() async {
-        guard let port, let id = ocSessionId else { return }
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(id)/abort")!)
+        guard let port, let id = ocSessionId, let url = abortURL(port: port, sessionId: id) else { return }
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         _ = try? await URLSession.shared.data(for: req)
+    }
+
+    /// Build the abort URL with the session id percent-escaped as a single
+    /// path component. The opencode-supplied id is usually a UUID-ish slug
+    /// without special characters, but we don't trust it — a malicious or
+    /// malformed value containing `/` or `?` would otherwise either land
+    /// on a different opencode route or split the URL into garbage. Using
+    /// `URLComponents` + `addingPercentEncoding(.urlPathAllowed)` keeps the
+    /// id contained.
+    private func abortURL(port: Int, sessionId: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = port
+        let escapedId = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+        components.percentEncodedPath = "/session/\(escapedId)/abort"
+        return components.url
     }
 
     // MARK: - Log parsing
@@ -218,7 +235,16 @@ final class OpenCodeServeHost: NSObject, SessionHost {
             "parts": [["type": "text", "text": content]]
         ]
         let data = try JSONSerialization.data(withJSONObject: body)
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/session/\(sessionID)/prompt_async")!)
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = port
+        let escapedId = sessionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionID
+        components.percentEncodedPath = "/session/\(escapedId)/prompt_async"
+        guard let url = components.url else {
+            throw NSError(domain: "OpenCodeServeHost", code: -1, userInfo: [NSLocalizedDescriptionKey: "Could not build prompt URL for session \(sessionID)"])
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = data

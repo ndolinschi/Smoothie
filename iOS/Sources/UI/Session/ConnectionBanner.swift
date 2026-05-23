@@ -11,6 +11,10 @@ struct ConnectionBanner: View {
     let connection: SSEClient.State
     let state: SessionStateWire
     let hasReceivedEvent: Bool
+    /// Optional reconnect action — surfaces a trailing "Reconnect" pill
+    /// when the SSE link is in a non-transient bad state (`.retrying`,
+    /// `.stopped`, `.gone`). When nil the banner stays read-only.
+    var onReconnect: (() -> Void)? = nil
 
     var body: some View {
         if let payload {
@@ -20,6 +24,9 @@ struct ConnectionBanner: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(payload.text)
                 Spacer(minLength: 0)
+                if payload.allowsReconnect, let onReconnect {
+                    reconnectButton(action: onReconnect)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -35,11 +42,29 @@ struct ConnectionBanner: View {
         }
     }
 
+    private func reconnectButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Reconnect")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(SmoothieColor.textPrimary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(SmoothieColor.bgCard, in: .capsule)
+            .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
     private struct Payload {
         let label: String
         let text: Color
         let background: Color
         let indicator: AnyView
+        var allowsReconnect: Bool = false
     }
 
     /// Returns nil → banner hides. Returns a payload → banner shows.
@@ -57,25 +82,30 @@ struct ConnectionBanner: View {
                 label: "Lost connection — retrying in \(seconds)s",
                 text: SmoothieColor.accent,
                 background: SmoothieColor.accentSoft,
-                indicator: AnyView(pulseDot(SmoothieColor.accent))
+                indicator: AnyView(pulseDot(SmoothieColor.accent)),
+                allowsReconnect: true
             )
         case .stopped:
             return Payload(
                 label: "Disconnected from your Mac",
                 text: SmoothieColor.statusErr,
                 background: SmoothieColor.statusErr.opacity(0.12),
-                indicator: AnyView(staticDot(SmoothieColor.statusErr))
+                indicator: AnyView(staticDot(SmoothieColor.statusErr)),
+                allowsReconnect: true
             )
         case .gone(let reason):
-            // Terminal — session no longer exists on the Mac. We stop
-            // pretending to reconnect and tell the user what happened.
+            // Terminal — session no longer exists on the Mac. We surface
+            // a Reconnect anyway so the user can take a manual stab at
+            // recovery (usually reproduces the gone state, but the
+            // agency matters when the daemon side just restarted).
             return Payload(
                 label: reason,
                 text: SmoothieColor.statusErr,
                 background: SmoothieColor.statusErr.opacity(0.12),
                 indicator: AnyView(Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(SmoothieColor.statusErr))
+                    .foregroundStyle(SmoothieColor.statusErr)),
+                allowsReconnect: true
             )
         case .connected:
             // Show a one-shot "Connected — waiting for the first event"
@@ -106,6 +136,11 @@ struct ConnectionBanner: View {
                 )
             case .done, .error, .limitReached:
                 // For terminal states an event row already explains things.
+                return nil
+            case .unknown:
+                // Future-daemon state we don't recognise — stay quiet rather
+                // than make up a label. The session state machine will keep
+                // ticking on subsequent events.
                 return nil
             }
         }

@@ -70,14 +70,16 @@ struct DiffSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     if sending {
-                        ProgressView().controlSize(.small).tint(.white)
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(totalComments > 0 ? SmoothieColor.onAccent : .white)
                     }
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 13, weight: .bold))
                     Text(sending ? "Sending…" : "Send feedback to Claude")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(totalComments > 0 ? SmoothieColor.onAccent : .white.opacity(0.5))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(
