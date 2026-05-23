@@ -52,12 +52,14 @@ struct MessageInput: View {
     private var canSend: Bool { !sending && !sessionEnded && (!trimmed.isEmpty || !attachments.isEmpty) }
     /// Show the starter chips until either the daemon-side session has
     /// real conversation content (parent passes `isFreshSession = false`)
-    /// OR the user has tapped send in this view's lifetime. The local
-    /// `hasUserSent` flag is the belt that the suspenders couldn't —
-    /// `isFreshSession` rides on the live event stream and was leaving
-    /// suggestions hidden in some flows even on a brand-new session.
+    /// OR the user has tapped send in this view's lifetime. Earlier
+    /// revisions also hid the bar the moment the user started typing
+    /// or staged an attachment — the user asked for the chips to
+    /// persist until the prompt actually goes out, so those gates were
+    /// dropped. Tapping a chip still appends to whatever the user has
+    /// typed via `insertAtCursor`.
     private var showSuggestions: Bool {
-        isFreshSession && !hasUserSent && trimmed.isEmpty && attachments.isEmpty && !sessionEnded
+        isFreshSession && !hasUserSent && !sessionEnded
     }
 
     /// True when the daemon-side session is no longer accepting input.
