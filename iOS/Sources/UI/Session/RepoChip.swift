@@ -62,5 +62,8 @@ struct RepoChip: View {
                 lineWidth: isActive ? 1 : 0.5
             )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isActive ? "Active repository: \(resolvedLabel)" : "Repository: \(resolvedLabel)")
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }

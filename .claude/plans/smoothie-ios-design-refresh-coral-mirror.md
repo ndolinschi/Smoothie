@@ -281,7 +281,40 @@ the notch-bar surface:
 Detailed P26 phasing deferred until P25 lands and we know which
 patterns translated cleanly.
 
+## Status (updated)
+
+- [x] P25.a — token expansion (commit d697342)
+- [x] P25.b — centered model dropdown popover (commit 20f8ae5)
+- [x] P25.c — EnvPill below the toolbar (commit 2da3f6b)
+- [x] P25.d — suggestion chips refresh (commit ef862a3)
+- [x] P25.e+f — multi-repo chips row + picker sheet (commit 039df96)
+- [x] P25.g — composer polish: placeholder, single attach entry
+      (commit 6128c42)
+- [x] P25.h — consolidation: dropped redundant `Models` row from
+      AttachSheet, removed dead callbacks (`onSwitchModel/Effort/
+      Provider/Mode`, `allAdapters`), added VoiceOver labels to
+      RepoChip + EnvPill.
+
 ## Next action when execution resumes
 
-Start P25.a — extend `DesignTokens.swift` with the new surface,
-chip, env, and menu tokens. No visual diff expected.
+P25 ships. Verification deferred to the user's local environment
+(this session can't run `xcodebuild` or the simulator). The two
+checks worth running before any further work:
+
+1. `xcodegen --spec iOS/project.yml --project iOS` to pick up
+   the new files (`EnvPill.swift`, `RepoPickerSheet.swift`).
+2. Build + boot SmoothieiOS, open a session, and walk: tap the
+   centered model name (compact dropdown), tap a model, tap the
+   "+" on the repo row (picker sheet), pick a different repo (pop
+   back to HomeView), confirm the EnvPill renders below the nav
+   bar, confirm suggestions render with the new rounded-rect look.
+
+If anything renders off, the most likely culprits are
+`.presentationCompactAdaptation(.popover)` on the model dropdown
+(iPad/iPhone behavior may need an `.popoverAttachmentAnchor` tweak)
+or the popover anchoring on `.principal` toolbar items
+(if it appears off-center, attach the popover to a sibling view
+or use a custom `.overlay(alignment: .top)` instead).
+
+P26 (Gin macOS parity) is the next phase. Stub is at the bottom of
+this file.

@@ -2,25 +2,18 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// REF-1 / REF-3 / REF-5 composer. Vertical stack: Suggestions (fresh
-/// session only) → attachment chips (when staged) → + button + project chip
-/// row → rounded text field → mode chip + quick actions + coral send.
+/// session only) → attachment chips (when staged) → repo chips row
+/// (leading + button + active chip + recent chips) → rounded text
+/// field → mode chip + paperclip + mic + coral send.
 struct MessageInput: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
-    let allAdapters: [AdapterInfoWire]
     let isFreshSession: Bool
     /// Current session state. When `.starting`/`.thinking`, the trailing
     /// send button becomes an Abort button instead.
     let sessionState: SessionStateWire
     let onSend: (String, [StagedAttachment]) async -> Void
     let onAbort: () -> Void
-    /// Async because the upstream applyRestart spawns a fresh process; the
-    /// model picker awaits it so it can show a row-level spinner instead of
-    /// dismissing silently.
-    let onSwitchModel: (String) async -> Void
-    let onSwitchEffort: (String) async -> Void
-    let onSwitchMode: (String) -> Void
-    let onSwitchProvider: (CLIWire) async -> Void
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
@@ -44,7 +37,6 @@ struct MessageInput: View {
     @State private var showingImporter = false
     @State private var showingAttach = false
     @State private var showingSkills = false
-    @State private var showingModels = false
     @State private var showingMCP = false
     @State private var importError: String?
     @State private var voice = VoiceDictator()
@@ -115,7 +107,6 @@ struct MessageInput: View {
                 onMentionFile: { showingMention = true },
                 onAttachFile:  { showingImporter = true },
                 onOpenSkills:  { showingSkills = true },
-                onOpenModels:  { showingModels = true },
                 onOpenMCP:     { showingMCP = true },
                 onDismiss:     { showingAttach = false }
             )
@@ -138,19 +129,6 @@ struct MessageInput: View {
                 SlashCommandSheet(commands: f.slashCommands, onPick: { insertAtCursor($0) })
                     .presentationDetents([.medium])
                     .presentationBackground(.clear)
-            }
-        }
-        .sheet(isPresented: $showingModels) {
-            if let f = features {
-                ModelPickerSheet(
-                    currentModel: session.model,
-                    currentEffort: session.reasoningEffort,
-                    features: f,
-                    onPickModel: { m in await onSwitchModel(m) },
-                    onPickEffort: { e in await onSwitchEffort(e) }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationBackground(.clear)
             }
         }
         .sheet(isPresented: $showingMCP) {

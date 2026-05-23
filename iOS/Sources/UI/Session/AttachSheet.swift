@@ -11,7 +11,6 @@ struct AttachSheet: View {
     let onMentionFile: () -> Void
     let onAttachFile: () -> Void
     let onOpenSkills: () -> Void
-    let onOpenModels: () -> Void
     let onOpenMCP: () -> Void
     let onDismiss: () -> Void
 
@@ -71,18 +70,10 @@ struct AttachSheet: View {
                 }
             }
 
-            if let f = features, f.supportsModelPicker {
-                SheetRow(
-                    glyph: "cube",
-                    glyphColor: SmoothieColor.statusDone,
-                    glyphBackground: Color(hex: 0x152A22),
-                    title: "Models",
-                    subtitle: "Switch model — restarts the session"
-                ) {
-                    onOpenModels()
-                    onDismiss()
-                }
-            }
+            // Model switching lives on the centered toolbar dropdown
+            // (P25.b). The "Models" row that used to live here was
+            // removed in P25.h — reasoning effort stays reachable via
+            // the dropdown's "All models…" footer.
 
             SheetRow(
                 glyph: "server.rack",

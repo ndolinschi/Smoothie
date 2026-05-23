@@ -12,7 +12,6 @@ struct SessionView: View {
     @State private var currentSession: SessionDescriptorWire
     @State private var store: SessionLiveStore?
     @State private var features: ProviderFeaturesWire?
-    @State private var allAdapters: [AdapterInfoWire] = []
     @State private var confirmKill = false
     @State private var switchError: String?
     @State private var lastNotifiedState: SessionStateWire?
@@ -131,7 +130,6 @@ struct SessionView: View {
                     MessageInput(
                         session: currentSession,
                         features: features,
-                        allAdapters: allAdapters,
                         isFreshSession: store.events.isEmpty,
                         sessionState: store.state,
                         onSend: { text, attachments in
@@ -139,10 +137,6 @@ struct SessionView: View {
                             await sendMessage(composed, images: attachments.images)
                         },
                         onAbort: { Task { await abortTurn() } },
-                        onSwitchModel: { m in await applyRestart(.model(m)) },
-                        onSwitchEffort: { e in await applyRestart(.effort(e)) },
-                        onSwitchMode: { applyMode($0) },
-                        onSwitchProvider: { c in await applyRestart(.provider(c)) },
                         onTapMode: { showingModeSheet = true },
                         otherProjects: otherRecentProjects,
                         onTapRepoPlus: { showingRepoPicker = true },
@@ -330,7 +324,6 @@ struct SessionView: View {
         let api = APIClient(store: pairing)
         do {
             let adapters = try await api.adapters()
-            allAdapters = adapters
             features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
             // non-fatal; ComposerMenu degrades gracefully
