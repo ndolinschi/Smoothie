@@ -45,14 +45,13 @@ final class SettingsStore {
     func clearLocalData(recents: RecentsStore, sessionMeta: SessionMetaStore) {
         recents.clear()
         sessionMeta.clearAll()
-        for key in [
-            Self.themeKey,
-            "smoothie.homeTipDismissed",
-        ] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        // Reset our in-memory copy too so the UI flips back to defaults
-        // without a relaunch.
+        UserDefaults.standard.removeObject(forKey: "smoothie.homeTipDismissed")
+        // Reset theme to .system first — didSet rewrites the key —
+        // THEN remove the key so it's actually absent on disk. The
+        // in-memory `theme` stays .system so the UI doesn't flicker.
+        // Order matters: doing removeObject before the assignment
+        // would let didSet immediately re-add it.
         theme = .system
+        UserDefaults.standard.removeObject(forKey: Self.themeKey)
     }
 }

@@ -192,6 +192,17 @@ struct HomeView: View {
         }
         .task { await refresh() }
         .refreshable { await refresh() }
+        .onChange(of: archivedCount) { _, newCount in
+            // P27.k — when the user unarchives the last archived
+            // session from within SessionView, `archivedCount` drops
+            // to 0 and the .archived chip is hidden by filterRow. If
+            // we leave `filter` at .archived, HomeView shows the
+            // empty-state with no chip to switch off. Fall back to
+            // .all so the user lands somewhere navigable.
+            if newCount == 0 && filter == .archived {
+                filter = .all
+            }
+        }
         .onChange(of: pairing.activeId) { _, _ in
             // Clear any pushed session — switching Mac means the SSE stream
             // would 404 if we kept the previous session on screen. Also
@@ -377,22 +388,31 @@ struct HomeView: View {
     /// themselves are ordered by their most-recent session's timestamp
     /// so the project you just touched bubbles to the top.
     private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionDescriptorWire])] {
-        // P27.j — pinned sessions float to the top of their project
-        // group. Two-key sort: pinned-desc first, then createdAt-desc.
-        let sorted = ss.sorted { lhs, rhs in
-            let lp = sessionMeta.isPinned(lhs.id)
-            let rp = sessionMeta.isPinned(rhs.id)
-            if lp != rp { return lp && !rp }
-            return lhs.createdAt > rhs.createdAt
-        }
-        var grouped: [String: [SessionDescriptorWire]] = [:]
+        // P27.k — project order MUST be derived from each project's
+        // most recent createdAt, independent of pin state. The earlier
+        // P27.j implementation conflated the two by computing
+        // firstSeen on the pinned-first sorted list, which caused a
+        // project with any pinned-old session to sink in the list.
+        //
+        // Two passes:
+        //   1. firstSeen[project] = max(createdAt) — pin-agnostic.
+        //   2. Bucket then sort within each bucket: pinned-desc first,
+        //      then createdAt-desc.
         var firstSeen: [String: Int64] = [:]
-        for s in sorted {
+        var grouped: [String: [SessionDescriptorWire]] = [:]
+        for s in ss {
             grouped[s.projectName, default: []].append(s)
-            // First time we see a project in the sorted-desc list = most
-            // recent activity. Locked in via `default` semantics.
-            if firstSeen[s.projectName] == nil {
+            let prev = firstSeen[s.projectName] ?? Int64.min
+            if s.createdAt > prev {
                 firstSeen[s.projectName] = s.createdAt
+            }
+        }
+        for key in grouped.keys {
+            grouped[key]?.sort { lhs, rhs in
+                let lp = sessionMeta.isPinned(lhs.id)
+                let rp = sessionMeta.isPinned(rhs.id)
+                if lp != rp { return lp && !rp }
+                return lhs.createdAt > rhs.createdAt
             }
         }
         let orderedKeys = grouped.keys.sorted {

@@ -123,8 +123,17 @@ struct MessageInput: View {
             // the picker's selection callback re-inserts `@path` via
             // insertAtCursor, so leaving the user-typed `@` would
             // produce `@@path`.
+            //
+            // P27.k — explicitly gate on `!voice.isListening` too: voice
+            // dictation can transcribe "at" as "@" mid-stream and we
+            // don't want the picker stealing focus while the mic is
+            // live. IME composition (Chinese / Japanese commits that
+            // grow `text` by >1 character at once) implicitly falls
+            // through the `count == oldText.count + 1` guard — those
+            // users still have the paperclip → Mention File path.
             guard !showingMention, !showingAttach, !showingImporter,
-                  !showingSkills, !showingMCP, pendingImagePickerSource == nil
+                  !showingSkills, !showingMCP, pendingImagePickerSource == nil,
+                  !voice.isListening
             else { return }
             guard newText.count == oldText.count + 1, newText.hasSuffix("@") else { return }
             let trailing = newText.index(newText.endIndex, offsetBy: -1)
