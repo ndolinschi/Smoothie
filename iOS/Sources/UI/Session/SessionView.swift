@@ -7,6 +7,7 @@ struct SessionView: View {
     let session: SessionDescriptorWire
     @Environment(PairingStore.self) private var pairing
     @Environment(RecentsStore.self) private var recents
+    @Environment(SessionMetaStore.self) private var sessionMeta
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var currentSession: SessionDescriptorWire
@@ -31,6 +32,10 @@ struct SessionView: View {
     /// `+` button on the repo chips row, or via tapping a non-active
     /// chip directly (which goes through `onSwitchRepo` instead).
     @State private var showingRepoPicker = false
+    /// P27.i — rename alert. `renameDraft` is the text-field binding;
+    /// `showingRename` controls presentation.
+    @State private var showingRename = false
+    @State private var renameDraft = ""
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -211,6 +216,38 @@ struct SessionView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        renameDraft = sessionMeta.meta(for: currentSession.id).title
+                            ?? currentSession.projectName
+                        showingRename = true
+                    } label: {
+                        Label("Rename…", systemImage: "pencil")
+                    }
+                    Button {
+                        sessionMeta.setPinned(
+                            !sessionMeta.isPinned(currentSession.id),
+                            for: currentSession.id
+                        )
+                    } label: {
+                        Label(
+                            sessionMeta.isPinned(currentSession.id) ? "Unpin" : "Pin to top",
+                            systemImage: sessionMeta.isPinned(currentSession.id) ? "pin.slash" : "pin"
+                        )
+                    }
+                    Button {
+                        sessionMeta.setArchived(
+                            !sessionMeta.isArchived(currentSession.id),
+                            for: currentSession.id
+                        )
+                    } label: {
+                        Label(
+                            sessionMeta.isArchived(currentSession.id) ? "Unarchive" : "Archive",
+                            systemImage: sessionMeta.isArchived(currentSession.id)
+                                ? "tray.and.arrow.up"
+                                : "archivebox"
+                        )
+                    }
+                    Divider()
                     if store?.contextSnapshot != nil {
                         Button {
                             showingBudget = true
@@ -332,6 +369,16 @@ struct SessionView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This terminates the agent process on your Mac.")
+        }
+        .alert("Rename session", isPresented: $showingRename) {
+            TextField("Session title", text: $renameDraft)
+                .textInputAutocapitalization(.sentences)
+            Button("Save") {
+                sessionMeta.setTitle(renameDraft, for: currentSession.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Leave empty to clear the custom title.")
         }
         .alert("Couldn't switch", isPresented: Binding(
             get: { switchError != nil },
