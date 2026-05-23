@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// Bottom-sheet detail view for the token budget. Header carries the
-/// current "context window %" headline + the same segmented bar used in
-/// the status footer; body lists every category with its color dot,
-/// label, and token count. Presented from `StatusFooter` when the user
-/// taps the percent ring; built on `SmoothieBottomSheet` so it gets the
-/// standard drag-to-dismiss + safe-area handling for free.
+/// current "context window %" headline + a segmented bar; body lists
+/// every category with its color dot, label, and token count. Presented
+/// from the session toolbar's `…` menu ("Context usage", P27.a); built
+/// on `SmoothieBottomSheet` so it gets the standard drag-to-dismiss +
+/// safe-area handling for free.
 struct ContextBudgetPanel: View {
     let snapshot: ContextSnapshotWire
     let onDismiss: () -> Void

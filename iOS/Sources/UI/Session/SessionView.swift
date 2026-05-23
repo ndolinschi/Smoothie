@@ -18,7 +18,9 @@ struct SessionView: View {
     @State private var showingModeSheet = false
     @State private var showingDiffSheet = false
     /// Drives the bottom-sheet presentation of `ContextBudgetPanel`
-    /// from the StatusFooter percent-ring tap.
+    /// from the toolbar ellipsis menu's "Context usage" item (P27.a —
+    /// the always-visible StatusFooter that hosted this tap target was
+    /// removed; the data is still one tap away via the menu).
     @State private var showingBudget = false
     @State private var showingModelSheet = false
     /// P25.b — compact rounded-card popover anchored to the toolbar
@@ -132,11 +134,6 @@ struct SessionView: View {
                             onDiffTap: { showingDiffSheet = true }
                         )
                     }
-                    StatusFooter(
-                        branchLabel: (currentSession.projectPath as NSString).lastPathComponent,
-                        snapshot: store.contextSnapshot,
-                        onTapBudget: { showingBudget = true }
-                    )
                     MessageInput(
                         session: currentSession,
                         features: features,
@@ -209,6 +206,13 @@ struct SessionView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if store?.contextSnapshot != nil {
+                        Button {
+                            showingBudget = true
+                        } label: {
+                            Label("Context usage", systemImage: "gauge.with.dots.needle.50percent")
+                        }
+                    }
                     Button {
                         Task { await handoffToTerminal() }
                     } label: {

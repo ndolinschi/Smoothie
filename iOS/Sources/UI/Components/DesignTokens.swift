@@ -122,10 +122,6 @@ enum SmoothieMetrics {
     static let toolCardPaddingH: CGFloat = 14
     static let toolCardPaddingV: CGFloat = 12
 
-    /// Height of the bottom-pinned `StatusFooter` strip — matches the
-    /// design spec JSON.
-    static let footerHeight: CGFloat = 44
-
     // MARK: - P25.a spacing scale
     //
     // Granular scale introduced so later phases (chips row, suggestion
