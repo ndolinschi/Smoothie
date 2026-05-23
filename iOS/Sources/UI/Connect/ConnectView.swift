@@ -159,7 +159,7 @@ private struct ScannerSheet: View {
                     VStack(spacing: 4) {
                         Text("Scan the QR from the Mac menu bar")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SmoothieColor.textPrimary)
                         if failed, let err = pairing.lastError {
                             Text(err)
                                 .font(.system(size: 12))
@@ -191,7 +191,7 @@ private struct ScannerSheet: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SmoothieColor.textPrimary)
                 .frame(width: 44, height: 44)
                 .background(SmoothieColor.bgGlyph, in: .circle)
         }

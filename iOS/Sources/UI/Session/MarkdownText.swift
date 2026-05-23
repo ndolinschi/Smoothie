@@ -49,7 +49,7 @@ struct MarkdownText: View {
         case .heading(let text, let level):
             inlineMarkdown(text)
                 .font(.system(size: headingSize(level), weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SmoothieColor.textPrimary)
                 .padding(.top, level == 1 ? 6 : 2)
         case .bulletList(let items):
             VStack(alignment: .leading, spacing: 4) {
@@ -81,9 +81,9 @@ struct MarkdownText: View {
         case .quote(let text):
             HStack(spacing: 10) {
                 Rectangle()
-                    .fill(Color.white.opacity(0.25))
+                    .fill(SmoothieColor.strokeDashed)
                     .frame(width: 2)
-                InlineMarkdownFlow(raw: text, font: .system(size: 14), lineSpacing: 2, textColor: .white.opacity(0.75), italic: true)
+                InlineMarkdownFlow(raw: text, font: .system(size: 14), lineSpacing: 2, textColor: SmoothieColor.textSecondary, italic: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
@@ -92,7 +92,7 @@ struct MarkdownText: View {
             codeBlockView(code: code, language: lang)
         case .rule:
             Rectangle()
-                .fill(Color.white.opacity(0.1))
+                .fill(SmoothieColor.stroke)
                 .frame(height: 0.5)
                 .padding(.vertical, 4)
         }

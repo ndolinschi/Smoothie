@@ -345,7 +345,7 @@ struct MessageInput: View {
             Button(action: send) {
                 Image(systemName: sending ? "ellipsis" : "arrow.up")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(canSend ? SmoothieColor.onAccent : .white.opacity(0.4))
+                    .foregroundStyle(canSend ? SmoothieColor.onAccent : SmoothieColor.onAccent.opacity(0.4))
                     .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
                     .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
             }
@@ -444,7 +444,7 @@ struct MessageInput: View {
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.onAccent)
                         .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
                         .background(SmoothieColor.accent, in: .circle)
                 }

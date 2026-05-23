@@ -219,12 +219,12 @@ struct FolderPickerSheet: View {
                 HStack(spacing: 12) {
                     Image(systemName: icon)
                         .font(.system(size: 16))
-                        .foregroundStyle(.white.opacity(iconAlpha))
+                        .foregroundStyle(SmoothieColor.textPrimary.opacity(iconAlpha))
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
                             .font(.system(size: 16, weight: .regular))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SmoothieColor.textPrimary)
                             .lineLimit(1)
                         Text(sublabel)
                             .font(.system(size: 12))
@@ -290,12 +290,12 @@ struct FolderPickerSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "macbook")
                     .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(SmoothieColor.textPrimary.opacity(0.75))
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Browse Mac…")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.textPrimary)
                     Text("Drill into any subfolder")
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.45))

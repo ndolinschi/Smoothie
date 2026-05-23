@@ -111,20 +111,20 @@ struct ModelPickerSheet: View {
                         if pickingEffort == effort {
                             ProgressView()
                                 .controlSize(.mini)
-                                .tint(.black)
+                                .tint(SmoothieColor.onAccent)
                         }
                         Text(effort)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(currentEffort == effort ? .black : .white.opacity(0.7))
+                            .foregroundStyle(currentEffort == effort ? SmoothieColor.onAccent : SmoothieColor.textSecondary)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(
-                        currentEffort == effort ? Color.white : Color.clear,
+                        currentEffort == effort ? SmoothieColor.accent : Color.clear,
                         in: .capsule
                     )
                     .overlay(
-                        Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                        Capsule().stroke(SmoothieColor.activeBorder.opacity(0.6), lineWidth: 0.5)
                     )
                 }
                 .buttonStyle(.plain)
@@ -162,7 +162,7 @@ struct ModelPickerSheet: View {
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.white)
+                        .tint(SmoothieColor.textPrimary)
                         .frame(width: 17, height: 17)
                 } else {
                     Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
@@ -172,7 +172,7 @@ struct ModelPickerSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model)
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.textPrimary)
                     if isLoading {
                         Text("switching…")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -420,19 +420,19 @@ struct MCPComingSoonSheet: View {
                 VStack(spacing: 16) {
                     Image(systemName: "server.rack")
                         .font(.system(size: 38))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                     Text("MCP Servers")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.textPrimary)
                     Text("MCP connectors land after the v1 release. The Mac daemon will broker connections for each session and surface them here.")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 28)
                     Button("Got it") { dismiss() }
                         .buttonStyle(.glassProminent)
-                        .tint(.white)
-                        .foregroundStyle(.black)
+                        .tint(SmoothieColor.accent)
+                        .foregroundStyle(SmoothieColor.onAccent)
                         .padding(.top, 8)
                 }
                 .padding(.top, 40)

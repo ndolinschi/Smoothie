@@ -124,12 +124,12 @@ struct ActivityHeatmap: View {
         // Mono density signal: white from 10% to 60% opacity. The narrow
         // range keeps the card from screaming at the eye while still
         // reading as a clear high-vs-low gradient.
-        return Color.white.opacity(0.10 + intensity * 0.50)
+        return Color.primary.opacity(0.10 + intensity * 0.50)
     }
 
     private func legendColor(step: Int) -> Color {
         if step == 0 { return SmoothieColor.bgChip }
         let intensity = Double(step) / 4.0
-        return Color.white.opacity(0.10 + intensity * 0.50)
+        return Color.primary.opacity(0.10 + intensity * 0.50)
     }
 }

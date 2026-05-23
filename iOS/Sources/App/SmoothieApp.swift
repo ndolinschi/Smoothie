@@ -12,8 +12,11 @@ struct SmoothieApp: App {
             RootView(notifications: notifications)
                 .environment(pairing)
                 .environment(recents)
-                .preferredColorScheme(.dark)
-                .tint(.white)
+                // P27.d — the .preferredColorScheme(.dark) lock was
+                // removed; surfaces and text read system-adaptive
+                // tokens from DesignTokens. The Settings store (P27.f)
+                // owns the manual override.
+                .tint(SmoothieColor.accent)
                 .task {
                     await LocalNotifier.shared.ensureAuthorization()
                 }

@@ -59,7 +59,7 @@ struct DashedBanner<Trailing: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(Color.white.opacity(0.02))
+        .background(SmoothieColor.overlayVeil)
         .overlay(
             RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
                 .strokeBorder(SmoothieColor.strokeDashed,

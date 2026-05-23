@@ -1,60 +1,77 @@
 import SwiftUI
 
-/// Centralised design tokens shared across every Smoothie surface. P16 swapped
-/// the prior Liquid-Glass aesthetic for a flat, dark surface; P25 retires the
-/// coral accent in favour of a mono (white-on-#0E0E0E) palette modelled after
-/// Cursor's mobile session view. New surfaces should read tokens from here
-/// instead of hard-coding `.white.opacity(...)` or hex literals. Active states
-/// use `accent` (white) for "pressable primary action" and `linkBlue` for
-/// "current selection in a list" — two-axis convention to avoid conflation
-/// after coral removal.
+/// Centralised design tokens shared across every Smoothie surface.
+///
+/// History: P16 retired Liquid Glass for a flat dark palette; P25 replaced
+/// the coral accent with a mono (white-on-#0E0E0E) palette; **P27.d makes
+/// the surface + text tokens adaptive** so the app can follow the system
+/// light/dark setting. Pinned hex stays for the status / mode / code-block
+/// accents — those read on both backgrounds.
+///
+/// New surfaces should read tokens from here instead of hard-coding
+/// `.primary.opacity(...)` or hex literals. Active states use `accent` for
+/// "pressable primary action" and `linkBlue` for "current selection in a
+/// list" — a two-axis convention to avoid conflation.
 enum SmoothieColor {
-    static let bgPrimary     = Color(hex: 0x0E0E0E)
-    static let bgCard        = Color(hex: 0x141414)
-    static let bgChip        = Color(hex: 0x1A1A1A)
-    static let bgSheet       = Color(hex: 0x161616)
-    static let bgGlyph       = Color(hex: 0x2A2A2A)
+    // MARK: - Surfaces (adaptive, P27.d)
 
-    static let stroke        = Color.white.opacity(0.12)
-    static let strokeSoft    = Color.white.opacity(0.06)
-    static let strokeDashed  = Color.white.opacity(0.20)
+    static let bgPrimary     = Color(uiColor: .systemBackground)
+    static let bgCard        = Color(uiColor: .secondarySystemBackground)
+    static let bgChip        = Color(uiColor: .tertiarySystemBackground)
+    static let bgSheet       = Color(uiColor: .secondarySystemGroupedBackground)
+    static let bgGlyph       = Color(uiColor: .quaternarySystemFill)
 
-    /// Primary action fill / "pressable" hue. Reassigned from coral (#ED7C5C)
-    /// in P25; existing call sites continue to compile against the same token.
-    static let accent        = Color.white
-    static let accentSoft    = Color.white.opacity(0.10)
+    // MARK: - Strokes (adaptive)
+
+    static let stroke        = Color.primary.opacity(0.12)
+    static let strokeSoft    = Color.primary.opacity(0.06)
+    static let strokeDashed  = Color.primary.opacity(0.20)
+
+    // MARK: - Primary action / accent (adaptive)
+
+    /// Primary action fill / "pressable" hue. Black in light mode, white in
+    /// dark mode. Used as a background fill for buttons; pair with
+    /// `onAccent` for the foreground.
+    static let accent        = Color.primary
+    static let accentSoft    = Color.primary.opacity(0.10)
     /// Outline for "this is the currently active variant" (e.g. selected mode
-    /// chip). Replaces the prior `accent.opacity(0.5)` pattern.
-    static let activeBorder  = Color.white.opacity(0.30)
-    /// Foreground colour that sits ON TOP of an `accent` fill. With the P25
-    /// mono palette, `accent` is white — so any text or icon previously
-    /// rendered as `.white` over an accent button now needs `onAccent`
-    /// (`bgPrimary`) to remain visible. Use this instead of `.white` whenever
-    /// the background is `SmoothieColor.accent` (or `accent.opacity(...)`).
-    static let onAccent      = Color(hex: 0x0E0E0E)
+    /// chip).
+    static let activeBorder  = Color.primary.opacity(0.30)
+    /// Foreground colour that sits ON TOP of an `accent` fill. Inverts with
+    /// the system mode so contrast always holds: light surface in light mode
+    /// (over a dark accent), dark surface in dark mode (over a white accent).
+    static let onAccent      = Color(uiColor: .systemBackground)
 
-    static let textPrimary   = Color.white
-    static let textSecondary = Color.white.opacity(0.55)
-    static let textTertiary  = Color.white.opacity(0.40)
-    static let textDim       = Color.white.opacity(0.25)
+    // MARK: - Text (adaptive)
+
+    static let textPrimary   = Color.primary
+    static let textSecondary = Color.secondary
+    static let textTertiary  = Color(uiColor: .tertiaryLabel)
+    static let textDim       = Color(uiColor: .quaternaryLabel)
+
+    // MARK: - Mode glyphs (pinned hex — readable on both surfaces)
 
     static let modeCode      = Color(hex: 0xA78BFA)
     static let modePlan      = Color(hex: 0x60A5FA)
+
+    // MARK: - Status (pinned hex)
 
     static let statusThinking = Color(hex: 0x3B82F6)
     static let statusWaiting  = Color(hex: 0xFB923C)
     static let statusDone     = Color(hex: 0x34D399)
     static let statusErr      = Color(hex: 0xEF4444)
 
-    // MARK: - P24.c additions
+    // MARK: - Sheet checkmark + tile tints (P24.c)
 
-    /// Blue used for selection checkmarks on sheet rows (matches the
-    /// reference's Tailwind-blue-600).
+    /// Blue used for selection checkmarks on sheet rows (Tailwind-blue-600).
     static let linkBlue       = Color(hex: 0x2563EB)
 
     /// Tile tints for `SheetRow` glyph backgrounds. Each pairs with a
     /// foreground token (modeCode / modePlan / accent / statusDone /
     /// statusErr) but renders the small 32-pt square behind the glyph.
+    /// These were designed for the dark palette — they read as quiet
+    /// muted blocks in dark mode and as accent-tinted blocks in light
+    /// mode (asset-catalog overrides would be a cleaner follow-up).
     static let glyphModeCode  = Color(hex: 0x1F1F2E)
     static let glyphModePlan  = Color(hex: 0x1F2A3E)
     static let glyphModeRun   = Color(hex: 0x2E1717)
@@ -62,33 +79,27 @@ enum SmoothieColor {
     static let glyphAmberSoft = Color(hex: 0x2A2415)
     static let glyphGreenSoft = Color(hex: 0x152A22)
 
+    // MARK: - Code-block surfaces (adaptive)
+
     /// Markdown code-block surfaces. `codeBg` for fenced blocks,
     /// `codeBgDim` for inline `code` spans.
-    static let codeBg         = Color.white.opacity(0.07)
-    static let codeBgDim      = Color.white.opacity(0.04)
+    static let codeBg         = Color.primary.opacity(0.07)
+    static let codeBgDim      = Color.primary.opacity(0.04)
 
     /// Subtle screen veil used by dashed banners / decorative surfaces.
-    static let overlayVeil    = Color.white.opacity(0.02)
+    static let overlayVeil    = Color.primary.opacity(0.02)
 
     // MARK: - P25.a surface tiers
-    //
-    // Named tiers introduced by the iOS design refresh. Existing
-    // tokens above (bgPrimary / bgCard / bgChip / bgSheet) remain the
-    // source of truth — these are aliases that let new surfaces read
-    // a semantic name (page vs. card vs. chip vs. popover) without
-    // needing to know which hex backs them today. `surface3` is the
-    // one new value: a slightly lighter popover background used by
-    // the centered model dropdown and similar overlays.
 
     static let surface0      = bgPrimary
     static let surface1      = bgCard
     static let surface2      = bgChip
-    static let surface3      = Color(hex: 0x1C1C1C)
+    static let surface3      = Color(uiColor: .tertiarySystemGroupedBackground)
 
     // MARK: - P25.a chip + pill styles
 
     static let chipBg         = bgChip
-    static let chipBgPressed  = Color(hex: 0x222222)
+    static let chipBgPressed  = Color.primary.opacity(0.08)
     static let chipStroke     = stroke
     static let chipLabel      = textPrimary
 
@@ -100,7 +111,7 @@ enum SmoothieColor {
 
     static let menuBg         = surface3
     static let menuStroke     = stroke
-    static let menuRowHover   = Color.white.opacity(0.04)
+    static let menuRowHover   = Color.primary.opacity(0.04)
     static let menuDivider    = strokeSoft
 }
 
