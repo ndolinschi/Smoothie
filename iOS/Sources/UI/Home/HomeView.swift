@@ -67,10 +67,14 @@ struct HomeView: View {
                             onLink: nil,
                             onDismiss: { withAnimation(.easeOut(duration: 0.2)) { tipDismissed = true } }
                         ) {
-                            Image(systemName: "macbook")
-                                .font(.system(size: 28))
+                            // P27.e — laptopcomputer reads as open-and-tilted
+                            // which sits more naturally than the closed
+                            // `macbook` glyph. Centered against the text
+                            // column via DashedBanner's .center alignment.
+                            Image(systemName: "laptopcomputer")
+                                .font(.system(size: 32, weight: .light))
                                 .foregroundStyle(SmoothieColor.textTertiary)
-                                .padding(.trailing, 4)
+                                .frame(width: 44)
                         }
                         .padding(.top, 4)
                         .listRowBackground(Color.clear)
