@@ -36,10 +36,14 @@ struct ManualPairView: View {
 
                         Button(action: connect) {
                             HStack(spacing: 8) {
-                                if verifying { ProgressView().controlSize(.small).tint(.white) }
+                                if verifying {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(canSubmit ? SmoothieColor.onAccent : .white)
+                                }
                                 Text(verifying ? "Verifying…" : "Connect")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(canSubmit ? SmoothieColor.onAccent : .white.opacity(0.6))
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)

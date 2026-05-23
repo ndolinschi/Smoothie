@@ -4,6 +4,9 @@ struct AgentStream: View {
     let events: [SmoothieEventWire]
     let connection: SSEClient.State
     let state: SessionStateWire
+    /// Lives on `SessionLiveStore` so tool-card expanded chevrons survive
+    /// `LazyVStack` view recycling. AgentStream is the only consumer.
+    @Bindable var expandStore: SessionLiveStore
 
     /// Memoised tool-stack collapse output. We rebuild it only when the
     /// event count or the trailing event identity actually changes —
@@ -51,10 +54,33 @@ struct AgentStream: View {
         return "\(events.count)-\(last?.id ?? "-")-\(last?.content.count ?? 0)-\(showsThinkingPulse)"
     }
 
+    /// Treat the stream as empty for placeholder purposes when there are
+    /// no events that would actually render visibly. WAITING / DONE /
+    /// EmptyView-rendered divider rows count as invisible — they only
+    /// move the state machine. Without this guard, a freshly spawned
+    /// session (single WAITING event from ProcessRegistry) showed a
+    /// blank middle area instead of the friendly "Ready when you are"
+    /// placeholder.
+    private var hasVisibleEvents: Bool {
+        events.contains { event in
+            switch event.type {
+            case .waiting, .done, .unknown, .contextUpdate:
+                return false
+            case .message, .thinking, .toolUse, .toolResult, .fileEdit, .error, .limitReached:
+                // toolResult dividers (metadata.divider) are technically
+                // visible but rendering them in isolation reads as a
+                // floating "( )" — they're meant as separators between
+                // visible content. We still count them so the placeholder
+                // doesn't appear after the divider lands.
+                return true
+            }
+        }
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                if events.isEmpty {
+                if !hasVisibleEvents {
                     EmptyStreamPlaceholder(connection: connection, state: state)
                         .frame(maxWidth: .infinity, minHeight: 320)
                         .padding(.horizontal, 16)
@@ -67,7 +93,23 @@ struct AgentStream: View {
                             case .event(let e):
                                 EventRow(event: e).id(item.id)
                             case .toolStack(let name, let members):
-                                ToolStackRow(name: name, members: members).id(item.id)
+                                ToolStackRow(
+                                    name: name,
+                                    members: members,
+                                    expandBinding: expandBinding(for: item.id),
+                                    resultExpandBinding: resultExpandBinding(for: item.id)
+                                ).id(item.id)
+                            case .toolCard(let use, let result):
+                                ToolCallCard(
+                                    icon: use.type == .fileEdit ? "doc.text.fill" : "wrench.adjustable",
+                                    name: use.content,
+                                    status: result != nil ? .completed : .running,
+                                    inputFields: EventRow.inputFields(from: use),
+                                    result: result?.content,
+                                    expanded: expandBinding(for: use.id),
+                                    resultExpanded: resultExpandBinding(for: use.id)
+                                )
+                                .id(item.id)
                             }
                         }
                         if showsThinkingPulse {
@@ -104,6 +146,29 @@ struct AgentStream: View {
             .onChange(of: events.count) { _, _ in refreshItemsIfNeeded() }
             .onChange(of: events.last?.content.count ?? 0) { _, _ in refreshItemsIfNeeded() }
         }
+    }
+
+    /// Build a Set<id> ↔ Bool binding for the per-card expanded chevron.
+    /// The Set lives on `SessionLiveStore` so it survives view recycles
+    /// when the LazyVStack reuses ToolCallCard instances during scroll.
+    private func expandBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandStore.expandedCardIds.contains(id) },
+            set: { newValue in
+                if newValue { expandStore.expandedCardIds.insert(id) }
+                else        { expandStore.expandedCardIds.remove(id) }
+            }
+        )
+    }
+
+    private func resultExpandBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandStore.expandedResultIds.contains(id) },
+            set: { newValue in
+                if newValue { expandStore.expandedResultIds.insert(id) }
+                else        { expandStore.expandedResultIds.remove(id) }
+            }
+        )
     }
 }
 
@@ -171,6 +236,10 @@ private struct EmptyStreamPlaceholder: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(SmoothieColor.statusErr)
+            case .unknown:
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(SmoothieColor.textTertiary)
             }
         }
     }
@@ -188,6 +257,7 @@ private struct EmptyStreamPlaceholder: View {
             case .done:                return "Session finished"
             case .error:               return "Something went wrong"
             case .limitReached:        return "Rate limit reached"
+            case .unknown:             return "Unknown session state"
             }
         }
     }
@@ -214,6 +284,8 @@ private struct EmptyStreamPlaceholder: View {
                 return "The CLI process reported an error before producing output."
             case .limitReached:
                 return "The provider rejected the turn. Try again later or hand off to another CLI."
+            case .unknown:
+                return "This iOS build doesn't recognise the daemon's session state. Update the app or check release notes."
             }
         }
     }
@@ -244,31 +316,47 @@ private struct ThinkingPulseRow: View {
     }
 }
 
-/// Either a single event or a collapsed run of same-name `.toolUse` events
-/// (e.g. three consecutive `Bash` calls render as a `Bash ×3` stack chip).
+/// One visual row in the agent stream. Either a single event, a single
+/// tool invocation paired with its optional result, or a collapsed run
+/// of same-name tool calls (`Bash ×3`).
 struct AgentStreamItem: Identifiable {
     enum Kind {
         case event(SmoothieEventWire)
         case toolStack(name: String, members: [SmoothieEventWire])
+        case toolCard(use: SmoothieEventWire, result: SmoothieEventWire?)
     }
     let kind: Kind
     let id: String
 
-    /// Walk `events` and merge consecutive `.toolUse` runs that share the
-    /// same tool name. `.toolResult` events between the same-name tool_use
-    /// calls are absorbed into the stack (and surfaced only when the user
-    /// taps to expand). Any other event type (message, thinking, fileEdit,
-    /// etc.) breaks the run.
+    /// Walk `events` and produce the visual rows:
+    /// - `.fileEdit` becomes a standalone `.toolCard` (no result pairing).
+    /// - A singleton `.toolUse` pairs with its immediately-following
+    ///   `.toolResult` into one `.toolCard`.
+    /// - 2+ consecutive same-name `.toolUse` events collapse into a
+    ///   single `.toolStack` (rendered as a `ToolCallCard` with a ×N
+    ///   stack badge).
+    /// - Everything else passes through as `.event`.
+    /// Divider events (a `.toolResult` carrying `metadata.divider`) are
+    /// never absorbed into a tool run — they stay as standalone rows so
+    /// `EventRow`'s divider renderer fires.
     static func collapse(_ events: [SmoothieEventWire]) -> [AgentStreamItem] {
         var out: [AgentStreamItem] = []
         var i = 0
         while i < events.count {
             let e = events[i]
+
+            if e.type == .fileEdit {
+                out.append(AgentStreamItem(kind: .toolCard(use: e, result: nil), id: e.id))
+                i += 1
+                continue
+            }
+
             guard e.type == .toolUse else {
                 out.append(AgentStreamItem(kind: .event(e), id: e.id))
                 i += 1
                 continue
             }
+
             let name = e.content
             var run: [SmoothieEventWire] = [e]
             var j = i + 1
@@ -276,23 +364,40 @@ struct AgentStreamItem: Identifiable {
                 let next = events[j]
                 if next.type == .toolUse && next.content == name {
                     run.append(next); j += 1
-                } else if next.type == .toolResult {
+                } else if next.type == .toolResult && EventRow.dividerLabel(for: next) == nil {
                     run.append(next); j += 1
                 } else {
                     break
                 }
             }
-            // Count how many tool_use entries we collected. A "stack" only
-            // makes sense if there are 2+ tool_uses; otherwise emit each
-            // individually so a lonely Bash call still shows its own chip.
             let useCount = run.filter { $0.type == .toolUse }.count
             if useCount >= 2 {
                 out.append(AgentStreamItem(kind: .toolStack(name: name, members: run), id: e.id))
             } else {
-                // One tool_use (plus maybe a tool_result) — render in place.
-                for member in run {
-                    out.append(AgentStreamItem(kind: .event(member), id: member.id))
+                let use = run.first(where: { $0.type == .toolUse })!
+                // Pair the tool_use with EVERY following tool_result up to
+                // the next break. The prior implementation took only the
+                // first result via `first(where:)` and dropped any 2nd+,
+                // which manifested as missing output text for tools that
+                // streamed multiple chunks (e.g. a Bash run with stdout +
+                // stderr arriving as separate frames). Joining preserves
+                // the full output for the user.
+                let results = run.filter { $0.type == .toolResult }
+                let combined: SmoothieEventWire?
+                if results.isEmpty {
+                    combined = nil
+                } else if results.count == 1 {
+                    combined = results[0]
+                } else {
+                    let joined = results.map(\.content).joined(separator: "\n\n──\n\n")
+                    combined = SmoothieEventWire(
+                        type: .toolResult,
+                        content: joined,
+                        metadata: results[0].metadata,
+                        timestamp: results[0].timestamp
+                    )
                 }
+                out.append(AgentStreamItem(kind: .toolCard(use: use, result: combined), id: use.id))
             }
             i = j
         }
@@ -300,54 +405,42 @@ struct AgentStreamItem: Identifiable {
     }
 }
 
-/// Compact stacked view for a run of N same-name tool calls (e.g. `Bash ×3`).
-/// Tap toggles expansion; expanded view streams the underlying tool_use +
-/// tool_result rows in order, each reusing the existing EventRow renderer.
+/// Card for a run of N same-name tool calls. Reuses `ToolCallCard` with
+/// the stack-count badge so the visual surface is identical to a
+/// singleton tool card — just with a `×N` chip in the header. Args are
+/// borrowed from the first call in the run (representative); all
+/// emitted results are joined and rendered inside the card's result
+/// block.
 private struct ToolStackRow: View {
     let name: String
     let members: [SmoothieEventWire]
-    @State private var expanded: Bool = false
+    let expandBinding: Binding<Bool>
+    let resultExpandBinding: Binding<Bool>
 
     private var useCount: Int {
         members.filter { $0.type == .toolUse }.count
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "wrench.adjustable")
-                        .font(.system(size: 11))
-                    Text(name)
-                        .font(.system(size: 12, design: .monospaced))
-                    Text("×\(useCount)")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(SmoothieColor.accent)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(SmoothieColor.accentSoft, in: .capsule)
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-                .foregroundStyle(.white.opacity(0.75))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(SmoothieColor.bgCard, in: .capsule)
-                .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
+    private var firstUse: SmoothieEventWire? {
+        members.first(where: { $0.type == .toolUse })
+    }
 
-            if expanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(members) { e in
-                        EventRow(event: e)
-                    }
-                }
-                .padding(.leading, 14)
-            }
-        }
+    private var combinedResult: String? {
+        let results = members.filter { $0.type == .toolResult }.map { $0.content }
+        guard !results.isEmpty else { return nil }
+        return results.joined(separator: "\n\n──\n\n")
+    }
+
+    var body: some View {
+        ToolCallCard(
+            icon: "wrench.adjustable",
+            name: name,
+            status: combinedResult != nil ? .completed : .running,
+            inputFields: firstUse.map { EventRow.inputFields(from: $0) } ?? [],
+            result: combinedResult,
+            stackCount: useCount,
+            expanded: expandBinding,
+            resultExpanded: resultExpandBinding
+        )
     }
 }

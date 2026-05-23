@@ -25,7 +25,7 @@ struct VoiceUnavailableSheet: View {
                 Button(action: onDismiss) {
                     Text("Got it")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .foregroundStyle(SmoothieColor.onAccent)
                         .padding(.vertical, 12)
                         .frame(maxWidth: .infinity)
                         .background(SmoothieColor.accent, in: .capsule)

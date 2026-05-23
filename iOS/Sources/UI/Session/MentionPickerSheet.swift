@@ -1,13 +1,136 @@
 import SwiftUI
 
-/// File picker for @-mentions. Lists project files via `/projects/files`,
-/// returns the absolute file content plus the relative path so callers can
-/// both stage the file and insert "@<relative path>" into the input.
+/// @-mention picker. Modelled after Cursor's mobile picker: a root list
+/// of context categories (Branch / Browser / MCP / Files & Folders /
+/// Past Chats) that drills into a category-specific picker when tapped.
+/// v1 ships Files & Folders as the only active category — the rest are
+/// disabled placeholders so the visual surface looks complete even
+/// before the daemon-side wiring lands.
+///
+/// `onPick(FileEntryWire, FileContentWire)` is the existing callback —
+/// invoked when the user taps a file in the Files & Folders sub-picker.
+/// New categories that need different payloads (e.g. Past Chats) will
+/// add their own callbacks alongside without breaking this one.
 struct MentionPickerSheet: View {
     let projectPath: String
     let onPick: (FileEntryWire, FileContentWire) -> Void
 
     @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                SmoothieColor.bgPrimary.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Add context")
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 16)
+
+                    VStack(spacing: 6) {
+                        NavigationLink {
+                            FilesAndFoldersPicker(projectPath: projectPath, onPick: { entry, content in
+                                onPick(entry, content)
+                                dismiss()
+                            })
+                        } label: {
+                            categoryRow(
+                                icon: "folder.fill",
+                                title: "Files & Folders",
+                                subtitle: "Attach a file from the project tree",
+                                enabled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        categoryRow(
+                            icon: "point.3.connected.trianglepath.dotted",
+                            title: "Branch",
+                            subtitle: "Use current branch diff as context — v1.5",
+                            enabled: false
+                        )
+
+                        categoryRow(
+                            icon: "bubble.left.and.bubble.right.fill",
+                            title: "Past Chats",
+                            subtitle: "Reference a previous session — v1.5",
+                            enabled: false
+                        )
+
+                        categoryRow(
+                            icon: "server.rack",
+                            title: "MCP Servers",
+                            subtitle: "Plug in a connector — v1.5",
+                            enabled: false
+                        )
+                    }
+                    .padding(.horizontal, 14)
+
+                    Spacer()
+                }
+            }
+            .navigationTitle("Mention")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(SmoothieColor.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func categoryRow(
+        icon: String,
+        title: String,
+        subtitle: String,
+        enabled: Bool
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(enabled ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
+                .frame(width: SmoothieMetrics.glyphTile, height: SmoothieMetrics.glyphTile)
+                .background(SmoothieColor.bgGlyph, in: .rect(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(enabled ? SmoothieColor.textPrimary : SmoothieColor.textSecondary)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(SmoothieColor.textTertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if enabled {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(SmoothieColor.textTertiary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
+        .opacity(enabled ? 1.0 : 0.55)
+    }
+}
+
+/// Files & Folders sub-picker. Lists project files via `/projects/files`,
+/// returns the absolute file content plus the relative path so callers
+/// can both stage the file and insert "@<relative path>" into the input.
+/// Lives as a pushed view in the MentionPickerSheet's NavigationStack.
+struct FilesAndFoldersPicker: View {
+    let projectPath: String
+    let onPick: (FileEntryWire, FileContentWire) -> Void
+
     @Environment(PairingStore.self) private var pairing
 
     @State private var files: [FileEntryWire] = []
@@ -23,66 +146,59 @@ struct MentionPickerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                SmoothieColor.bgPrimary.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(SmoothieColor.textTertiary)
-                        TextField("Search files in project", text: $query)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .foregroundStyle(SmoothieColor.textPrimary)
-                            .font(.system(.body, design: .monospaced))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
-                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 10)
-
-                    if loading {
-                        ProgressView().tint(SmoothieColor.textTertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let loadError {
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.circle").foregroundStyle(SmoothieColor.statusErr)
-                            Text(loadError).font(.system(size: 13)).foregroundStyle(SmoothieColor.textSecondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if filtered.isEmpty {
-                        Text(query.isEmpty ? "No files found." : "No matches.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(SmoothieColor.textTertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 4) {
-                                ForEach(filtered) { file in row(file) }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 24)
-                        }
-                        .scrollContentBackground(.hidden)
-                    }
+        ZStack {
+            SmoothieColor.bgPrimary.ignoresSafeArea()
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                    TextField("Search files in project", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .font(.system(.body, design: .monospaced))
                 }
-            }
-            .navigationTitle("Mention file")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }.foregroundStyle(SmoothieColor.textSecondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+
+                if loading {
+                    ProgressView().tint(SmoothieColor.textTertiary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let loadError {
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.circle").foregroundStyle(SmoothieColor.statusErr)
+                        Text(loadError).font(.system(size: 13)).foregroundStyle(SmoothieColor.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filtered.isEmpty {
+                    Text(query.isEmpty ? "No files found." : "No matches.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            ForEach(filtered) { file in row(file) }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 24)
+                    }
+                    .scrollContentBackground(.hidden)
                 }
             }
         }
+        .navigationTitle("Files & Folders")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(SmoothieColor.bgPrimary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .task { await load() }
     }
 
@@ -166,7 +282,6 @@ struct MentionPickerSheet: View {
         do {
             let content = try await api.fileContent(path: file.fullPath)
             onPick(file, content)
-            dismiss()
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

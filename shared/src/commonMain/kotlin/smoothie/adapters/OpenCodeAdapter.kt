@@ -47,15 +47,34 @@ class OpenCodeAdapter : AdapterParser {
             supportsReasoningEffort = false,
             supportsModes = false,
             defaultModel = null,
-            // OpenCode picks the model from the user's config — we ship a
-            // short list of common defaults so the iOS model picker has
-            // something to show, but the actual list comes from the user's
-            // `~/.config/opencode/opencode.json` config.
+            // OpenCode picks the model from the user's config. The
+            // proper fix is to hit the running serve's `/providers`
+            // endpoint after spawn and forward the result — that's
+            // v1.5 work since it needs the OpenCodeServeHost to feed
+            // dynamic features back through the adapter. For v1 we
+            // ship a generous static list covering the four main
+            // providers OpenCode supports out of the box so the iOS
+            // model picker isn't an embarrassing three-row sliver.
             availableModels = listOf(
+                // Anthropic
+                "anthropic/claude-opus-4-7",
+                "anthropic/claude-sonnet-4-6",
                 "anthropic/claude-sonnet-4-5",
                 "anthropic/claude-haiku-4-5",
+                // OpenAI
                 "openai/gpt-5",
+                "openai/gpt-5-mini",
+                "openai/gpt-4o",
+                "openai/o1",
+                "openai/o3-mini",
+                // Google
                 "google/gemini-3-pro",
+                "google/gemini-3-flash-preview",
+                "google/gemini-2.5-pro",
+                // Groq / open models
+                "groq/llama-3.3-70b-versatile",
+                "groq/kimi-k2",
+                "groq/qwen-2.5-coder-32b",
             ),
             availableReasoningEfforts = emptyList(),
             availableModes = emptyList(),

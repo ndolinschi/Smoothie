@@ -10,9 +10,18 @@ struct EventRow: View {
     let event: SmoothieEventWire
     @State private var expanded = false
 
+    var body: some View {
+        if let label = Self.dividerLabel(for: event) {
+            dividerRow(label: label)
+        } else {
+            typedBody
+        }
+    }
+
     /// Resolve a divider label from either the new metadata flag or the
-    /// legacy sentinel prefix. Metadata wins when both are set.
-    private var dividerLabel: String? {
+    /// legacy sentinel prefix. Static so `AgentStreamItem.collapse` can
+    /// guard against absorbing a divider into an adjacent tool run.
+    static func dividerLabel(for event: SmoothieEventWire) -> String? {
         if let s = event.metadata?["divider"]?.stringValue, !s.isEmpty {
             return s
         }
@@ -20,14 +29,6 @@ struct EventRow: View {
             return String(event.content.dropFirst(dividerSentinel.count))
         }
         return nil
-    }
-
-    var body: some View {
-        if let label = dividerLabel {
-            dividerRow(label: label)
-        } else {
-            typedBody
-        }
     }
 
     private func dividerRow(label: String) -> some View {
@@ -56,16 +57,22 @@ struct EventRow: View {
             if !event.content.isEmpty {
                 thinkingRow
             }
-        case .toolUse:
-            toolRow(icon: "wrench.adjustable", tint: .white.opacity(0.75))
+        case .toolUse, .fileEdit:
+            // Tool invocations are grouped into a `ToolCallCard` by
+            // `AgentStreamItem.collapse` before reaching this row. The
+            // case stays as a defensive `EmptyView` in case a future
+            // call site renders an `EventRow` outside the agent stream.
+            EmptyView()
         case .toolResult:
+            // Most `.toolResult` events are absorbed into a `ToolCallCard`
+            // by the collapse step; this fallback only fires for standalone
+            // results (e.g. a daemon-emitted result without a paired
+            // tool_use) and divider events handled above.
             Text(event.content)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.55))
                 .lineLimit(expanded ? nil : 4)
                 .onTapGesture { expanded.toggle() }
-        case .fileEdit:
-            toolRow(icon: "doc.text.fill", tint: .green.opacity(0.85))
         case .waiting:
             EmptyView()
         case .done:
@@ -81,7 +88,7 @@ struct EventRow: View {
                     .foregroundStyle(.red)
                 Text(event.content)
                     .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.55))
+                    .foregroundStyle(SmoothieColor.statusErr)
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,6 +98,15 @@ struct EventRow: View {
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
             )
+        case .contextUpdate:
+            // Side-channel event consumed by SessionLiveStore — never
+            // belongs in the visible stream.
+            EmptyView()
+        case .unknown:
+            // Forward-compat: a newer daemon emitted an event type this
+            // build doesn't know. Render nothing rather than crashing;
+            // the next known event will rejoin the visible stream.
+            EmptyView()
         }
     }
 
@@ -132,44 +148,11 @@ struct EventRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Chip + optional expandable detail for `.toolUse` and `.fileEdit`.
-    /// The chip is always tappable; if the event has structured input
-    /// metadata (Bash's `command`, Edit's `old_string`, etc.), tapping
-    /// reveals a key/value detail block below.
-    private func toolRow(icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                if !inputFields.isEmpty { expanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: icon)
-                        .font(.system(size: 11))
-                    Text(event.content)
-                        .font(.system(size: 12, design: .monospaced))
-                    if !inputFields.isEmpty {
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                }
-                .foregroundStyle(tint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(SmoothieColor.bgCard, in: .capsule)
-                .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            if expanded, !inputFields.isEmpty {
-                ToolInputView(fields: inputFields)
-            }
-        }
-    }
-
-    /// Ordered list of (key, value) pairs extracted from
-    /// `metadata.input`. Empty if the event has no input — in which case
-    /// the chip stays non-expandable.
-    private var inputFields: [(String, String)] {
+    /// Ordered list of `(key, value)` pairs extracted from `metadata.input`.
+    /// Used by `ToolCallCard` (via `AgentStream`) to populate the card
+    /// body. Returns an empty array if the event has no structured input
+    /// or the input isn't a JSON object.
+    static func inputFields(from event: SmoothieEventWire) -> [(String, String)] {
         guard let metadata = event.metadata,
               let input = metadata["input"]
         else { return [] }
@@ -199,7 +182,7 @@ struct EventRow: View {
         return ordered
     }
 
-    private func anyCodableString(_ v: AnyCodable) -> String {
+    private static func anyCodableString(_ v: AnyCodable) -> String {
         switch v.value {
         case .null:           return "null"
         case .bool(let b):    return b ? "true" : "false"
@@ -211,37 +194,5 @@ struct EventRow: View {
         case .object(let obj):
             return "{" + obj.map { "\($0.key): \(anyCodableString($0.value))" }.joined(separator: ", ") + "}"
         }
-    }
-}
-
-/// Renders the structured input args of a tool call. Mono-font, scrollable
-/// for very long fields (e.g. Edit's `old_string`). Sits below the chip
-/// when the user taps to expand.
-private struct ToolInputView: View {
-    let fields: [(String, String)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(fields.enumerated()), id: \.offset) { _, field in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(field.0.uppercased())
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .tracking(0.6)
-                        .foregroundStyle(SmoothieColor.textTertiary)
-                    Text(field.1)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(SmoothieColor.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerSm))
-        .overlay(
-            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
     }
 }

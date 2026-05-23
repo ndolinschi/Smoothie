@@ -122,24 +122,23 @@ final class ProcessRegistry {
             hosts[session.id] = host
             activeCount = hosts.count
 
-            // Inject a synthetic "starting" event right after the
-            // process launches so the iOS empty-state placeholder
-            // dismisses immediately instead of waiting 5-15 s for the
-            // CLI to print its own init line. The thinking pulse takes
-            // over while the real init is still loading. Without this,
-            // the user sees the static "Agent is warming up…" card for
-            // the full provider warmup window and assumes the app is
-            // hung.
-            let resumeLabel = effective.providerSessionId?.isEmpty == false ? " (resuming)" : ""
-            let projectName = (effective.projectPath as NSString).lastPathComponent
-            let bootMessage = "Spawning \(effective.cli.displayName) in \(projectName)\(resumeLabel)…"
-            let bootEvent = SmoothieEvent(
-                type: .thinking,
-                content: bootMessage,
+            // Inject a single WAITING event to flip the session state
+            // out of .starting (otherwise iOS sits on "Agent is warming
+            // up…" forever — every CLI we wrap is ready for stdin
+            // immediately after spawn). Prior versions also injected a
+            // THINKING event with text like "Spawning Claude Code in
+            // Smoothie…" — that turned out to look broken (typing pulse
+            // animating with no actual agent activity) and added noise
+            // to the conversation history. The empty stream + .waiting
+            // state now triggers iOS's `EmptyStreamPlaceholder` which
+            // renders the cleaner "Ready when you are" card.
+            let readyEvent = SmoothieEvent(
+                type: .waiting,
+                content: "",
                 metadata: nil,
                 timestamp: Int64(Date().timeIntervalSince1970 * 1000)
             )
-            try? await session.injectEvent(event: bootEvent)
+            try? await session.injectEvent(event: readyEvent)
         } catch {
             partialHost?.terminate()
             try? await session.markError(message: "spawn failed: \(error.localizedDescription)")
@@ -188,13 +187,29 @@ final class ProcessRegistry {
     // MARK: - Helpers
 
     private func which(_ binary: String) -> String? {
-        let candidates = [
+        // Search the user's PATH first so installs under non-standard
+        // prefixes (~/.cargo/bin, ~/.bun/bin, ~/.pyenv/shims, etc.) are
+        // detected without a hardcoded candidate list. Then fall back to
+        // the curated list for cases where the daemon was launched
+        // without a PATH inherited (e.g. via launchd plist).
+        if let pathEnv = ProcessInfo.processInfo.environment["PATH"] {
+            for dir in pathEnv.split(separator: ":", omittingEmptySubsequences: true) {
+                let candidate = "\(dir)/\(binary)"
+                if FileManager.default.isExecutableFile(atPath: candidate) {
+                    return candidate
+                }
+            }
+        }
+        let curated = [
             "\(NSHomeDirectory())/.local/bin/\(binary)",
+            "\(NSHomeDirectory())/.cargo/bin/\(binary)",
+            "\(NSHomeDirectory())/.bun/bin/\(binary)",
+            "\(NSHomeDirectory())/.cursor/bin/\(binary)",
             "/opt/homebrew/bin/\(binary)",
             "/usr/local/bin/\(binary)",
             "/usr/bin/\(binary)",
         ]
-        for p in candidates where FileManager.default.isExecutableFile(atPath: p) { return p }
+        for p in curated where FileManager.default.isExecutableFile(atPath: p) { return p }
         return nil
     }
 

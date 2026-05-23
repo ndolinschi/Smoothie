@@ -17,6 +17,9 @@ struct SessionView: View {
     @State private var lastNotifiedState: SessionStateWire?
     @State private var showingModeSheet = false
     @State private var showingDiffSheet = false
+    /// Drives the bottom-sheet presentation of `ContextBudgetPanel`
+    /// from the StatusFooter percent-ring tap.
+    @State private var showingBudget = false
     @State private var showingModelSheet = false
     /// P25.b — compact rounded-card popover anchored to the toolbar
     /// title. The full search-enabled `ModelPickerSheet` is still
@@ -101,7 +104,8 @@ struct SessionView: View {
                     ConnectionBanner(
                         connection: store.connection,
                         state: store.state,
-                        hasReceivedEvent: store.hasReceivedEvent
+                        hasReceivedEvent: store.hasReceivedEvent,
+                        onReconnect: { store.reconnect() }
                     )
                     .animation(.easeInOut(duration: 0.2), value: store.connected)
                     .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
@@ -118,7 +122,8 @@ struct SessionView: View {
                     AgentStream(
                         events: store.events,
                         connection: store.connection,
-                        state: store.state
+                        state: store.state,
+                        expandStore: store
                     )
                     if !store.events.isEmpty {
                         ActionChipsRow(
@@ -127,6 +132,11 @@ struct SessionView: View {
                             onDiffTap: { showingDiffSheet = true }
                         )
                     }
+                    StatusFooter(
+                        branchLabel: (currentSession.projectPath as NSString).lastPathComponent,
+                        snapshot: store.contextSnapshot,
+                        onTapBudget: { showingBudget = true }
+                    )
                     MessageInput(
                         session: currentSession,
                         features: features,
@@ -190,6 +200,12 @@ struct SessionView: View {
                             .presentationBackground(SmoothieColor.menuBg)
                     }
                 }
+                // Note: my earlier p25 work kept a small "cloud + mode"
+                // pill inline next to the model button. The parallel
+                // branch (p25.c) moved that to a standalone `EnvPill`
+                // row sitting below the ConnectionBanner, so the inline
+                // version is removed here — see the EnvPill above
+                // `AgentStream` in `body`.
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -213,6 +229,13 @@ struct SessionView: View {
                         .overlay(Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
                         .contentShape(Circle())
                 }
+            }
+        }
+        .sheet(isPresented: $showingBudget) {
+            if let store, let snap = store.contextSnapshot {
+                ContextBudgetPanel(snapshot: snap, onDismiss: { showingBudget = false })
+                    .presentationDetents([.medium, .large])
+                    .presentationBackground(.clear)
             }
         }
         .sheet(isPresented: $showingModeSheet) {

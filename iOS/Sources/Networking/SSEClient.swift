@@ -32,6 +32,15 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private var stopped: Bool = false
     private let lock = NSLock()
 
+    /// Cap on consecutive failed reconnects. After this many backoff
+    /// cycles we surface `.gone` with a user-actionable message instead
+    /// of silently spinning forever. The previous behaviour with no cap
+    /// was the root cause of the "infinity connecting" complaint —
+    /// e.g. a misbehaving Tailscale proxy returning 502 on every probe
+    /// kept the banner stuck at "Reconnecting in 30s…" indefinitely.
+    private static let maxRetries: Int = 6
+    private var retryCount: Int = 0
+
     init(
         url: URL,
         bearer: String,
@@ -44,8 +53,16 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         self.onState = onState
         super.init()
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = .infinity
-        cfg.timeoutIntervalForResource = .infinity
+        // Request timeout = 60s for the initial handshake — if the daemon
+        // doesn't respond with status in a minute, the network's broken.
+        // Resource timeout = 600s (10 min) as an upper bound on a single
+        // SSE pipe; long enough for idle sessions, short enough that a
+        // half-open TCP connection eventually drops and reconnect kicks
+        // in. Both were `.infinity` previously, which is why a hung
+        // proxy / NAT timeout would leave the iOS app stuck on
+        // "Connecting…" forever with no way out.
+        cfg.timeoutIntervalForRequest = 60
+        cfg.timeoutIntervalForResource = 600
         cfg.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         cfg.urlCache = nil
         cfg.httpAdditionalHeaders = ["Accept": "text/event-stream"]
@@ -53,7 +70,13 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     }
 
     func start() {
-        lock.lock(); stopped = false; lock.unlock()
+        lock.lock()
+        stopped = false
+        // Reset the retry counter on explicit start so a manual reconnect
+        // (via SessionLiveStore.reconnect) gets a fresh attempt budget.
+        retryCount = 0
+        backoffStep = 0
+        lock.unlock()
         onState(.connecting)
         openConnection()
     }
@@ -73,7 +96,10 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        req.timeoutInterval = .infinity
+        // 60s handshake timeout. The configuration-level resource timeout
+        // governs the whole streaming pipe; this one is just for the
+        // initial response headers.
+        req.timeoutInterval = 60
         guard let session else { return }
         let t = session.dataTask(with: req)
         task = t
@@ -83,9 +109,24 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private func scheduleReconnect() {
         lock.lock()
         if stopped { lock.unlock(); return }
+        retryCount += 1
+        let attempt = retryCount
         let nextStep = min(backoffStep + 1, 6)
         backoffStep = nextStep
         lock.unlock()
+
+        // After N consecutive failed reconnects we stop spinning and
+        // surface .gone so the user can either tap Reconnect (which
+        // resets retryCount via start()) or pair a different Mac. Before
+        // this cap landed, a misbehaving network kept the banner stuck
+        // on "Reconnecting in 30s…" forever — the visible "infinity
+        // connecting" symptom from the regression report.
+        if attempt > Self.maxRetries {
+            stopAndMarkGone(
+                reason: "Couldn't reach your Mac after \(Self.maxRetries) attempts. Check the daemon is running and tap Reconnect."
+            )
+            return
+        }
 
         let delays = [1, 2, 4, 8, 16, 30]
         let delay = delays[min(nextStep - 1, delays.count - 1)]
@@ -120,7 +161,13 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         }
         switch http.statusCode {
         case 200:
+            // Successful handshake — reset both the backoff cursor AND
+            // the retry counter so a later transient blip doesn't share
+            // a budget with prior failures.
+            lock.lock()
             backoffStep = 0
+            retryCount = 0
+            lock.unlock()
             onState(.connected)
             completionHandler(.allow)
         case 404:
@@ -134,9 +181,15 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         case 410:
             stopAndMarkGone(reason: "Session ended on the Mac.")
             completionHandler(.cancel)
+        case 502, 503, 504:
+            // Gateway / upstream error. Likely a misconfigured proxy or
+            // the daemon temporarily overloaded. We DO want to retry
+            // these, but the global retry cap in scheduleReconnect()
+            // will eventually flip us to .gone instead of spinning.
+            completionHandler(.cancel)
         default:
-            // Other non-200s (5xx, etc.) — let the existing retry path
-            // handle it via didCompleteWithError.
+            // Other non-200s — let the existing retry path handle it
+            // via didCompleteWithError + the retry cap.
             completionHandler(.cancel)
         }
     }

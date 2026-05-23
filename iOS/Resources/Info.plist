@@ -31,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -40,6 +42,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to scan a pairing QR code from the Smoothie menubar app, and to attach photos to your messages.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Smoothie pairs with the Smoothie app on your Mac over the local network or your tailnet. Nothing is uploaded to the cloud.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Used to record short voice input that's transcribed into your message.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -59,7 +63,7 @@
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string></string>
+		<string>LaunchBackground</string>
 	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>

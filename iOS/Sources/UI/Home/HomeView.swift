@@ -18,6 +18,11 @@ struct HomeView: View {
     /// from a notification tap. HomeView resolves the id against the live
     /// `/sessions` list and pushes SessionView via its own NavigationStack.
     @Binding var deepLinkedSessionId: String?
+    /// Toast surfaced when a deep link can't resolve (session gone, daemon
+    /// unreachable). Cleared after the user dismisses the alert. Without
+    /// this, a tap on a notification for a killed session was a silent
+    /// no-op and the user had no idea why nothing happened.
+    @State private var deepLinkErrorMessage: String?
 
     init(deepLinkedSessionId: Binding<String?> = .constant(nil)) {
         self._deepLinkedSessionId = deepLinkedSessionId
@@ -188,6 +193,18 @@ struct HomeView: View {
             deepLinkedSessionId = nil
             Task { await resolveAndPush(sessionId: id) }
         }
+        .alert(
+            "Couldn't open session",
+            isPresented: Binding(
+                get: { deepLinkErrorMessage != nil },
+                set: { if !$0 { deepLinkErrorMessage = nil } }
+            ),
+            presenting: deepLinkErrorMessage
+        ) { _ in
+            Button("OK", role: .cancel) { deepLinkErrorMessage = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     /// Resolve a notification-tapped session id against the live list and
@@ -199,8 +216,19 @@ struct HomeView: View {
             return
         }
         let api = APIClient(store: pairing)
-        if let descriptor = try? await api.sessions().first(where: { $0.id == id }) {
-            selectedSession = descriptor
+        do {
+            let list = try await api.sessions()
+            if let descriptor = list.first(where: { $0.id == id }) {
+                selectedSession = descriptor
+            } else {
+                // Surface the no-op to the user — silent failure was the
+                // worst part of the prior behaviour: tap a notification,
+                // nothing happens, no way to tell whether the app froze
+                // or the session was already killed on the Mac.
+                deepLinkErrorMessage = "Session not found. It may have already been killed on your Mac."
+            }
+        } catch {
+            deepLinkErrorMessage = "Couldn't reach your Mac. \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
         }
     }
 
@@ -267,11 +295,18 @@ struct HomeView: View {
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            // Long-press / haptic-touch menu replaces the
+                            // prior swipe-to-delete. The mono-palette
+                            // swipe action rendered a white "Remove"
+                            // pill against the dark row, which read as
+                            // broken animation; a contextMenu lets the
+                            // system render the destructive action with
+                            // its native red affordance.
+                            .contextMenu {
                                 Button(role: .destructive) {
                                     Task { await deleteSession(s) }
                                 } label: {
-                                    Label("Remove", systemImage: "trash")
+                                    Label("Delete session", systemImage: "trash")
                                 }
                             }
                     }
@@ -290,6 +325,29 @@ struct HomeView: View {
                             .padding(.vertical, 1)
                             .background(SmoothieColor.bgChip, in: .capsule)
                         Spacer(minLength: 0)
+                        // Quick "+" to open a new session pre-filled with
+                        // this project's path. Faster than picking the
+                        // folder from scratch via the global + button —
+                        // the user already has visual context for the
+                        // project they want to extend.
+                        if let sample = bucket.value.first {
+                            Button {
+                                pendingPath = sample.projectPath
+                                presentingNew = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(SmoothieColor.textSecondary)
+                                    .frame(width: 22, height: 22)
+                                    .background(SmoothieColor.bgCard, in: .circle)
+                                    .overlay(
+                                        Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                                    )
+                                    .contentShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("New session in \(bucket.key)")
+                        }
                     }
                     .textCase(nil)
                     .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 4, trailing: 16))
@@ -370,6 +428,7 @@ struct HomeView: View {
         case .done:                       return SmoothieColor.statusDone
         case .error, .limitReached:       return SmoothieColor.statusErr
         case .starting:                   return SmoothieColor.textSecondary
+        case .unknown:                    return SmoothieColor.textTertiary
         }
     }
 
