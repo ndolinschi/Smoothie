@@ -295,11 +295,18 @@ struct HomeView: View {
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            // Long-press / haptic-touch menu replaces the
+                            // prior swipe-to-delete. The mono-palette
+                            // swipe action rendered a white "Remove"
+                            // pill against the dark row, which read as
+                            // broken animation; a contextMenu lets the
+                            // system render the destructive action with
+                            // its native red affordance.
+                            .contextMenu {
                                 Button(role: .destructive) {
                                     Task { await deleteSession(s) }
                                 } label: {
-                                    Label("Remove", systemImage: "trash")
+                                    Label("Delete session", systemImage: "trash")
                                 }
                             }
                     }

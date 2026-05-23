@@ -16,8 +16,9 @@ struct ActivityHeatmap: View {
     /// How many weeks to display (most recent on the right).
     let weeks: Int
 
-    private let cellSize: CGFloat = 14
     private let cellSpacing: CGFloat = 4
+    private let minCellSize: CGFloat = 12
+    private let maxCellSize: CGFloat = 22
 
     /// Per-cell intensity ceiling. Uses the 90th-percentile (when there
     /// are enough samples) so a single monster-day doesn't crush every
@@ -41,45 +42,60 @@ struct ActivityHeatmap: View {
         let mostRecentMonday = cal.date(byAdding: .day, value: -daysSinceMonday, to: today) ?? today
         let maxCount = self.maxCount
 
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: cellSpacing) {
-                ForEach(0..<weeks, id: \.self) { weekIndex in
-                    let weekStart = cal.date(
-                        byAdding: .day,
-                        value: -(weeks - 1 - weekIndex) * 7,
-                        to: mostRecentMonday
-                    ) ?? mostRecentMonday
-                    VStack(spacing: cellSpacing) {
-                        ForEach(0..<7, id: \.self) { dow in
-                            let day = cal.date(byAdding: .day, value: dow, to: weekStart) ?? weekStart
-                            cellView(for: day, today: today, count: buckets[day] ?? 0, max: maxCount)
+        // Dynamic cell sizing — the prior fixed 14pt cell left a blank
+        // right gutter on iPhone widths where the stats card was wider
+        // than 12 * (14 + 4) ≈ 212pt. Read the parent's offered width
+        // via GeometryReader and divide it evenly across the weeks so
+        // the heatmap fills its column.
+        GeometryReader { geo in
+            let computed = (geo.size.width - cellSpacing * CGFloat(weeks - 1)) / CGFloat(weeks)
+            let cellSize = min(maxCellSize, max(minCellSize, computed))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: cellSpacing) {
+                    ForEach(0..<weeks, id: \.self) { weekIndex in
+                        let weekStart = cal.date(
+                            byAdding: .day,
+                            value: -(weeks - 1 - weekIndex) * 7,
+                            to: mostRecentMonday
+                        ) ?? mostRecentMonday
+                        VStack(spacing: cellSpacing) {
+                            ForEach(0..<7, id: \.self) { dow in
+                                let day = cal.date(byAdding: .day, value: dow, to: weekStart) ?? weekStart
+                                cellView(for: day, today: today, count: buckets[day] ?? 0, max: maxCount, size: cellSize)
+                            }
                         }
                     }
                 }
-            }
-            HStack(spacing: 6) {
-                Text("Less")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(SmoothieColor.textTertiary)
-                ForEach(0..<5, id: \.self) { step in
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(legendColor(step: step))
-                        .frame(width: cellSize * 0.8, height: cellSize * 0.6)
+                HStack(spacing: 6) {
+                    Text("Less")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(SmoothieColor.textTertiary)
+                    ForEach(0..<5, id: \.self) { step in
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(legendColor(step: step))
+                            .frame(width: cellSize * 0.8, height: cellSize * 0.6)
+                    }
+                    Text("More")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
-                Text("More")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(SmoothieColor.textTertiary)
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // Outer height: 7 rows * cellSize + 6 gaps * spacing + 6 (VStack
+        // spacing) + ~14 (legend row). Use a heuristic upper bound so
+        // the GeometryReader gets vertical space; the actual grid sits
+        // top-aligned inside it.
+        .frame(height: maxCellSize * 7 + cellSpacing * 6 + 6 + 14)
     }
 
-    private func cellView(for day: Date, today: Date, count: Int, max: Int) -> some View {
+    private func cellView(for day: Date, today: Date, count: Int, max: Int, size: CGFloat) -> some View {
         let isFuture = day > today
         let intensity = isFuture ? -1.0 : intensity(count: count, max: max)
         return RoundedRectangle(cornerRadius: 3, style: .continuous)
             .fill(color(for: intensity))
-            .frame(width: cellSize, height: cellSize)
+            .frame(width: size, height: size)
     }
 
     /// Map (0 ... max) to a normalised intensity in [0, 1]. We bin in
