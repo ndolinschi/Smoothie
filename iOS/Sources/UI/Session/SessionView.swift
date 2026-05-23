@@ -18,6 +18,10 @@ struct SessionView: View {
     @State private var showingModeSheet = false
     @State private var showingDiffSheet = false
     @State private var showingModelSheet = false
+    /// P25.b — compact rounded-card popover anchored to the toolbar
+    /// title. The full search-enabled `ModelPickerSheet` is still
+    /// reachable from this dropdown's "All models…" footer.
+    @State private var showingModelDropdown = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -132,13 +136,14 @@ struct SessionView: View {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 4) {
                     Button {
-                        showingModelSheet = true
+                        showingModelDropdown = true
                     } label: {
                         HStack(spacing: 4) {
                             Text(modelChipLabel)
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(SmoothieColor.textPrimary)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(SmoothieColor.textSecondary)
@@ -146,6 +151,27 @@ struct SessionView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .popover(isPresented: $showingModelDropdown, arrowEdge: .top) {
+                        if let f = features {
+                            ModelDropdownMenu(
+                                cli: currentSession.cli,
+                                currentModel: currentSession.model,
+                                features: f,
+                                onPickModel: { m in await applyRestart(.model(m)) },
+                                onMoreOptions: {
+                                    showingModelDropdown = false
+                                    showingModelSheet = true
+                                }
+                            )
+                            .presentationBackground(SmoothieColor.menuBg)
+                        } else {
+                            ProgressView()
+                                .tint(SmoothieColor.textSecondary)
+                                .padding(SmoothieMetrics.space24)
+                                .presentationCompactAdaptation(.popover)
+                                .presentationBackground(SmoothieColor.menuBg)
+                        }
+                    }
                     HStack(spacing: 6) {
                         Button {
                             showingModeSheet = true

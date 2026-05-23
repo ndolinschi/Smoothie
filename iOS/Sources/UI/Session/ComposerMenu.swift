@@ -203,6 +203,129 @@ struct ModelPickerSheet: View {
     }
 }
 
+// MARK: - Compact model dropdown (P25.b)
+
+/// Centered-toolbar model dropdown — small rounded card with one row per
+/// available model. Mirrors the Claude Code mobile reference where the
+/// model name + chevron in the nav bar opens a compact popover (not a
+/// full sheet). The existing `ModelPickerSheet` remains reachable from
+/// AttachSheet for power-user search + reasoning effort.
+struct ModelDropdownMenu: View {
+    let cli: CLIWire
+    let currentModel: String?
+    let features: ProviderFeaturesWire
+    let onPickModel: (String) async -> Void
+    let onMoreOptions: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var picking: String?
+
+    private var models: [String] { features.availableModels }
+    private var showsMoreFooter: Bool { models.count > 4 || features.supportsReasoningEffort }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(models.enumerated()), id: \.element) { index, model in
+                modelRow(model)
+                if index < models.count - 1 {
+                    Divider()
+                        .background(SmoothieColor.menuDivider)
+                        .padding(.leading, SmoothieMetrics.space16 + 16 + SmoothieMetrics.space12)
+                }
+            }
+            if showsMoreFooter {
+                Divider().background(SmoothieColor.menuDivider)
+                moreOptionsRow
+            }
+        }
+        .frame(minWidth: 280, idealWidth: 300)
+        .background(SmoothieColor.menuBg)
+        .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg))
+        .overlay(
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg)
+                .strokeBorder(SmoothieColor.menuStroke, lineWidth: 0.5)
+        )
+        .presentationCompactAdaptation(.popover)
+    }
+
+    private func modelRow(_ model: String) -> some View {
+        let isCurrent = (currentModel ?? features.defaultModel) == model
+        let isLoading = picking == model
+        return Button {
+            Task { await select(model) }
+        } label: {
+            HStack(alignment: .top, spacing: SmoothieMetrics.space12) {
+                leadingGutter(isCurrent: isCurrent, isLoading: isLoading)
+                VStack(alignment: .leading, spacing: SmoothieMetrics.space2) {
+                    Text(cli.friendlyModelName(model))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    if let descriptor = cli.modelDescriptor(model) {
+                        Text(descriptor)
+                            .font(.system(size: 13))
+                            .foregroundStyle(SmoothieColor.textSecondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, SmoothieMetrics.space16)
+            .padding(.vertical, SmoothieMetrics.space12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(picking != nil)
+        .opacity(picking != nil && !isLoading ? 0.45 : 1)
+    }
+
+    private func leadingGutter(isCurrent: Bool, isLoading: Bool) -> some View {
+        ZStack {
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(SmoothieColor.textPrimary)
+            } else if isCurrent {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SmoothieColor.textPrimary)
+            }
+        }
+        .frame(width: 16, height: 18)
+        .padding(.top, 1)
+    }
+
+    private var moreOptionsRow: some View {
+        Button {
+            dismiss()
+            onMoreOptions()
+        } label: {
+            HStack(spacing: SmoothieMetrics.space12) {
+                Text("All models…")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SmoothieColor.textSecondary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SmoothieColor.textTertiary)
+            }
+            .padding(.horizontal, SmoothieMetrics.space16)
+            .padding(.vertical, SmoothieMetrics.space12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func select(_ model: String) async {
+        guard picking == nil else { return }
+        picking = model
+        await onPickModel(model)
+        picking = nil
+        dismiss()
+    }
+}
+
 // MARK: - Slash command picker (Commands)
 
 struct SlashCommandSheet: View {

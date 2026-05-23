@@ -67,6 +67,30 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
             return id.isEmpty ? "Antigravity" : id
         }
     }
+
+    /// One-line descriptor shown beneath the model name in the compact
+    /// dropdown (P25.b). Returns nil for providers that don't have a
+    /// per-model marketing line.
+    func modelDescriptor(_ id: String) -> String? {
+        switch self {
+        case .claudeCode:
+            switch id.lowercased() {
+            case "opus":   return "Most capable for ambitious work"
+            case "sonnet": return "Responsive everyday work"
+            case "haiku":  return "Fastest, most efficient"
+            default:       return nil
+            }
+        case .gemini:
+            switch id.lowercased() {
+            case "auto-gemini-3":          return "Auto-routed across Gemini 3"
+            case "gemini-3-flash-preview": return "Fast preview model"
+            case "gemini-3.1-flash-lite":  return "Lightest, fastest"
+            default:                       return nil
+            }
+        case .openCode, .antigravity:
+            return nil
+        }
+    }
 }
 
 enum SessionStateWire: String, Codable, Sendable {
