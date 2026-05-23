@@ -226,7 +226,7 @@ struct MessageInput: View {
 
     private var textField: some View {
         TextField(
-            isFreshSession ? "Code" : "Add feedback…",
+            isFreshSession ? "Code anything…" : "Add feedback…",
             text: $text,
             axis: .vertical
         )
@@ -244,25 +244,16 @@ struct MessageInput: View {
     }
 
     private var actionsRow: some View {
-        HStack(spacing: 10) {
-            Button {
-                showingAttach = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-                    .frame(width: 26, height: 26)
-                    .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
+        HStack(spacing: SmoothieMetrics.space12) {
             ModeChip(mode: session.mode) {
                 onTapMode()
             }
             Spacer()
+            // Paperclip opens the full AttachSheet (camera, mention, file,
+            // commands, models, MCP). Direct fileImporter access stays
+            // reachable from AttachSheet's "Attach a file" row (P25.g).
             Button {
-                showingImporter = true
+                showingAttach = true
             } label: {
                 Image(systemName: "paperclip")
                     .font(.system(size: 15, weight: .semibold))
@@ -271,6 +262,7 @@ struct MessageInput: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Attach or open menu")
 
             Button {
                 Task { await toggleVoice() }
