@@ -568,9 +568,12 @@ struct HomeView: View {
         do {
             async let s = api.sessions()
             async let a = api.adapters()
-            sessions = try await s
-            // Mirror NewSessionView's filter so dashboard counts don't
-            // include Antigravity (hidden from users for now).
+            // Hide Antigravity end-to-end: no rows in the session list,
+            // no contribution to the 'Top Provider' stat, no row in the
+            // CLI picker. Existing agy sessions stay alive on the daemon
+            // but won't surface here. Reach them from the Mac menubar
+            // popover if you need to kill them.
+            sessions = (try await s).filter { $0.cli != .antigravity }
             adapters = try await a.filter { $0.cli != .antigravity }
         } catch {
             if isCancellation(error) {

@@ -278,8 +278,9 @@ struct AgentView: View {
     private func refresh() async {
         let api = APIClient(store: pairing)
         do {
-            let fetched = try await api.sessions()
-            sessions = fetched
+            // Mirror HomeView's filter — agy is hidden across iOS until
+            // its host story firms up.
+            sessions = (try await api.sessions()).filter { $0.cli != .antigravity }
             loadError = nil
         } catch {
             if !isCancellation(error) {

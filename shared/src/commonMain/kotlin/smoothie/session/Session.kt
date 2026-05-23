@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import smoothie.adapters.AdapterParser
@@ -222,6 +223,19 @@ class Session(
 
     /** Encode a user message into the bytes the CLI's stdin expects. */
     fun encodeUserMessage(content: String): String = parser.encodeUserMessage(content)
+
+    /** Convenience for hosts that need to push an in-flight text part to
+     *  the visible event stream. The metadata carries the part id so the
+     *  iOS client can coalesce successive updates to the same part into
+     *  one bubble instead of N stacked copies. Used by OpenCodeServeHost
+     *  to stream `message.part.delta` text as it arrives. */
+    suspend fun injectStreamingText(partId: String, text: String, timestamp: Long) {
+        val metadata = mapOf<String, JsonElement>(
+            "partId" to JsonPrimitive(partId),
+            "streaming" to JsonPrimitive(true),
+        )
+        injectEvent(SmoothieEvent(EventType.MESSAGE, text, metadata, timestamp))
+    }
 
     /** Inject a synthetic event (e.g. when Swift side detects process exit). */
     suspend fun injectEvent(event: SmoothieEvent) {

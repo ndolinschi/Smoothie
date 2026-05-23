@@ -34,8 +34,12 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     /// Buffered text content per message part. Some opencode versions emit
     /// per-token deltas (`properties.delta`) and others emit a cumulative
-    /// `part.text` snapshot — we handle both, then flush each part as a
-    /// single MESSAGE event on `session.idle`.
+    /// `part.text` snapshot — we handle both. P30.c — was flushed only on
+    /// `session.idle` which produced the "no streaming, then a full reply
+    /// dumps" delay the user complained about. Now we emit a MESSAGE event
+    /// on every part update with the running buffer, tagged with the part
+    /// id in metadata so iOS coalesces consecutive same-part events into
+    /// one bubble (see `SessionLiveStore.ingest`).
     private var textBuffers: [String: String] = [:]
     /// Tool / file parts we've already emitted, keyed by `part.id`, so
     /// repeated `message.part.updated` events for the same tool call don't
@@ -303,6 +307,7 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         let field = (properties["field"] as? String) ?? "text"
         guard field == "text" else { return }   // ignore reasoning deltas for now
         textBuffers[partID, default: ""].append(delta)
+        emitStreamingText(partID: partID)
     }
 
     private func handlePartUpdated(_ properties: [String: Any]) {
@@ -318,6 +323,7 @@ final class OpenCodeServeHost: NSObject, SessionHost {
             } else if let delta = properties["delta"] as? String, !delta.isEmpty {
                 textBuffers[partID, default: ""].append(delta)
             }
+            emitStreamingText(partID: partID)
         case "tool":
             if emittedToolParts.contains(partID) { return }
             emittedToolParts.insert(partID)
@@ -339,10 +345,29 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         }
     }
 
-    private func flushBufferedTextParts() async {
-        for (_, text) in textBuffers where !text.isEmpty {
-            try? await session.injectEvent(event: makeEvent(.message, content: text))
+    /// Push the running text buffer for `partID` as a MESSAGE event
+    /// tagged with the part id. iOS's SessionLiveStore.ingest replaces
+    /// any prior MESSAGE event carrying the same part id, so the user
+    /// sees the message growing in place rather than as N stacked
+    /// bubbles. Fire-and-forget — opencode emits deltas faster than
+    /// our K/N broker can serialise.
+    private func emitStreamingText(partID: String) {
+        let text = textBuffers[partID] ?? ""
+        guard !text.isEmpty else { return }
+        let timestamp = Int64(Date.now.timeIntervalSince1970 * 1000)
+        Task { @MainActor [weak self] in
+            try? await self?.session.injectStreamingText(
+                partId: partID,
+                text: text,
+                timestamp: timestamp
+            )
         }
+    }
+
+    private func flushBufferedTextParts() async {
+        // session.idle fires after the last delta — by this point iOS
+        // has already seen the in-flight events thanks to emitStreamingText.
+        // Drop the buffer so the next turn starts clean.
         textBuffers.removeAll()
         emittedToolParts.removeAll()
     }

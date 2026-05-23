@@ -52,6 +52,8 @@ struct RepoChip: View {
                 .font(.system(size: 13, weight: isActive ? .bold : .semibold))
                 .foregroundStyle(SmoothieColor.textPrimary)
                 .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 180, alignment: .leading)
         }
         .padding(.vertical, SmoothieMetrics.space8)
         .padding(.horizontal, SmoothieMetrics.space12)

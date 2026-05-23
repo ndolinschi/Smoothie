@@ -145,6 +145,26 @@ final class SessionLiveStore {
             hasReceivedEvent = true
             return
         }
+        // Streaming text — opencode-style adapters emit a MESSAGE event
+        // per delta tagged with the same `partId` metadata. Replace any
+        // existing MESSAGE event with the same partId in place so the
+        // bubble grows in real time instead of producing N stacked
+        // duplicates. The replacement reuses the original event's id
+        // via `events[idx] = event` so SwiftUI's LazyVStack diffing
+        // sees an in-place update.
+        if event.type == .message,
+           let partId = event.metadata?["partId"]?.stringValue,
+           !partId.isEmpty,
+           let idx = events.lastIndex(where: { $0.metadata?["partId"]?.stringValue == partId })
+        {
+            events[idx] = event
+            hasReceivedEvent = true
+            // Streaming deltas count as agent activity → keep the
+            // session state in `.thinking` until the host sends DONE
+            // or WAITING.
+            state = .thinking
+            return
+        }
         events.append(event)
         hasReceivedEvent = true
         if events.count > 2000 {
@@ -222,6 +242,26 @@ final class SessionLiveStore {
             timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
         )
         events.append(divider)
+    }
+
+    /// Optimistically append a USER-authored MESSAGE event to the
+    /// visible ring. The daemon doesn't echo the user's turn back as
+    /// an event today (CLIs see it on stdin, agent reply comes via
+    /// stream-json), so the iOS chat would otherwise jump straight
+    /// from "Ready when you are" to the assistant's response with no
+    /// trace of what the user typed. Marking it with `role: user`
+    /// metadata lets EventRow render it as a right-aligned chat
+    /// bubble distinct from agent prose.
+    func appendUserMessage(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let event = SmoothieEventWire(
+            type: .message,
+            content: trimmed,
+            metadata: ["role": AnyCodable("user")],
+            timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
+        )
+        events.append(event)
     }
 
     /// Called by SessionView's send path just before the user's text

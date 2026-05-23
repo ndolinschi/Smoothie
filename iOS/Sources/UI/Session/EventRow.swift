@@ -51,8 +51,12 @@ struct EventRow: View {
     private var typedBody: some View {
         switch event.type {
         case .message:
-            MarkdownText(content: event.content)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if Self.isUserAuthored(event) {
+                userMessageBubble
+            } else {
+                MarkdownText(content: event.content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         case .thinking:
             if !event.content.isEmpty {
                 thinkingRow
@@ -108,6 +112,42 @@ struct EventRow: View {
             // the next known event will rejoin the visible stream.
             EmptyView()
         }
+    }
+
+    /// Right-aligned bubble for MESSAGE events authored by the user.
+    /// Distinguished from assistant messages by a coral-tinted
+    /// background, plain text rendering (no markdown — what the user
+    /// typed is what's shown), and trailing alignment. The width caps
+    /// at ~80% of the row so long prompts wrap inside the bubble
+    /// instead of stretching edge-to-edge.
+    private var userMessageBubble: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Spacer(minLength: 40)
+            Text(event.content)
+                .font(.system(size: 15))
+                .foregroundStyle(SmoothieColor.textPrimary)
+                .multilineTextAlignment(.leading)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(SmoothieColor.accent.opacity(0.18), in: .rect(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(SmoothieColor.accent.opacity(0.35), lineWidth: 0.5)
+                )
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    /// True when the daemon-side metadata flags this MESSAGE event as
+    /// authored by the user (vs. the assistant). iOS injects these
+    /// optimistically in `SessionLiveStore.appendUserMessage`; future
+    /// daemon-side echoing could populate the same flag.
+    static func isUserAuthored(_ event: SmoothieEventWire) -> Bool {
+        guard let metadata = event.metadata,
+              let role = metadata["role"]?.stringValue
+        else { return false }
+        return role.lowercased() == "user"
     }
 
     /// Collapsed reasoning chip ("thinking ▾"). Tap to reveal the italic

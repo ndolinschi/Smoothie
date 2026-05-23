@@ -160,10 +160,7 @@ struct SessionView: View {
                         // assistant has already spoken.
                         isFreshSession: !store.events.contains { $0.type == .message },
                         sessionState: store.state,
-                        onSend: { text, attachments in
-                            let composed = attachments.composedMessage(with: text)
-                            await sendMessage(composed, images: attachments.images)
-                        },
+                        onSend: handleUserSend,
                         onAbort: { Task { await abortTurn() } },
                         onTapMode: { showingModeSheet = true }
                     )
@@ -482,6 +479,17 @@ struct SessionView: View {
         let normalised = mode.lowercased() == "default" ? nil : mode
         currentSession = currentSession.withMode(normalised)
         store?.queueModeChange(mode)
+    }
+
+    /// Composer's onSend callback. Echoes the user's turn into the visible
+    /// chat (daemon doesn't echo it back), composes the wire body with any
+    /// attachments, and dispatches to the daemon. Extracted out of the
+    /// MessageInput initializer because the SwiftUI body type-checker
+    /// timed out trying to infer the closure inline.
+    private func handleUserSend(_ text: String, attachments: [StagedAttachment]) async {
+        store?.appendUserMessage(text)
+        let composed = attachments.composedMessage(with: text)
+        await sendMessage(composed, images: attachments.images)
     }
 
     private func sendMessage(_ content: String, images: [StagedImage] = []) async {
