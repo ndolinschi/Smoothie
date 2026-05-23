@@ -114,30 +114,95 @@ struct EventRow: View {
         }
     }
 
-    /// Right-aligned bubble for MESSAGE events authored by the user.
-    /// Distinguished from assistant messages by a coral-tinted
-    /// background, plain text rendering (no markdown — what the user
-    /// typed is what's shown), and trailing alignment. The width caps
-    /// at ~80% of the row so long prompts wrap inside the bubble
-    /// instead of stretching edge-to-edge.
+    /// Right-aligned chat bubble for MESSAGE events authored by the
+    /// user. Solid coral fill, white-on-coral text, no stroke — same
+    /// shape language as iMessage / WhatsApp user bubbles so the chat
+    /// stream reads as a proper conversation rather than two columns
+    /// of agent prose. The bottom-trailing corner is tightened so the
+    /// bubble reads as "from this side" without needing a tail.
+    /// Width is capped at 80% of the row by the leading spacer so long
+    /// prompts wrap inside the bubble.
     private var userMessageBubble: some View {
         HStack(alignment: .top, spacing: 0) {
-            Spacer(minLength: 40)
+            Spacer(minLength: 48)
             Text(event.content)
                 .font(.system(size: 15))
-                .foregroundStyle(SmoothieColor.textPrimary)
+                .foregroundStyle(SmoothieColor.onAccent)
                 .multilineTextAlignment(.leading)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(SmoothieColor.accent.opacity(0.18), in: .rect(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(SmoothieColor.accent.opacity(0.35), lineWidth: 0.5)
-                )
+                .background(SmoothieColor.accent, in: BubbleShape())
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 24)
+        .padding(.vertical, 1)
     }
+}
+
+/// User-side chat-bubble shape: 18pt corners everywhere except the
+/// bottom-trailing corner which tightens to 6pt. Mirrors iMessage's
+/// "from this side" affordance without painting a literal tail. Used
+/// only by `EventRow.userMessageBubble` today; broken out as a top-
+/// level `Shape` so SwiftUI's layout engine sizes the background
+/// rectangle from the text's intrinsic content rather than fighting
+/// the rounded-rect modifier's frame heuristics.
+private struct BubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let bigCorner: CGFloat = 18
+        let smallCorner: CGFloat = 6
+        var path = Path()
+
+        // Top-left
+        path.move(to: CGPoint(x: rect.minX + bigCorner, y: rect.minY))
+        // Top edge
+        path.addLine(to: CGPoint(x: rect.maxX - bigCorner, y: rect.minY))
+        // Top-right corner
+        path.addArc(
+            center: CGPoint(x: rect.maxX - bigCorner, y: rect.minY + bigCorner),
+            radius: bigCorner,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        // Right edge to bottom-right corner (tight)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - smallCorner))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - smallCorner, y: rect.maxY - smallCorner),
+            radius: smallCorner,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        // Bottom edge
+        path.addLine(to: CGPoint(x: rect.minX + bigCorner, y: rect.maxY))
+        // Bottom-left corner
+        path.addArc(
+            center: CGPoint(x: rect.minX + bigCorner, y: rect.maxY - bigCorner),
+            radius: bigCorner,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
+        )
+        // Left edge
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + bigCorner))
+        // Top-left corner
+        path.addArc(
+            center: CGPoint(x: rect.minX + bigCorner, y: rect.minY + bigCorner),
+            radius: bigCorner,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+// Re-open EventRow's extension so the rest of its methods still belong
+// to the same type after the BubbleShape file-private declaration above.
+extension EventRow {
 
     /// True when the daemon-side metadata flags this MESSAGE event as
     /// authored by the user (vs. the assistant). iOS injects these
