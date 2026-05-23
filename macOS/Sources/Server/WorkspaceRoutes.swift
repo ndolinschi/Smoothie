@@ -150,6 +150,51 @@ enum WorkspaceRoutes {
             }
         }
 
+        // MARK: - Transcript (Past Chats mention)
+
+        // GET /sessions/:id/transcript
+        // Returns the session's MESSAGE event stream assembled as a
+        // single markdown string. Used by the iOS "Past Chats" mention
+        // picker so a user can attach a prior conversation as context
+        // to the next outgoing turn. Non-MESSAGE events (tool calls,
+        // thinking, file edits) are skipped — the goal is the
+        // dialogue, not the agent's machinery.
+        group.get("/sessions/:id/transcript") { _, context -> Response in
+            guard let id = context.parameters.get("id") else {
+                return errorResponse(.badRequest, "missing id")
+            }
+            let result: Result<String, Error> = await Task { @MainActor in
+                guard let session = try? await handle.manager.get(id: id) else {
+                    return .failure(NSError(
+                        domain: "Smoothie", code: 404,
+                        userInfo: [NSLocalizedDescriptionKey: "session not found"]
+                    ))
+                }
+                let events = (try? await session.snapshot()) ?? []
+                let descriptor: SessionDescriptor
+                do {
+                    descriptor = try await session.descriptor()
+                } catch {
+                    return .failure(error)
+                }
+                let assembled = assembleTranscript(
+                    events: events,
+                    projectName: descriptor.projectName,
+                    cliName: descriptor.cli.name
+                )
+                return .success(assembled)
+            }.value
+            switch result {
+            case .success(let body):
+                let payload = "{\"transcript\":\(jsonString(body))}"
+                return jsonResponse(payload)
+            case .failure(let err):
+                let nsErr = err as NSError
+                let status: HTTPResponse.Status = nsErr.code == 404 ? .notFound : .internalServerError
+                return errorResponse(status, nsErr.localizedDescription)
+            }
+        }
+
         // POST /sessions/:id/mcp-servers  { "enabled": ["id1", "id2"] }
         // Persists the per-session enabled subset. Takes effect on the
         // next host spawn (so the user typically follows this with a
@@ -261,4 +306,33 @@ func encodeMCPServer(_ s: MCPServerInfo) -> String {
 func decodeMCPEnabledBody(_ data: Data) -> [String]? {
     struct Body: Decodable { let enabled: [String] }
     return (try? JSONDecoder().decode(Body.self, from: data))?.enabled
+}
+
+// MARK: - Transcript assembly
+
+/// Build a compact markdown transcript from a session's event ring.
+/// MESSAGE events are kept; everything else (tool calls, thinking,
+/// state pings, context updates) is dropped — the goal is the
+/// dialogue, not the agent's machinery. Lines are prefixed with
+/// `**Agent:**` / `**You:**` heuristically: the daemon doesn't tag
+/// MESSAGE events with author today, so we assume the assistant is
+/// the source. The first line is a one-line header so the caller can
+/// drop the block straight into another prompt as a reference.
+func assembleTranscript(events: [SmoothieEvent], projectName: String, cliName: String) -> String {
+    var lines: [String] = []
+    lines.append("# Past chat — \(projectName) (\(cliName))")
+    lines.append("")
+    var emittedAny = false
+    for event in events {
+        guard event.type == EventType.message else { continue }
+        let trimmed = event.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { continue }
+        lines.append("**Agent:** \(trimmed)")
+        lines.append("")
+        emittedAny = true
+    }
+    if !emittedAny {
+        lines.append("_(no assistant messages were exchanged in this session.)_")
+    }
+    return lines.joined(separator: "\n")
 }

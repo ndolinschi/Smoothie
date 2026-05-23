@@ -174,9 +174,18 @@ struct MessageInput: View {
             }
         }
         .sheet(isPresented: $showingMention) {
-            MentionPickerSheet(session: session) { entry, content in
-                stage(file: entry, content: content, asMention: true)
-            }
+            MentionPickerSheet(
+                session: session,
+                onPick: { entry, content in
+                    stage(file: entry, content: content, asMention: true)
+                },
+                onPickChat: { chat in
+                    attachments.append(.chat(chat))
+                    // Inline the @<title> marker into the text so the
+                    // user can still see what context they pulled in.
+                    insertAtCursor("@\(chat.title)")
+                }
+            )
             .presentationDetents([.large])
             .presentationBackground(.clear)
             .smoothieThemed()
@@ -413,7 +422,28 @@ struct MessageInput: View {
         switch att {
         case .file(let f):  fileChip(f)
         case .image(let i): imageChip(i)
+        case .chat(let c):  chatChip(c)
         }
+    }
+
+    /// Capsule rendered for a `StagedChat` mention. Mirrors the file
+    /// chip but uses the conversation glyph + a "past" prefix so the
+    /// user can distinguish staged transcripts from staged code files.
+    private func chatChip(_ c: StagedChat) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(SmoothieColor.accent)
+            Text("past · \(c.title)")
+                .font(.system(size: 12))
+                .foregroundStyle(SmoothieColor.textPrimary)
+                .lineLimit(1)
+            removeButton(id: c.id)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(SmoothieColor.bgCard, in: .capsule)
+        .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
     }
 
     private func fileChip(_ f: StagedFile) -> some View {

@@ -14,11 +14,18 @@ import SwiftUI
 struct MentionPickerSheet: View {
     let session: SessionDescriptorWire
     let onPick: (FileEntryWire, FileContentWire) -> Void
+    /// Called when the user picks a past session from the Past Chats
+    /// sub-picker. The MessageInput parent stages it as a `.chat`
+    /// attachment so it folds into the next outgoing turn alongside
+    /// any files / images.
+    let onPickChat: (StagedChat) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(PairingStore.self) private var pairing
+    @Environment(SessionMetaStore.self) private var sessionMeta
     @State private var showingBranch = false
     @State private var showingMCP = false
+    @State private var showingPastChats = false
 
     var body: some View {
         NavigationStack {
@@ -72,12 +79,17 @@ struct MentionPickerSheet: View {
                         }
                         .buttonStyle(.plain)
 
-                        categoryRow(
-                            icon: "bubble.left.and.bubble.right.fill",
-                            title: "Past Chats",
-                            subtitle: "Reference a previous session — v1.5",
-                            enabled: false
-                        )
+                        Button {
+                            showingPastChats = true
+                        } label: {
+                            categoryRow(
+                                icon: "bubble.left.and.bubble.right.fill",
+                                title: "Past Chats",
+                                subtitle: "Reference a previous session as context",
+                                enabled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 14)
 
@@ -116,6 +128,22 @@ struct MentionPickerSheet: View {
                         showingMCP = false
                         dismiss()
                     }
+                )
+                .presentationDetents([.large])
+                .presentationBackground(.clear)
+                .smoothieThemed()
+            }
+            .sheet(isPresented: $showingPastChats) {
+                PastChatsPickerSheet(
+                    currentSession: session,
+                    pairing: pairing,
+                    sessionMeta: sessionMeta,
+                    onPicked: { chat in
+                        onPickChat(chat)
+                        showingPastChats = false
+                        dismiss()
+                    },
+                    onDismiss: { showingPastChats = false }
                 )
                 .presentationDetents([.large])
                 .presentationBackground(.clear)

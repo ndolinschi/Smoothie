@@ -30,4 +30,16 @@ extension APIClient {
         let data = try await post("/sessions/\(sessionId)/mcp-servers", json: Body(enabled: enabled))
         return try decode(MCPListingWire.self, from: data)
     }
+
+    // MARK: - Transcript (Past Chats mention)
+
+    /// Fetch a past session's assembled markdown transcript so the
+    /// composer can stage it as @-mention context for the next turn.
+    /// Daemon assembles MESSAGE events only — tool calls / thinking /
+    /// state pings are stripped to keep the reference block compact.
+    func transcript(sessionId: String) async throws -> String {
+        let data = try await get("/sessions/\(sessionId)/transcript")
+        struct R: Decodable { let transcript: String }
+        return try decode(R.self, from: data).transcript
+    }
 }
