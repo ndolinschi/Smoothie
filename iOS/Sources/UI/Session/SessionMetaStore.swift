@@ -25,15 +25,48 @@ final class SessionMetaStore {
 
     private static let key = "smoothie.sessionMeta.v1"
     private static let cap = 500
+    /// Bump when SessionMeta gains a non-optional field. The init reads
+    /// the envelope's version and only treats the entries as usable if
+    /// it matches; mismatches fall back to a fresh map but the raw
+    /// payload is preserved in a backup key so the user can recover
+    /// titles manually if needed.
+    private static let schemaVersion = 1
+    private static let backupKey = "smoothie.sessionMeta.backup"
+
+    /// On-disk envelope. Existing v1 blobs decode cleanly because the
+    /// extra `version` field is decoded with a default; missing keys
+    /// in the dictionary entries are tolerated by SessionMeta's
+    /// `Codable` since all fields except `updatedAt` are easy to back-
+    /// fill, and `updatedAt` has `init(from:)` defaulting on absence.
+    private struct Envelope: Codable {
+        var version: Int
+        var entries: [String: SessionMeta]
+    }
 
     private var entries: [String: SessionMeta]
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: Self.key),
-           let decoded = try? JSONDecoder().decode([String: SessionMeta].self, from: data) {
-            self.entries = decoded
+        guard let data = UserDefaults.standard.data(forKey: Self.key) else {
+            self.entries = [:]
             return
         }
+        let decoder = JSONDecoder()
+        // Try the v2+ envelope first.
+        if let envelope = try? decoder.decode(Envelope.self, from: data),
+           envelope.version == Self.schemaVersion {
+            self.entries = envelope.entries
+            return
+        }
+        // Legacy: pre-envelope blobs are a raw [String: SessionMeta] map.
+        // Keep them on schemaVersion == 1 so existing installs migrate
+        // silently. If the legacy decode ALSO fails, stash the raw
+        // payload in a backup key for diagnosis and start fresh — DO
+        // NOT silently drop unrecoverable user data.
+        if let legacy = try? decoder.decode([String: SessionMeta].self, from: data) {
+            self.entries = legacy
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Self.backupKey)
         self.entries = [:]
     }
 
@@ -78,6 +111,9 @@ final class SessionMetaStore {
     func clearAll() {
         entries.removeAll()
         persistInline()
+        // Also drop any diagnostic backup from a previous decode
+        // failure so "Delete local data" actually leaves no trace.
+        UserDefaults.standard.removeObject(forKey: Self.backupKey)
     }
 
     // MARK: - Internals
@@ -108,7 +144,8 @@ final class SessionMetaStore {
     }
 
     private func persistInline() {
-        if let data = try? JSONEncoder().encode(entries) {
+        let envelope = Envelope(version: Self.schemaVersion, entries: entries)
+        if let data = try? JSONEncoder().encode(envelope) {
             UserDefaults.standard.set(data, forKey: Self.key)
         }
     }

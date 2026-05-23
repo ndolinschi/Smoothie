@@ -132,15 +132,20 @@ struct MenubarPopover: View {
         case local, remote
     }
 
-    /// `.local` whenever cloudflared is `.off` or `.failed`; `.remote` for
-    /// `.starting` and `.running`. Flipping the segmented control calls
-    /// start()/stop() on the cloudflared host.
+    /// `.local` only when cloudflared is fully `.off`; `.remote` for
+    /// `.starting`, `.running`, **and** `.failed` — a failed start
+    /// reflects the user's last expressed intent (they tapped Remote),
+    /// so we keep the picker on Remote and surface the failure in
+    /// `tunnelStatusBody`. P28.a — previously `.failed` mapped to
+    /// `.local`, which silently undid the user's choice and made the
+    /// "couldn't start" hint feel disconnected from what they'd just
+    /// tapped.
     private var networkModeBinding: Binding<NetworkMode> {
         Binding(
             get: {
                 switch pairing.cloudflared.status {
-                case .starting, .running: return .remote
-                case .off, .failed:       return .local
+                case .starting, .running, .failed: return .remote
+                case .off:                         return .local
                 }
             },
             set: { mode in

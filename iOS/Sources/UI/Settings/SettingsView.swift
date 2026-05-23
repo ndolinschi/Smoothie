@@ -91,11 +91,17 @@ struct SettingsView: View {
                         // Close both this Settings sheet and the
                         // nested PairingsSheet, then ask HomeView to
                         // present its AddPairingCover via the host's
-                        // onAddPairing closure.
+                        // onAddPairing closure. P27.k — the prior
+                        // 200ms delay raced the sheet's dismiss
+                        // animation on slower devices and silently
+                        // dropped the cover. SwiftUI's standard sheet
+                        // dismiss is ~350ms; 450ms gives both nested
+                        // sheets time to tear down before the next
+                        // modal is requested.
                         showingPairings = false
                         dismiss()
                         Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(200))
+                            try? await Task.sleep(for: .milliseconds(450))
                             onAddPairing()
                         }
                     },
