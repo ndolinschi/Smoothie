@@ -6,12 +6,12 @@ import SwiftUI
 struct SessionView: View {
     let session: SessionDescriptorWire
     @Environment(PairingStore.self) private var pairing
+    @Environment(RecentsStore.self) private var recents
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var currentSession: SessionDescriptorWire
     @State private var store: SessionLiveStore?
     @State private var features: ProviderFeaturesWire?
-    @State private var allAdapters: [AdapterInfoWire] = []
     @State private var confirmKill = false
     @State private var switchError: String?
     @State private var lastNotifiedState: SessionStateWire?
@@ -21,6 +21,14 @@ struct SessionView: View {
     /// from the StatusFooter percent-ring tap.
     @State private var showingBudget = false
     @State private var showingModelSheet = false
+    /// P25.b — compact rounded-card popover anchored to the toolbar
+    /// title. The full search-enabled `ModelPickerSheet` is still
+    /// reachable from this dropdown's "All models…" footer.
+    @State private var showingModelDropdown = false
+    /// P25.f — repository picker bottom sheet. Opened via the leading
+    /// `+` button on the repo chips row, or via tapping a non-active
+    /// chip directly (which goes through `onSwitchRepo` instead).
+    @State private var showingRepoPicker = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -81,6 +89,13 @@ struct SessionView: View {
             .replacingOccurrences(of: "_", with: " ")
     }
 
+    /// Recent project paths excluding the active session's path. Surfaced
+    /// as the trailing chips on the repo row (P25.e); the picker sheet
+    /// presents the same list under a search field.
+    private var otherRecentProjects: [String] {
+        recents.paths.filter { $0 != currentSession.projectPath }
+    }
+
     var body: some View {
         ZStack {
             SmoothieColor.bgPrimary.ignoresSafeArea()
@@ -94,6 +109,16 @@ struct SessionView: View {
                     )
                     .animation(.easeInOut(duration: 0.2), value: store.connected)
                     .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
+                    HStack(spacing: SmoothieMetrics.space8) {
+                        EnvPill(label: modeChipLabel.capitalized) {
+                            showingModeSheet = true
+                        }
+                        if store.state != .done, store.state != .error {
+                            StatusBadge(state: store.state, connected: store.connected)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, SmoothieMetrics.space2)
                     AgentStream(
                         events: store.events,
                         connection: store.connection,
@@ -115,7 +140,6 @@ struct SessionView: View {
                     MessageInput(
                         session: currentSession,
                         features: features,
-                        allAdapters: allAdapters,
                         isFreshSession: store.events.isEmpty,
                         sessionState: store.state,
                         onSend: { text, attachments in
@@ -123,11 +147,10 @@ struct SessionView: View {
                             await sendMessage(composed, images: attachments.images)
                         },
                         onAbort: { Task { await abortTurn() } },
-                        onSwitchModel: { m in await applyRestart(.model(m)) },
-                        onSwitchEffort: { e in await applyRestart(.effort(e)) },
-                        onSwitchMode: { applyMode($0) },
-                        onSwitchProvider: { c in await applyRestart(.provider(c)) },
-                        onTapMode: { showingModeSheet = true }
+                        onTapMode: { showingModeSheet = true },
+                        otherProjects: otherRecentProjects,
+                        onTapRepoPlus: { showingRepoPicker = true },
+                        onSwitchRepo: { path in switchToProject(path) }
                     )
                 }
             } else {
@@ -140,53 +163,49 @@ struct SessionView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 4) {
-                    Button {
-                        showingModelSheet = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(modelChipLabel)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(SmoothieColor.textPrimary)
-                                .lineLimit(1)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(SmoothieColor.textSecondary)
-                        }
-                        .contentShape(Rectangle())
+                Button {
+                    showingModelDropdown = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(modelChipLabel)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SmoothieColor.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                     }
-                    .buttonStyle(.plain)
-                    // Header keeps just the model picker + mode pill. The
-                    // StatusBadge was here too but duplicated the typing
-                    // pulse already pinned to the bottom of AgentStream
-                    // and kept showing "thinking" forever while the user
-                    // was waiting for the session to be ready (now fixed
-                    // server-side). Mode is still surfaced here for the
-                    // explicit picker affordance — the ModeChip in the
-                    // composer covers in-flow switching.
-                    if let store, store.state == .error || store.state == .limitReached {
-                        StatusBadge(state: store.state, connected: store.connected)
-                    } else {
-                        Button {
-                            showingModeSheet = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "cloud")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(SmoothieColor.textSecondary)
-                                Text(modeChipLabel)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(SmoothieColor.textSecondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingModelDropdown, arrowEdge: .top) {
+                    if let f = features {
+                        ModelDropdownMenu(
+                            cli: currentSession.cli,
+                            currentModel: currentSession.model,
+                            features: f,
+                            onPickModel: { m in await applyRestart(.model(m)) },
+                            onMoreOptions: {
+                                showingModelDropdown = false
+                                showingModelSheet = true
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 3)
-                            .overlay(
-                                Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        )
+                        .presentationBackground(SmoothieColor.menuBg)
+                    } else {
+                        ProgressView()
+                            .tint(SmoothieColor.textSecondary)
+                            .padding(SmoothieMetrics.space24)
+                            .presentationCompactAdaptation(.popover)
+                            .presentationBackground(SmoothieColor.menuBg)
                     }
                 }
+                // Note: my earlier p25 work kept a small "cloud + mode"
+                // pill inline next to the model button. The parallel
+                // branch (p25.c) moved that to a standalone `EnvPill`
+                // row sitting below the ConnectionBanner, so the inline
+                // version is removed here — see the EnvPill above
+                // `AgentStream` in `body`.
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -253,6 +272,22 @@ struct SessionView: View {
                 .presentationBackground(.clear)
             }
         }
+        .sheet(isPresented: $showingRepoPicker) {
+            RepoPickerSheet(
+                currentPath: currentSession.projectPath,
+                recentPaths: otherRecentProjects,
+                onPick: { path in
+                    showingRepoPicker = false
+                    if path != currentSession.projectPath {
+                        switchToProject(path)
+                    }
+                },
+                onDismiss: { showingRepoPicker = false }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+        }
         .onAppear {
             // Remember which pairing this session belongs to so we can
             // bail out if it gets removed or switched while we're still
@@ -312,7 +347,6 @@ struct SessionView: View {
         let api = APIClient(store: pairing)
         do {
             let adapters = try await api.adapters()
-            allAdapters = adapters
             features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
             // non-fatal; ComposerMenu degrades gracefully
@@ -384,6 +418,15 @@ struct SessionView: View {
     private func killSession() async {
         let api = APIClient(store: pairing)
         _ = try? await api.killSession(sessionId: currentSession.id)
+        dismiss()
+    }
+
+    /// Switch the user's focus to a different project (P25.e). The current
+    /// session keeps running on the daemon — we just stamp the recents
+    /// store so HomeView surfaces the picked project, then pop back. The
+    /// user re-enters via the session list there.
+    private func switchToProject(_ path: String) {
+        recents.touch(path)
         dismiss()
     }
 

@@ -2,28 +2,33 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// REF-1 / REF-3 / REF-5 composer. Vertical stack: Suggestions (fresh
-/// session only) → attachment chips (when staged) → + button + project chip
-/// row → rounded text field → mode chip + quick actions + coral send.
+/// session only) → attachment chips (when staged) → repo chips row
+/// (leading + button + active chip + recent chips) → rounded text
+/// field → mode chip + paperclip + mic + coral send.
 struct MessageInput: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
-    let allAdapters: [AdapterInfoWire]
     let isFreshSession: Bool
     /// Current session state. When `.starting`/`.thinking`, the trailing
     /// send button becomes an Abort button instead.
     let sessionState: SessionStateWire
     let onSend: (String, [StagedAttachment]) async -> Void
     let onAbort: () -> Void
-    /// Async because the upstream applyRestart spawns a fresh process; the
-    /// model picker awaits it so it can show a row-level spinner instead of
-    /// dismissing silently.
-    let onSwitchModel: (String) async -> Void
-    let onSwitchEffort: (String) async -> Void
-    let onSwitchMode: (String) -> Void
-    let onSwitchProvider: (CLIWire) async -> Void
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
+    /// Recent project paths (excluding the active session's path) used to
+    /// render the multi-chip repo row above the composer (P25.e). Capped
+    /// upstream; this view renders them all in a horizontal scroller.
+    let otherProjects: [String]
+    /// Opens the repository picker bottom sheet (the leading `+` on the
+    /// repo chips row, P25.e → P25.f).
+    let onTapRepoPlus: () -> Void
+    /// Tap on a non-active repo chip — switches the user's focus to that
+    /// project. Implementation lives in SessionView; the visible effect
+    /// is the current session being dismissed and HomeView surfacing the
+    /// requested project.
+    let onSwitchRepo: (String) -> Void
 
     @State private var text: String = ""
     @State private var sending = false
@@ -32,7 +37,6 @@ struct MessageInput: View {
     @State private var showingImporter = false
     @State private var showingAttach = false
     @State private var showingSkills = false
-    @State private var showingModels = false
     @State private var showingMCP = false
     @State private var importError: String?
     @State private var voice = VoiceDictator()
@@ -97,11 +101,14 @@ struct MessageInput: View {
             // a `.waiting` transition arriving while AttachSheet /
             // ImagePicker / MentionPicker is open steals focus back to
             // the text field and dismisses the iOS keyboard mid-tap.
+            // Removed `&& !showingModels` after the merge — model picker
+            // moved to SessionView's toolbar (showingModelDropdown /
+            // showingModelSheet) so this composer-local state var no
+            // longer exists.
             let noSheetUp = !showingAttach
                 && !showingImporter
                 && !showingMention
                 && !showingSkills
-                && !showingModels
                 && !showingMCP
                 && pendingImagePickerSource == nil
             if new == .waiting && noSheetUp { focused = true }
@@ -132,7 +139,6 @@ struct MessageInput: View {
                 onMentionFile: { showingMention = true },
                 onAttachFile:  { showingImporter = true },
                 onOpenSkills:  { showingSkills = true },
-                onOpenModels:  { showingModels = true },
                 onOpenMCP:     { showingMCP = true },
                 onDismiss:     { showingAttach = false }
             )
@@ -155,19 +161,6 @@ struct MessageInput: View {
                 SlashCommandSheet(commands: f.slashCommands, onPick: { insertAtCursor($0) })
                     .presentationDetents([.medium])
                     .presentationBackground(.clear)
-            }
-        }
-        .sheet(isPresented: $showingModels) {
-            if let f = features {
-                ModelPickerSheet(
-                    currentModel: session.model,
-                    currentEffort: session.reasoningEffort,
-                    features: f,
-                    onPickModel: { m in await onSwitchModel(m) },
-                    onPickEffort: { e in await onSwitchEffort(e) }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationBackground(.clear)
             }
         }
         .sheet(isPresented: $showingMCP) {
@@ -205,19 +198,48 @@ struct MessageInput: View {
 
     // MARK: - Rows
 
-    /// REF-1's "connected repo" row — sits between attachments / suggestions
-    /// and the text field. Single tappable chip showing the current project;
-    /// no `+` to its left (that lives in the bottom actionsRow per the
-    /// user's preference for a compact bottom).
+    /// REF-1's repo chips row — horizontally scrolling list of recent
+    /// projects. Leading `+` opens the repository picker (P25.f). The
+    /// active session's chip gets an accent stroke; other chips dismiss
+    /// the current session and surface the picked project on HomeView.
     private var projectRow: some View {
-        HStack(spacing: 8) {
-            RepoChip(projectPath: session.projectPath, isGit: true)
-            Spacer(minLength: 0)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SmoothieMetrics.space8) {
+                repoPlusButton
+                RepoChip(projectPath: session.projectPath, isGit: true, isActive: true)
+                ForEach(otherProjects, id: \.self) { path in
+                    Button {
+                        onSwitchRepo(path)
+                    } label: {
+                        RepoChip(projectPath: path, isGit: true, isActive: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
         }
+    }
+
+    private var repoPlusButton: some View {
+        Button(action: onTapRepoPlus) {
+            Image(systemName: "plus")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(SmoothieColor.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(SmoothieColor.chipBg, in: .circle)
+                .overlay(Circle().strokeBorder(SmoothieColor.chipStroke, lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Choose repository")
     }
 
     private var textField: some View {
         TextField(
+            // Keep the merged-in placeholder set — the parallel branch
+            // landed on "Ask Claude…" / "Message…" after the earlier
+            // sim feedback flagged "Add feedback…" as confusing for a
+            // brand-new session. Plays nicer across non-Claude CLIs too.
             isFreshSession ? "Ask Claude…" : "Message…",
             text: $text,
             axis: .vertical
@@ -236,36 +258,25 @@ struct MessageInput: View {
     }
 
     private var actionsRow: some View {
-        HStack(spacing: 10) {
-            Button {
-                showingAttach = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-                    .frame(width: 26, height: 26)
-                    .overlay(Circle().strokeBorder(SmoothieColor.stroke, lineWidth: 1))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            // Phase 3 of the Cursor redesign: model picker is no longer
-            // buried under AttachSheet → "Models". The chip is always
-            // visible in the actions row showing the current model + a
-            // tier dot, and tap opens the existing ModelPickerSheet (we
-            // reuse the same sheet body — only its entry point moved).
-            if features?.supportsModelPicker == true {
-                ModelChip(cli: session.cli, model: session.model) {
-                    showingModels = true
-                }
-            }
-
+        // P25.g/h consolidation (origin/main): the leading "+" + the
+        // composer-level ModelChip were both removed. Attach is now a
+        // single entry via the trailing paperclip → AttachSheet, and
+        // model picking lives in the toolbar title dropdown
+        // (showingModelDropdown). My earlier composer ModelChip work
+        // (p25.b) is superseded — the toolbar dropdown is always
+        // visible and shows the friendly model name. ModelChip /
+        // ModelCatalog files stay in the repo as building blocks for
+        // a future inline-overlay dropdown if we revisit.
+        HStack(spacing: SmoothieMetrics.space12) {
             ModeChip(mode: session.mode) {
                 onTapMode()
             }
             Spacer()
+            // Paperclip opens the full AttachSheet (camera, mention, file,
+            // commands, models, MCP). Direct fileImporter access stays
+            // reachable from AttachSheet's "Attach a file" row (P25.g).
             Button {
-                showingImporter = true
+                showingAttach = true
             } label: {
                 Image(systemName: "paperclip")
                     .font(.system(size: 15, weight: .semibold))
@@ -274,6 +285,7 @@ struct MessageInput: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Attach or open menu")
 
             Button {
                 Task { await toggleVoice() }

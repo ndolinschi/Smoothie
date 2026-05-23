@@ -69,6 +69,39 @@ enum SmoothieColor {
 
     /// Subtle screen veil used by dashed banners / decorative surfaces.
     static let overlayVeil    = Color.white.opacity(0.02)
+
+    // MARK: - P25.a surface tiers
+    //
+    // Named tiers introduced by the iOS design refresh. Existing
+    // tokens above (bgPrimary / bgCard / bgChip / bgSheet) remain the
+    // source of truth — these are aliases that let new surfaces read
+    // a semantic name (page vs. card vs. chip vs. popover) without
+    // needing to know which hex backs them today. `surface3` is the
+    // one new value: a slightly lighter popover background used by
+    // the centered model dropdown and similar overlays.
+
+    static let surface0      = bgPrimary
+    static let surface1      = bgCard
+    static let surface2      = bgChip
+    static let surface3      = Color(hex: 0x1C1C1C)
+
+    // MARK: - P25.a chip + pill styles
+
+    static let chipBg         = bgChip
+    static let chipBgPressed  = Color(hex: 0x222222)
+    static let chipStroke     = stroke
+    static let chipLabel      = textPrimary
+
+    static let envPillBg      = bgChip
+    static let envPillIcon    = textSecondary
+    static let envPillStroke  = strokeSoft
+
+    // MARK: - P25.a menu / dropdown
+
+    static let menuBg         = surface3
+    static let menuStroke     = stroke
+    static let menuRowHover   = Color.white.opacity(0.04)
+    static let menuDivider    = strokeSoft
 }
 
 enum SmoothieMetrics {
@@ -92,6 +125,22 @@ enum SmoothieMetrics {
     /// Height of the bottom-pinned `StatusFooter` strip — matches the
     /// design spec JSON.
     static let footerHeight: CGFloat = 44
+
+    // MARK: - P25.a spacing scale
+    //
+    // Granular scale introduced so later phases (chips row, suggestion
+    // chips, env pill, dropdown) can read a named value instead of
+    // sprinkling literals. The existing rowPadding* values stay as
+    // the canonical row inset; these are for inter-element gaps.
+
+    static let space2:  CGFloat = 2
+    static let space4:  CGFloat = 4
+    static let space6:  CGFloat = 6
+    static let space8:  CGFloat = 8
+    static let space12: CGFloat = 12
+    static let space16: CGFloat = 16
+    static let space20: CGFloat = 20
+    static let space24: CGFloat = 24
 }
 
 extension Color {

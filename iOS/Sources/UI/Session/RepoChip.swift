@@ -11,11 +11,16 @@ struct RepoChip: View {
     /// form `<mac-user>/<folder>` which matches the visual shape of the
     /// reference's GitHub repo chip even for purely-local projects.
     let label: String?
+    /// True when this chip represents the currently-active session's
+    /// project — gets an accent stroke + bold label so the row reads
+    /// "you are here" at a glance (P25.e).
+    let isActive: Bool
 
-    init(projectPath: String, isGit: Bool, label: String? = nil) {
+    init(projectPath: String, isGit: Bool, label: String? = nil, isActive: Bool = true) {
         self.projectPath = projectPath
         self.isGit = isGit
         self.label = label
+        self.isActive = isActive
     }
 
     private var resolvedLabel: String {
@@ -39,20 +44,26 @@ struct RepoChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SmoothieMetrics.space6) {
             Image(systemName: isGit ? "point.3.connected.trianglepath.dotted" : "folder.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(SmoothieColor.textSecondary)
+                .foregroundStyle(isActive ? SmoothieColor.textPrimary : SmoothieColor.textSecondary)
             Text(resolvedLabel)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13, weight: isActive ? .bold : .semibold))
                 .foregroundStyle(SmoothieColor.textPrimary)
                 .lineLimit(1)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(SmoothieColor.bgCard, in: .capsule)
+        .padding(.vertical, SmoothieMetrics.space8)
+        .padding(.horizontal, SmoothieMetrics.space12)
+        .background(SmoothieColor.chipBg, in: .capsule)
         .overlay(
-            Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+            Capsule().strokeBorder(
+                isActive ? SmoothieColor.accent.opacity(0.7) : SmoothieColor.chipStroke,
+                lineWidth: isActive ? 1 : 0.5
+            )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isActive ? "Active repository: \(resolvedLabel)" : "Repository: \(resolvedLabel)")
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }
