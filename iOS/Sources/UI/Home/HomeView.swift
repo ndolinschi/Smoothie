@@ -318,6 +318,29 @@ struct HomeView: View {
                             .padding(.vertical, 1)
                             .background(SmoothieColor.bgChip, in: .capsule)
                         Spacer(minLength: 0)
+                        // Quick "+" to open a new session pre-filled with
+                        // this project's path. Faster than picking the
+                        // folder from scratch via the global + button —
+                        // the user already has visual context for the
+                        // project they want to extend.
+                        if let sample = bucket.value.first {
+                            Button {
+                                pendingPath = sample.projectPath
+                                presentingNew = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(SmoothieColor.textSecondary)
+                                    .frame(width: 22, height: 22)
+                                    .background(SmoothieColor.bgCard, in: .circle)
+                                    .overlay(
+                                        Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                                    )
+                                    .contentShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("New session in \(bucket.key)")
+                        }
                     }
                     .textCase(nil)
                     .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 4, trailing: 16))

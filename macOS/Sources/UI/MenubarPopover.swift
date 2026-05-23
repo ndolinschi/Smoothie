@@ -200,10 +200,15 @@ struct MenubarPopover: View {
 
     private var pairingSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("PAIRING")
-                .font(.system(size: 9, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 6) {
+                Image(systemName: "qrcode")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text("PAIRING")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(.tertiary)
+            }
             HStack(alignment: .top, spacing: 12) {
                 if let img = pairing.qrImage(pixelSize: 160) {
                     Image(nsImage: img)
@@ -428,7 +433,7 @@ struct MenubarPopover: View {
             actionButton(
                 label: "Re-pair (rotate token)",
                 systemImage: "arrow.triangle.2.circlepath",
-                tint: .orange
+                tint: .secondary
             ) {
                 pairing.rotate()
                 server.restart()
