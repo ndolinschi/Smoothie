@@ -8,12 +8,12 @@ struct SuggestionsBar: View {
     let onPick: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space8) {
             Text("Suggestions")
                 .font(.system(size: 13))
                 .foregroundStyle(SmoothieColor.textSecondary)
-                .padding(.leading, 4)
-            VStack(spacing: 6) {
+                .padding(.leading, SmoothieMetrics.space4)
+            VStack(spacing: SmoothieMetrics.space8) {
                 ForEach(SmoothieSuggestions.starters(for: session.cli), id: \.self) { s in
                     Button {
                         onPick(SmoothieSuggestions.plainText(s))
@@ -35,7 +35,7 @@ struct SuggestionsBar: View {
                     case .text(let t):
                         Text(t)
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(SmoothieColor.textPrimary)
+                            .foregroundStyle(SmoothieColor.chipLabel)
                     case .code(let c):
                         Text(c)
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
@@ -50,9 +50,13 @@ struct SuggestionsBar: View {
             .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, SmoothieMetrics.space16)
+        .padding(.vertical, SmoothieMetrics.space12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SmoothieColor.bgChip, in: .capsule)
+        .background(SmoothieColor.chipBg, in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
+        .overlay(
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg)
+                .strokeBorder(SmoothieColor.chipStroke, lineWidth: 0.5)
+        )
     }
 }
