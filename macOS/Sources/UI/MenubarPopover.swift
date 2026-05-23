@@ -85,13 +85,22 @@ struct MenubarPopover: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.statusWaiting)
-                Text("Tailscale not detected — phone must be on the same LAN, or turn on the public tunnel below.")
+                Text("Tailscale not detected — phone must be on the same LAN, or switch the Network selector to Remote.")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.textSecondary)
             }
         }
     }
 
+    /// P28 — Network mode selector. Two-segment Picker that maps to
+    /// cloudflared on/off:
+    ///   • Local  — phone must reach this Mac directly (LAN / Tailscale).
+    ///              cloudflared is stopped.
+    ///   • Remote — phone can reach this Mac from anywhere via a
+    ///              Cloudflare tunnel. cloudflared is started.
+    /// Replaces the prior PUBLIC TUNNEL toggle so the mental model is
+    /// "where is your phone right now?" instead of "do you want a
+    /// tunnel?".
     @ViewBuilder
     private var tunnelSection: some View {
         VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
@@ -99,84 +108,97 @@ struct MenubarPopover: View {
                 Image(systemName: "globe")
                     .font(.system(size: 11))
                     .foregroundStyle(SmoothieColor.textSecondary)
-                Text("PUBLIC TUNNEL")
+                Text("NETWORK")
                     .font(.system(size: 9, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(SmoothieColor.textTertiary)
                 Spacer()
-                Toggle("", isOn: tunnelBinding)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .labelsHidden()
-                    .disabled(!pairing.cloudflared.isInstalled)
             }
+            Picker("", selection: networkModeBinding) {
+                Text("Local").tag(NetworkMode.local)
+                Text("Remote").tag(NetworkMode.remote)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            // Both tabs stay tappable. If cloudflared isn't installed,
+            // flipping to Remote yields a .failed status via
+            // CloudflaredHost.start(); the install hint surfaces in
+            // tunnelStatusBody below.
             tunnelStatusBody
         }
     }
 
-    private var tunnelBinding: Binding<Bool> {
+    private enum NetworkMode: Hashable {
+        case local, remote
+    }
+
+    /// `.local` whenever cloudflared is `.off` or `.failed`; `.remote` for
+    /// `.starting` and `.running`. Flipping the segmented control calls
+    /// start()/stop() on the cloudflared host.
+    private var networkModeBinding: Binding<NetworkMode> {
         Binding(
-            get: { pairing.isPublicTunnelActive || isTunnelStarting },
-            set: { on in
-                if on { pairing.cloudflared.start() }
-                else  { pairing.cloudflared.stop() }
+            get: {
+                switch pairing.cloudflared.status {
+                case .starting, .running: return .remote
+                case .off, .failed:       return .local
+                }
+            },
+            set: { mode in
+                switch mode {
+                case .remote: pairing.cloudflared.start()
+                case .local:  pairing.cloudflared.stop()
+                }
             }
         )
     }
 
-    private var isTunnelStarting: Bool {
-        if case .starting = pairing.cloudflared.status { return true }
-        return false
-    }
-
     @ViewBuilder
     private var tunnelStatusBody: some View {
-        if !pairing.cloudflared.isInstalled {
+        switch pairing.cloudflared.status {
+        case .off:
+            // Local mode. Phone has to reach the daemon directly — show
+            // the install hint only when the user might want to switch
+            // to Remote later.
             VStack(alignment: .leading, spacing: SmoothieMetrics.space2) {
-                Text("`cloudflared` is not installed.")
+                Text("Local — phone must be on the same network (LAN or Tailscale).")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.textSecondary)
-                Text("Run `brew install cloudflared` and reopen this popover.")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(SmoothieColor.textTertiary)
-            }
-        } else {
-            switch pairing.cloudflared.status {
-            case .off:
-                Text("Off — phone must reach this Mac directly (LAN or Tailscale).")
-                    .font(.system(size: 10))
-                    .foregroundStyle(SmoothieColor.textSecondary)
-            case .starting:
-                HStack(spacing: SmoothieMetrics.space6) {
-                    ProgressView().controlSize(.mini)
-                    Text("Asking Cloudflare for a URL…")
-                        .font(.system(size: 10))
-                        .foregroundStyle(SmoothieColor.textSecondary)
-                }
-            case .running(let url):
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: SmoothieMetrics.space4) {
-                        Circle().fill(SmoothieColor.statusDone).frame(width: 6, height: 6)
-                        Text("Public — anyone with the QR can connect from anywhere.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(SmoothieColor.textSecondary)
-                    }
-                    Text(url.absoluteString)
+                if !pairing.cloudflared.isInstalled {
+                    Text("Remote needs `cloudflared` — run `brew install cloudflared`.")
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(SmoothieColor.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
-            case .failed(let msg):
-                HStack(spacing: SmoothieMetrics.space6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(SmoothieColor.statusErr)
-                    Text(msg)
+            }
+        case .starting:
+            HStack(spacing: SmoothieMetrics.space6) {
+                ProgressView().controlSize(.mini)
+                Text("Asking Cloudflare for a URL…")
+                    .font(.system(size: 10))
+                    .foregroundStyle(SmoothieColor.textSecondary)
+            }
+        case .running(let url):
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: SmoothieMetrics.space4) {
+                    Circle().fill(SmoothieColor.statusDone).frame(width: 6, height: 6)
+                    Text("Remote — anyone with the QR can connect from anywhere.")
                         .font(.system(size: 10))
                         .foregroundStyle(SmoothieColor.textSecondary)
                 }
+                Text(url.absoluteString)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(SmoothieColor.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+        case .failed(let msg):
+            HStack(spacing: SmoothieMetrics.space6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(SmoothieColor.statusErr)
+                Text(msg)
+                    .font(.system(size: 10))
+                    .foregroundStyle(SmoothieColor.textSecondary)
             }
         }
     }
