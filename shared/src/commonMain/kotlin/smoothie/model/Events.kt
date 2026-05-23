@@ -15,6 +15,12 @@ enum class EventType {
     DONE,
     ERROR,
     LIMIT_REACHED,
+    /** Side-channel update of the session's token-budget snapshot.
+     *  Payload (a serialised ContextSnapshot) rides in `metadata` so
+     *  the existing event encoder doesn't need a special shape. iOS
+     *  consumes these in SessionLiveStore.applyContextUpdate before
+     *  the visible event ring, so the agent transcript stays clean. */
+    CONTEXT_UPDATE,
 }
 
 @Serializable
