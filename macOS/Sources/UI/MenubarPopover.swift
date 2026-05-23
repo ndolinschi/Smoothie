@@ -11,7 +11,7 @@ struct MenubarPopover: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space12) {
             header
             Divider()
             statusSection
@@ -22,21 +22,22 @@ struct MenubarPopover: View {
             Divider()
             actions
         }
-        .padding(14)
-        .frame(width: 340)
+        .padding(SmoothieMetrics.space14)
+        .frame(width: SmoothieMetrics.popoverWidth)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SmoothieMetrics.space8) {
             Image(systemName: "waveform.path")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(SmoothieColor.accent)
             Text("Smoothie")
                 .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SmoothieColor.textPrimary)
             Spacer()
             Text("v0.2.0")
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SmoothieColor.textTertiary)
         }
     }
 
@@ -44,37 +45,37 @@ struct MenubarPopover: View {
     private var statusSection: some View {
         switch server.status {
         case .running(let host, let port):
-            statusRow(color: .green, label: "Running", detail: "\(host):\(port)")
+            statusRow(color: SmoothieColor.statusDone, label: "Running", detail: "\(host):\(port)")
         case .starting:
-            statusRow(color: .yellow, label: "Starting…", detail: "")
+            statusRow(color: SmoothieColor.statusWaiting, label: "Starting…", detail: "")
         case .failed(let msg):
-            statusRow(color: .red, label: "Failed", detail: msg)
+            statusRow(color: SmoothieColor.statusErr, label: "Failed", detail: msg)
         case .stopped:
-            statusRow(color: .gray, label: "Stopped", detail: "")
+            statusRow(color: SmoothieColor.statusIdle, label: "Stopped", detail: "")
         }
         if !pairing.hostIsTailscale && !pairing.isPublicTunnelActive {
-            HStack(spacing: 6) {
+            HStack(spacing: SmoothieMetrics.space6) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 10))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SmoothieColor.statusWaiting)
                 Text("Tailscale not detected — phone must be on the same LAN, or turn on the public tunnel below.")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
             }
         }
     }
 
     @ViewBuilder
     private var tunnelSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
+            HStack(spacing: SmoothieMetrics.space6) {
                 Image(systemName: "globe")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
                 Text("PUBLIC TUNNEL")
                     .font(.system(size: 9, weight: .bold))
                     .tracking(0.6)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SmoothieColor.textTertiary)
                 Spacer()
                 Toggle("", isOn: tunnelBinding)
                     .toggleStyle(.switch)
@@ -104,94 +105,96 @@ struct MenubarPopover: View {
     @ViewBuilder
     private var tunnelStatusBody: some View {
         if !pairing.cloudflared.isInstalled {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SmoothieMetrics.space2) {
                 Text("`cloudflared` is not installed.")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
                 Text("Run `brew install cloudflared` and reopen this popover.")
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SmoothieColor.textTertiary)
             }
         } else {
             switch pairing.cloudflared.status {
             case .off:
                 Text("Off — phone must reach this Mac directly (LAN or Tailscale).")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
             case .starting:
-                HStack(spacing: 6) {
+                HStack(spacing: SmoothieMetrics.space6) {
                     ProgressView().controlSize(.mini)
                     Text("Asking Cloudflare for a URL…")
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
             case .running(let url):
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Circle().fill(Color.green).frame(width: 6, height: 6)
+                    HStack(spacing: SmoothieMetrics.space4) {
+                        Circle().fill(SmoothieColor.statusDone).frame(width: 6, height: 6)
                         Text("Public — anyone with the QR can connect from anywhere.")
                             .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SmoothieColor.textSecondary)
                     }
                     Text(url.absoluteString)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SmoothieColor.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .textSelection(.enabled)
                 }
             case .failed(let msg):
-                HStack(spacing: 6) {
+                HStack(spacing: SmoothieMetrics.space6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(SmoothieColor.statusErr)
                     Text(msg)
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
             }
         }
     }
 
     private func statusRow(color: Color, label: String, detail: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SmoothieMetrics.space8) {
             Circle()
                 .fill(color)
                 .frame(width: 8, height: 8)
                 .shadow(color: color.opacity(0.6), radius: 3)
             Text(label)
                 .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SmoothieColor.textPrimary)
             Spacer()
             if !detail.isEmpty {
                 Text(detail)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
                     .lineLimit(1)
             }
         }
     }
 
     private var pairingSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space8) {
             Text("PAIRING")
                 .font(.system(size: 9, weight: .bold))
                 .tracking(0.6)
-                .foregroundStyle(.tertiary)
-            HStack(alignment: .top, spacing: 12) {
+                .foregroundStyle(SmoothieColor.textTertiary)
+            HStack(alignment: .top, spacing: SmoothieMetrics.space12) {
                 if let img = pairing.qrImage(pixelSize: 160) {
                     Image(nsImage: img)
                         .resizable()
                         .interpolation(.none)
                         .frame(width: 88, height: 88)
                         .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerSm))
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
                     Text("Scan from iPhone")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SmoothieColor.textPrimary)
                     Text("or enter manually:")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SmoothieColor.textSecondary)
                     copyableRow(
                         label: "host",
                         value: pairingHostDisplay,
@@ -211,6 +214,7 @@ struct MenubarPopover: View {
                     Button("Show full QR") { showingFullQR = true }
                         .buttonStyle(.link)
                         .font(.system(size: 11))
+                        .tint(SmoothieColor.accent)
                 }
                 Spacer()
             }
@@ -238,11 +242,11 @@ struct MenubarPopover: View {
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
             actionButton(
                 label: copiedField == .token ? "✓ Token copied" : "Copy token",
                 systemImage: "key.fill",
-                tint: copiedField == .token ? .green : .primary
+                tint: copiedField == .token ? SmoothieColor.statusDone : SmoothieColor.textPrimary
             ) {
                 copy(pairing.token, as: .token)
             }
@@ -250,7 +254,7 @@ struct MenubarPopover: View {
             actionButton(
                 label: copiedField == .url ? "✓ Pairing URL copied" : "Copy pairing URL",
                 systemImage: "link",
-                tint: copiedField == .url ? .green : .primary
+                tint: copiedField == .url ? SmoothieColor.statusDone : SmoothieColor.textPrimary
             ) {
                 copy(pairing.qrPayloadURL, as: .url)
             }
@@ -258,18 +262,18 @@ struct MenubarPopover: View {
             actionButton(
                 label: "Re-pair (rotate token)",
                 systemImage: "arrow.triangle.2.circlepath",
-                tint: .orange
+                tint: SmoothieColor.accent
             ) {
                 pairing.rotate()
                 server.restart()
             }
 
-            Divider().padding(.vertical, 2)
+            Divider().padding(.vertical, SmoothieMetrics.space2)
 
             actionButton(
                 label: "Quit Smoothie",
                 systemImage: "power",
-                tint: .red
+                tint: SmoothieColor.statusErr
             ) {
                 NSApplication.shared.terminate(nil)
             }
@@ -285,20 +289,20 @@ struct MenubarPopover: View {
         field: CopiedField,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SmoothieMetrics.space4) {
             Text("\(label):")
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SmoothieColor.textTertiary)
             Text(value)
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.primary)
+                .foregroundStyle(SmoothieColor.textPrimary)
                 .lineLimit(1)
                 .textSelection(.enabled)
-            Spacer(minLength: 4)
+            Spacer(minLength: SmoothieMetrics.space4)
             Button(action: action) {
                 Image(systemName: copiedField == field ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(copiedField == field ? .green : .secondary)
+                    .foregroundStyle(copiedField == field ? SmoothieColor.statusDone : SmoothieColor.textSecondary)
             }
             .buttonStyle(.plain)
             .help("Copy \(label)")
@@ -308,11 +312,11 @@ struct MenubarPopover: View {
     private func actionButton(
         label: String,
         systemImage: String,
-        tint: Color = .primary,
+        tint: Color = SmoothieColor.textPrimary,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: SmoothieMetrics.space6) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11))
                     .frame(width: 14)
@@ -351,39 +355,40 @@ struct PairingFullView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: SmoothieMetrics.space14) {
             Text("Pair Smoothie")
                 .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(SmoothieColor.textPrimary)
             if let img = pairing.qrImage(pixelSize: 320) {
                 Image(nsImage: img)
                     .resizable()
                     .interpolation(.none)
                     .frame(width: 320, height: 320)
                     .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg))
             }
-            VStack(spacing: 6) {
+            VStack(spacing: SmoothieMetrics.space6) {
                 Text("Scan with the iPhone Smoothie app")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
                 Text("Or enter manually:")
                     .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SmoothieColor.textTertiary)
                 Text(pairingHostDisplayForFull)
                     .font(.system(size: 12, design: .monospaced))
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SmoothieMetrics.space12)
                 Text("token: \(pairing.token)")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SmoothieColor.textSecondary)
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SmoothieMetrics.space12)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: SmoothieMetrics.space8) {
                 Button {
                     copyToPasteboard(pairing.token, label: "token")
                 } label: {
@@ -400,7 +405,7 @@ struct PairingFullView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(SmoothieMetrics.space20)
         .frame(width: 380)
     }
 

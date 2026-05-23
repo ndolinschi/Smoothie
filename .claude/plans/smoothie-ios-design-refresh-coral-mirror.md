@@ -263,23 +263,49 @@ that introduces no broken intermediate states. Sweep last (P25.h).
 Each phase ships in a single commit using the project's
 `<phase>: <summary>` style.
 
-## P26 — Gin (macOS) follow-up (stub only)
+## P26 — Gin (macOS) follow-up
 
-After iOS lands, Gin gets the matching treatment but adapted for
-the notch-bar surface:
+The original stub assumed Gin had a notch-bar + expanded session view
+to translate iOS patterns into. That was wrong: `macOS/Sources/UI/`
+contains a single `MenubarPopover.swift` — Gin is a **menubar
+popover** with status / tunnel / pairing / actions sections. No chat
+surface, no model picker, no repo chips. The iOS patterns from P25
+(centered model dropdown, suggestion chips, repo chips row, env pill)
+have no home on the Mac.
 
-- Token parity (`DesignTokens` is iOS-only today; Gin uses its own
-  Swift assets — investigate whether tokens can be split into a
-  cross-target Swift Package consumed by both).
-- Centered model dropdown in the expanded notch panel.
-- Suggestion chips in the expanded view's empty state.
-- Repo chips row in the expanded session view; picker becomes a
-  popover instead of a bottom sheet (macOS idiom).
-- Env pill: probably collapsed into the notch's status row rather
-  than a separate capsule.
+What P26 *can* deliver: visual token parity. Bring the iOS design
+language (coral accent, surface tiers, spacing scale, status colors)
+into the menubar popover so the daemon control surface feels like
+the same product as the iOS chat surface.
 
-Detailed P26 phasing deferred until P25 lands and we know which
-patterns translated cleanly.
+### P26.a — Tokenize the macOS popover
+
+- New `macOS/Sources/UI/DesignTokens.swift` mirroring the iOS token
+  vocabulary, but mapped to AppKit-friendly values where iOS used
+  fixed hex:
+  - `textPrimary/Secondary/Tertiary` → `.primary` / `.secondary` /
+    `.tertiary` so the popover stays light/dark adaptive.
+  - `accent` → `Color(hex: 0xED7C5C)` (same as iOS, fixed).
+  - `statusDone/Waiting/Err/Thinking` → same fixed hex as iOS.
+  - `surface1/2/3` → `Color(NSColor.controlBackgroundColor)` and
+    siblings.
+  - Spacing scale: same names (`space4/6/8/12/16/24`).
+- `MenubarPopover.swift` sweep: replace magic-number paddings,
+  ad-hoc `.green/.red/.orange` status dots, and inline font sizes
+  with token reads.
+- No structural change to the popover layout — it's the same
+  sections in the same order, just dressed in the shared token
+  vocabulary.
+
+### Out of scope for P26 (and noted as such)
+
+- Shared Swift-package extraction of tokens between iOS + macOS.
+  Duplicating the token file is the right move for the MVP;
+  consolidate later if/when the duplication gets painful.
+- Forcing the popover into dark mode. macOS users expect adaptive
+  surfaces; the popover stays light/dark aware.
+- Anything chat-shaped on the Mac. The daemon doesn't render
+  agent output and isn't supposed to.
 
 ## Status (updated)
 
