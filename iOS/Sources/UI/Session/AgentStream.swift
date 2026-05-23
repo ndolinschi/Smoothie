@@ -100,12 +100,16 @@ struct AgentStream: View {
                                     resultExpandBinding: resultExpandBinding(for: item.id)
                                 ).id(item.id)
                             case .toolCard(let use, let result):
+                                let isSubagent = use.content == "Task"
                                 ToolCallCard(
-                                    icon: use.type == .fileEdit ? "doc.text.fill" : "wrench.adjustable",
+                                    icon: iconForTool(use),
                                     name: use.content,
                                     status: result != nil ? .completed : .running,
-                                    inputFields: EventRow.inputFields(from: use),
+                                    inputFields: EventRow.inputFields(from: use, hidingKeys: isSubagent ? ["subagent_type"] : []),
                                     result: result?.content,
+                                    tint: isSubagent ? SmoothieColor.accent : SmoothieColor.textPrimary.opacity(0.85),
+                                    subtitleBadge: isSubagent ? EventRow.subagentType(from: use) : nil,
+                                    emphasised: isSubagent,
                                     expanded: expandBinding(for: use.id),
                                     resultExpanded: resultExpandBinding(for: use.id)
                                 )
@@ -169,6 +173,28 @@ struct AgentStream: View {
                 else        { expandStore.expandedResultIds.remove(id) }
             }
         )
+    }
+
+    /// Picks the SF Symbol that fronts a tool card. File-mutating tools
+    /// reuse the document glyph; Claude's `Task` tool gets a distinct
+    /// people glyph so subagent invocations stand out from regular tool
+    /// calls in a busy stream. Everything else falls back to the generic
+    /// wrench so adapter-emitted tools (Read, Grep, Bash, Glob, etc.)
+    /// share a single visual lane.
+    private func iconForTool(_ use: SmoothieEventWire) -> String {
+        if use.type == .fileEdit {
+            return "doc.text.fill"
+        }
+        switch use.content {
+        case "Task":         return "person.2.fill"
+        case "Bash":         return "terminal.fill"
+        case "Read":         return "doc.text"
+        case "Grep":         return "magnifyingglass"
+        case "Glob":         return "asterisk"
+        case "WebFetch",
+             "WebSearch":    return "globe"
+        default:             return "wrench.adjustable"
+        }
     }
 }
 
@@ -431,14 +457,36 @@ private struct ToolStackRow: View {
         return results.joined(separator: "\n\n──\n\n")
     }
 
+    private var isSubagentStack: Bool { name == "Task" }
+
+    private var stackIcon: String {
+        if isSubagentStack { return "person.2.fill" }
+        switch name {
+        case "Bash":              return "terminal.fill"
+        case "Read":              return "doc.text"
+        case "Grep":              return "magnifyingglass"
+        case "Glob":              return "asterisk"
+        case "WebFetch",
+             "WebSearch":         return "globe"
+        default:                  return "wrench.adjustable"
+        }
+    }
+
     var body: some View {
         ToolCallCard(
-            icon: "wrench.adjustable",
+            icon: stackIcon,
             name: name,
             status: combinedResult != nil ? .completed : .running,
-            inputFields: firstUse.map { EventRow.inputFields(from: $0) } ?? [],
+            inputFields: firstUse.map {
+                EventRow.inputFields(from: $0, hidingKeys: isSubagentStack ? ["subagent_type"] : [])
+            } ?? [],
             result: combinedResult,
             stackCount: useCount,
+            tint: isSubagentStack ? SmoothieColor.accent : SmoothieColor.textPrimary.opacity(0.85),
+            subtitleBadge: isSubagentStack
+                ? (firstUse.flatMap { EventRow.subagentType(from: $0) } ?? "subagent")
+                : nil,
+            emphasised: isSubagentStack,
             expanded: expandBinding,
             resultExpanded: resultExpandBinding
         )

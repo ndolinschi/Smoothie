@@ -19,6 +19,16 @@ struct ToolCallCard: View {
     let result: String?
     var stackCount: Int = 1
     var tint: Color = SmoothieColor.textPrimary.opacity(0.85)
+    /// Optional small chip rendered next to the tool name in the
+    /// header. Used by Claude's `Task` tool to surface the
+    /// `subagent_type` (e.g. `general-purpose`, `Explore`, `Plan`)
+    /// so the user can tell at a glance which subagent the parent
+    /// dispatched without expanding the card.
+    var subtitleBadge: String? = nil
+    /// When true, the card draws a coral-tinted stroke instead of the
+    /// neutral soft stroke. Used for subagent invocations so they
+    /// visually pop out of the regular tool-call cadence.
+    var emphasised: Bool = false
 
     /// Externally-owned expand state — required so the card's expanded /
     /// collapsed status survives `LazyVStack` view recycling when the user
@@ -51,7 +61,10 @@ struct ToolCallCard: View {
         .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd, style: .continuous)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                .strokeBorder(
+                    emphasised ? SmoothieColor.accent.opacity(0.45) : SmoothieColor.strokeSoft,
+                    lineWidth: emphasised ? 1 : 0.5
+                )
         )
     }
 
@@ -73,6 +86,15 @@ struct ToolCallCard: View {
                     .foregroundStyle(SmoothieColor.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if let subtitleBadge {
+                    Text(subtitleBadge)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(SmoothieColor.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(SmoothieColor.accent.opacity(0.14), in: .capsule)
+                        .lineLimit(1)
+                }
                 if stackCount > 1 {
                     Text("×\(stackCount)")
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))

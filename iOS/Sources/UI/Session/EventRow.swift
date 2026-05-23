@@ -151,24 +151,32 @@ struct EventRow: View {
     /// Ordered list of `(key, value)` pairs extracted from `metadata.input`.
     /// Used by `ToolCallCard` (via `AgentStream`) to populate the card
     /// body. Returns an empty array if the event has no structured input
-    /// or the input isn't a JSON object.
-    static func inputFields(from event: SmoothieEventWire) -> [(String, String)] {
+    /// or the input isn't a JSON object. `hidingKeys` lets callers drop
+    /// fields already surfaced elsewhere — e.g. AgentStream hides
+    /// `subagent_type` for Task tool calls because the value is already
+    /// rendered as a header badge on the card.
+    static func inputFields(
+        from event: SmoothieEventWire,
+        hidingKeys: Set<String> = []
+    ) -> [(String, String)] {
         guard let metadata = event.metadata,
               let input = metadata["input"]
         else { return [] }
         guard case .object(let inputObj) = input.value else { return [] }
+        // `prompt` is now near the top so Task tool invocations surface
+        // the subagent's instructions before any auxiliary fields.
         let priority = [
+            "prompt",
             "command", "description",
             "file_path", "path",
             "pattern", "glob",
             "old_string", "new_string",
             "content",
             "url",
-            "prompt",
         ]
-        var seen: Set<String> = []
+        var seen: Set<String> = hidingKeys
         var ordered: [(String, String)] = []
-        for key in priority {
+        for key in priority where !seen.contains(key) {
             if let v = inputObj[key] {
                 ordered.append((key, anyCodableString(v)))
                 seen.insert(key)
@@ -180,6 +188,23 @@ struct EventRow: View {
             }
         }
         return ordered
+    }
+
+    /// Pull the subagent kind out of a Task tool's metadata so
+    /// `ToolCallCard` can render it as a header chip. Claude's
+    /// stream-json wraps the value under `metadata.input.subagent_type`.
+    /// Returns nil when the field is missing or empty — caller falls
+    /// back to the bare "Task" name in that case.
+    static func subagentType(from event: SmoothieEventWire) -> String? {
+        guard let metadata = event.metadata,
+              let input = metadata["input"]
+        else { return nil }
+        guard case .object(let inputObj) = input.value else { return nil }
+        guard let raw = inputObj["subagent_type"] else { return nil }
+        if case .string(let s) = raw.value, !s.isEmpty {
+            return s
+        }
+        return nil
     }
 
     private static func anyCodableString(_ v: AnyCodable) -> String {
