@@ -113,6 +113,27 @@ struct MessageInput: View {
                 && pendingImagePickerSource == nil
             if new == .waiting && noSheetUp { focused = true }
         }
+        .onChange(of: text) { oldText, newText in
+            // P27.b — typing `@` at the start of a token auto-opens the
+            // mention picker. We require a single-character append at the
+            // very end (so paste of a string containing `@` doesn't
+            // trigger), AND the character before the `@` must be
+            // whitespace or absent (so email addresses like "me@x" don't
+            // trigger either). The `@` is stripped before presenting —
+            // the picker's selection callback re-inserts `@path` via
+            // insertAtCursor, so leaving the user-typed `@` would
+            // produce `@@path`.
+            guard !showingMention, !showingAttach, !showingImporter,
+                  !showingSkills, !showingMCP, pendingImagePickerSource == nil
+            else { return }
+            guard newText.count == oldText.count + 1, newText.hasSuffix("@") else { return }
+            let trailing = newText.index(newText.endIndex, offsetBy: -1)
+            let prefix = newText[..<trailing]
+            if prefix.isEmpty || prefix.last?.isWhitespace == true {
+                text = String(prefix)
+                showingMention = true
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             // Release the mic + speech recognizer when iOS sends us to
             // the background. Otherwise a long dictation session left
