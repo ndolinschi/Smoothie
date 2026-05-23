@@ -40,7 +40,11 @@ struct HomeView: View {
     @State private var pendingPath: String?
     @State private var selectedSession: SessionDescriptorWire?
     @State private var filter: HomeFilter = .all
-    @State private var presentingPairings = false
+    /// Renamed in P27.f: the leading toolbar button now opens
+    /// SettingsView, which presents PairingsSheet from one of its rows.
+    /// The legacy "presentingPairings" sheet attachment further down is
+    /// removed in the same phase.
+    @State private var presentingSettings = false
     @State private var presentingAddPair = false
     @AppStorage("smoothie.homeTipDismissed") private var tipDismissed: Bool = false
 
@@ -134,7 +138,7 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     topBarButton(systemName: "line.3.horizontal") {
-                        presentingPairings = true
+                        presentingSettings = true
                     }
                 }
                 ToolbarItem(placement: .principal) {
@@ -175,20 +179,12 @@ struct HomeView: View {
                 .presentationDetents([.large])
                 .presentationBackground(.clear)
             }
-            .sheet(isPresented: $presentingPairings) {
-                PairingsSheet(
-                    onAddPairing: {
-                        presentingPairings = false
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(200))
-                            presentingAddPair = true
-                        }
-                    },
-                    onDismiss: { presentingPairings = false }
-                )
-                .presentationDetents([.medium])
+            .sheet(isPresented: $presentingSettings) {
+                SettingsView(onAddPairing: {
+                    presentingAddPair = true
+                })
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationCornerRadius(20)
             }
             .fullScreenCover(isPresented: $presentingAddPair) {
                 AddPairingCover(onDismiss: { presentingAddPair = false })

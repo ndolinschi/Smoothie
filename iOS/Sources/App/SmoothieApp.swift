@@ -6,6 +6,7 @@ struct SmoothieApp: App {
     @State private var pairing = PairingStore()
     @State private var recents = RecentsStore()
     @State private var sessionMeta = SessionMetaStore()
+    @State private var settings = SettingsStore()
     @StateObject private var notifications = NotificationRouter()
 
     var body: some Scene {
@@ -14,10 +15,11 @@ struct SmoothieApp: App {
                 .environment(pairing)
                 .environment(recents)
                 .environment(sessionMeta)
-                // P27.d — the .preferredColorScheme(.dark) lock was
-                // removed; surfaces and text read system-adaptive
-                // tokens from DesignTokens. The Settings store (P27.f)
-                // owns the manual override.
+                .environment(settings)
+                // P27.d/f — preferredColorScheme follows the user's
+                // Settings override; `nil` means follow system. Tokens
+                // in DesignTokens are adaptive either way.
+                .preferredColorScheme(settings.theme.colorScheme)
                 .tint(SmoothieColor.accent)
                 .task {
                     await LocalNotifier.shared.ensureAuthorization()
