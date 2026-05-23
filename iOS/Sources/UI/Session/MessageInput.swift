@@ -249,6 +249,17 @@ struct MessageInput: View {
             }
             .buttonStyle(.plain)
 
+            // Phase 3 of the Cursor redesign: model picker is no longer
+            // buried under AttachSheet → "Models". The chip is always
+            // visible in the actions row showing the current model + a
+            // tier dot, and tap opens the existing ModelPickerSheet (we
+            // reuse the same sheet body — only its entry point moved).
+            if features?.supportsModelPicker == true {
+                ModelChip(cli: session.cli, model: session.model) {
+                    showingModels = true
+                }
+            }
+
             ModeChip(mode: session.mode) {
                 onTapMode()
             }
