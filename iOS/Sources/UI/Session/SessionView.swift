@@ -111,16 +111,21 @@ struct SessionView: View {
                     )
                     .animation(.easeInOut(duration: 0.2), value: store.connected)
                     .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
-                    HStack(spacing: SmoothieMetrics.space8) {
+                    // P27.c — EnvPill only renders for non-default modes.
+                    // "Default" is the no-op case and carries no signal
+                    // worth a permanent capsule. The inline StatusBadge
+                    // ("thinking") was removed entirely; AgentStream's
+                    // ThinkingPulseRow communicates the agent working
+                    // state, which is enough.
+                    if let mode = currentSession.mode,
+                       !mode.isEmpty,
+                       mode.lowercased() != "default" {
                         EnvPill(label: modeChipLabel.capitalized) {
                             showingModeSheet = true
                         }
-                        if store.state != .done, store.state != .error {
-                            StatusBadge(state: store.state, connected: store.connected)
-                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, SmoothieMetrics.space2)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, SmoothieMetrics.space2)
                     AgentStream(
                         events: store.events,
                         connection: store.connection,

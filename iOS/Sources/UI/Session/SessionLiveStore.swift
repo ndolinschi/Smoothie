@@ -49,7 +49,7 @@ final class SessionLiveStore {
     private var api: APIClient?
     let session: SessionDescriptorWire
 
-    /// Convenience flag (kept for the existing StatusBadge call sites).
+    /// Convenience flag — true once the SSE handshake has completed.
     var connected: Bool {
         if case .connected = connection { return true }
         return false
