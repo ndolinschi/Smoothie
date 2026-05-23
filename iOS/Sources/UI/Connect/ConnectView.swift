@@ -87,15 +87,15 @@ struct ConnectView: View {
             HStack(spacing: 14) {
                 Image(systemName: systemName)
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(prominent ? .white : SmoothieColor.textPrimary)
+                    .foregroundStyle(prominent ? SmoothieColor.onAccent : SmoothieColor.textPrimary)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(prominent ? .white : SmoothieColor.textPrimary)
+                        .foregroundStyle(prominent ? SmoothieColor.onAccent : SmoothieColor.textPrimary)
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundStyle(prominent ? Color.white.opacity(0.75) : SmoothieColor.textSecondary)
+                        .foregroundStyle(prominent ? SmoothieColor.onAccent.opacity(0.75) : SmoothieColor.textSecondary)
                 }
                 Spacer()
             }
@@ -233,7 +233,7 @@ private struct ScannerSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(SmoothieColor.accent, in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmoothieColor.onAccent)
                     }
                     .buttonStyle(.plain)
                     Button {

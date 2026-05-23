@@ -50,7 +50,7 @@ struct SmoothieChip: View {
         .background(active ? SmoothieColor.accentSoft : SmoothieColor.bgCard, in: .capsule)
         .overlay(
             Capsule().strokeBorder(
-                active ? SmoothieColor.accent.opacity(0.5) : SmoothieColor.strokeSoft,
+                active ? SmoothieColor.activeBorder : SmoothieColor.strokeSoft,
                 lineWidth: 0.5
             )
         )

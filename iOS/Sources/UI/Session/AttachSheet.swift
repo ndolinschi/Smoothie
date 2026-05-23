@@ -84,16 +84,21 @@ struct AttachSheet: View {
                 }
             }
 
-            SheetRow(
-                glyph: "server.rack",
-                glyphColor: SmoothieColor.textSecondary,
-                glyphBackground: SmoothieColor.bgGlyph,
-                title: "MCP servers",
-                subtitle: "Connectors land in v1.5"
-            ) {
-                onOpenMCP()
-                onDismiss()
-            }
+            // TODO(v1.5): restore MCP row. Hidden for v1 release to avoid
+            // shipping a "coming soon" row that signals incompleteness.
+            // The MCPComingSoonSheet file is preserved unchanged; v1.5
+            // just deletes this comment and uncomments the SheetRow below.
+            //
+            // SheetRow(
+            //     glyph: "server.rack",
+            //     glyphColor: SmoothieColor.textSecondary,
+            //     glyphBackground: SmoothieColor.bgGlyph,
+            //     title: "MCP servers",
+            //     subtitle: "Connectors land in v1.5"
+            // ) {
+            //     onOpenMCP()
+            //     onDismiss()
+            // }
         }
     }
 }

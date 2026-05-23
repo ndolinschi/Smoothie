@@ -86,14 +86,16 @@ struct SessionView: View {
                     ConnectionBanner(
                         connection: store.connection,
                         state: store.state,
-                        hasReceivedEvent: store.hasReceivedEvent
+                        hasReceivedEvent: store.hasReceivedEvent,
+                        onReconnect: { store.reconnect() }
                     )
                     .animation(.easeInOut(duration: 0.2), value: store.connected)
                     .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
                     AgentStream(
                         events: store.events,
                         connection: store.connection,
-                        state: store.state
+                        state: store.state,
+                        expandStore: store
                     )
                     if !store.events.isEmpty {
                         ActionChipsRow(
@@ -146,7 +148,17 @@ struct SessionView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    HStack(spacing: 6) {
+                    // Header keeps just the model picker + mode pill. The
+                    // StatusBadge was here too but duplicated the typing
+                    // pulse already pinned to the bottom of AgentStream
+                    // and kept showing "thinking" forever while the user
+                    // was waiting for the session to be ready (now fixed
+                    // server-side). Mode is still surfaced here for the
+                    // explicit picker affordance — the ModeChip in the
+                    // composer covers in-flow switching.
+                    if let store, store.state == .error || store.state == .limitReached {
+                        StatusBadge(state: store.state, connected: store.connected)
+                    } else {
                         Button {
                             showingModeSheet = true
                         } label: {
@@ -165,9 +177,6 @@ struct SessionView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        if let store, store.state != .done, store.state != .error {
-                            StatusBadge(state: store.state, connected: store.connected)
-                        }
                     }
                 }
             }

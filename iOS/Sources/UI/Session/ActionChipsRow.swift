@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// REF-5 chip row that sits above the composer in an active session. Two
-/// chips today: open the mode picker, and (when the session has produced
-/// file edits) a Diff button that opens DiffSheet for review + comments.
+/// Chip row above the composer. Surfaces the Diff button when the session
+/// has produced file edits. The prior "Plan" chip was removed in this
+/// revision — Code/Plan mode is already switchable from the `ModeChip`
+/// inside the composer, and showing the same toggle in two places
+/// confused users. `onPlanTap` is preserved on the type signature so the
+/// SessionView call site doesn't need rewiring; the closure is unused.
 struct ActionChipsRow: View {
     let events: [SmoothieEventWire]
     let onPlanTap: () -> Void
@@ -13,33 +16,14 @@ struct ActionChipsRow: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                planChip
-                if fileEditCount > 0 {
+        if fileEditCount > 0 {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
                     diffChip
                 }
+                .padding(.horizontal, 14)
             }
-            .padding(.horizontal, 14)
         }
-    }
-
-    private var planChip: some View {
-        Button(action: onPlanTap) {
-            HStack(spacing: 6) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-                Text("Plan")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(SmoothieColor.bgCard, in: .capsule)
-            .overlay(Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
     }
 
     private var diffChip: some View {

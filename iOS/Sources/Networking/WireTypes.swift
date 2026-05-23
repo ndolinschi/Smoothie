@@ -72,13 +72,24 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
 enum SessionStateWire: String, Codable, Sendable {
     case starting, thinking, waiting, done, error
     case limitReached = "limit_reached"
+    /// Fallback for state strings introduced by a newer daemon that this
+    /// iOS build doesn't recognise yet. The default `String`-backed
+    /// `Codable` synthesis would throw on decode and crash the SSE
+    /// pipeline; a tolerant decoder lets the app keep ticking and just
+    /// render the session in an unknown-but-non-fatal pose.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionStateWire(rawValue: raw) ?? .unknown
+    }
 
     /// Treated as completed in the HomeView filter — the agent isn't going to
     /// produce more events without a manual restart.
     var isCompleted: Bool {
         switch self {
         case .done, .error, .limitReached: return true
-        case .starting, .thinking, .waiting: return false
+        case .starting, .thinking, .waiting, .unknown: return false
         }
     }
 }
@@ -90,6 +101,15 @@ enum EventTypeWire: String, Codable, Sendable {
     case fileEdit = "file_edit"
     case waiting, done, error
     case limitReached = "limit_reached"
+    /// Same forward-compat fallback as `SessionStateWire.unknown` — a
+    /// new event type from a newer daemon decodes as `.unknown` instead
+    /// of crashing the whole event stream parser.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = EventTypeWire(rawValue: raw) ?? .unknown
+    }
 }
 
 struct SmoothieEventWire: Codable, Sendable, Identifiable {
@@ -354,6 +374,7 @@ extension SessionStateWire {
         case .done:         return .done
         case .error:        return .error
         case .limitReached: return .limitReached
+        case .unknown:      return .starting
         }
     }
 }

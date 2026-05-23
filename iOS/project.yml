@@ -18,13 +18,13 @@ targets:
     platform: iOS
     sources:
       - path: Sources
-    resources:
       - path: Resources/Assets.xcassets
+      - path: Resources/PrivacyInfo.xcprivacy
     info:
       path: Resources/Info.plist
       properties:
         UILaunchScreen:
-          UIColorName: ""
+          UIColorName: LaunchBackground
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIBackgroundModes:
@@ -41,10 +41,12 @@ targets:
         CFBundleDisplayName: Smoothie
         CFBundleShortVersionString: "0.2.0"
         CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.developer-tools
         NSCameraUsageDescription: "Used to scan a pairing QR code from the Smoothie menubar app, and to attach photos to your messages."
         NSMicrophoneUsageDescription: "Used to record short voice input that's transcribed into your message."
         NSSpeechRecognitionUsageDescription: "Smoothie transcribes your voice into the message field locally."
         NSPhotoLibraryUsageDescription: "Used to attach photos from your library to your message for the agent to analyze."
+        NSLocalNetworkUsageDescription: "Smoothie pairs with the Smoothie app on your Mac over the local network or your tailnet. Nothing is uploaded to the cloud."
         CFBundleURLTypes:
           - CFBundleURLName: dev.smoothie.ios
             CFBundleURLSchemes:

@@ -7,11 +7,15 @@ struct ModeChip: View {
     let onTap: () -> Void
 
     private var resolved: (icon: String, color: Color, label: String) {
+        // Mode-specific tints retired in the P25 mono migration — icons
+        // render in `textPrimary` to match the rest of the composer
+        // chrome. Yolo keeps its red bolt because that's a semantic
+        // warning indicator, not a brand colour.
         switch (mode ?? "default").lowercased() {
-        case "plan":          return ("doc.text", SmoothieColor.modePlan, "Plan")
-        case "auto_edit":     return ("scribble", SmoothieColor.modeCode, "Auto-edit")
+        case "plan":          return ("doc.text", SmoothieColor.textPrimary, "Plan")
+        case "auto_edit":     return ("scribble", SmoothieColor.textPrimary, "Auto-edit")
         case "yolo":          return ("bolt.fill", SmoothieColor.statusErr, "Yolo")
-        default:              return ("chevron.left.forwardslash.chevron.right", SmoothieColor.modeCode, "Code")
+        default:              return ("chevron.left.forwardslash.chevron.right", SmoothieColor.textPrimary, "Code")
         }
     }
 

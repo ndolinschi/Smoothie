@@ -1,9 +1,13 @@
 import SwiftUI
 
-/// Centralised design tokens shared across every Smoothie surface. P16 swaps
-/// the prior Liquid-Glass aesthetic for a flat, dark, coral-accented look
-/// modelled after the reference screenshots. New surfaces should read tokens
-/// from here instead of hard-coding `.white.opacity(...)` or hex literals.
+/// Centralised design tokens shared across every Smoothie surface. P16 swapped
+/// the prior Liquid-Glass aesthetic for a flat, dark surface; P25 retires the
+/// coral accent in favour of a mono (white-on-#0E0E0E) palette modelled after
+/// Cursor's mobile session view. New surfaces should read tokens from here
+/// instead of hard-coding `.white.opacity(...)` or hex literals. Active states
+/// use `accent` (white) for "pressable primary action" and `linkBlue` for
+/// "current selection in a list" — two-axis convention to avoid conflation
+/// after coral removal.
 enum SmoothieColor {
     static let bgPrimary     = Color(hex: 0x0E0E0E)
     static let bgCard        = Color(hex: 0x141414)
@@ -15,8 +19,19 @@ enum SmoothieColor {
     static let strokeSoft    = Color.white.opacity(0.06)
     static let strokeDashed  = Color.white.opacity(0.20)
 
-    static let accent        = Color(hex: 0xED7C5C)
-    static let accentSoft    = Color(hex: 0xED7C5C).opacity(0.18)
+    /// Primary action fill / "pressable" hue. Reassigned from coral (#ED7C5C)
+    /// in P25; existing call sites continue to compile against the same token.
+    static let accent        = Color.white
+    static let accentSoft    = Color.white.opacity(0.10)
+    /// Outline for "this is the currently active variant" (e.g. selected mode
+    /// chip). Replaces the prior `accent.opacity(0.5)` pattern.
+    static let activeBorder  = Color.white.opacity(0.30)
+    /// Foreground colour that sits ON TOP of an `accent` fill. With the P25
+    /// mono palette, `accent` is white — so any text or icon previously
+    /// rendered as `.white` over an accent button now needs `onAccent`
+    /// (`bgPrimary`) to remain visible. Use this instead of `.white` whenever
+    /// the background is `SmoothieColor.accent` (or `accent.opacity(...)`).
+    static let onAccent      = Color(hex: 0x0E0E0E)
 
     static let textPrimary   = Color.white
     static let textSecondary = Color.white.opacity(0.55)
@@ -68,6 +83,11 @@ enum SmoothieMetrics {
 
     static let rowPaddingH: CGFloat = 14
     static let rowPaddingV: CGFloat = 12
+
+    /// Padding for `ToolCallCard` header + body blocks. Slightly tighter
+    /// than `rowPadding*` because the card already has a visible border.
+    static let toolCardPaddingH: CGFloat = 14
+    static let toolCardPaddingV: CGFloat = 12
 }
 
 extension Color {

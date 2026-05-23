@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Compact GitHub-style contribution graph for "sessions started per day".
 /// Rows = day-of-week (Mon → Sun), columns = weeks (oldest left, today
-/// right). Cell tint deepens toward the coral accent as the bucket count
-/// grows. Tap a day to scroll the list below to that range (wiring left
-/// out for v1 — the visual alone is what the user asked for).
+/// right). Cell tint deepens monochromatically as the bucket count grows
+/// (P25 retired the coral accent here — density is signalled by white
+/// opacity alone). Tap a day to scroll the list below to that range
+/// (wiring left out for v1 — the visual alone is what the user asked for).
 ///
 /// Adapted from the Claude Code desktop dashboard's heatmap, but sized
 /// for a phone width: 12 weeks × 7 days gives a comfortable square grid
@@ -18,6 +19,19 @@ struct ActivityHeatmap: View {
     private let cellSize: CGFloat = 14
     private let cellSpacing: CGFloat = 4
 
+    /// Per-cell intensity ceiling. Uses the 90th-percentile (when there
+    /// are enough samples) so a single monster-day doesn't crush every
+    /// other day into the bottom intensity bucket — anything above this
+    /// renders at full intensity but stops pulling the gradient with it.
+    private var maxCount: Int {
+        let allCounts = buckets.values.sorted()
+        if allCounts.count >= 10 {
+            let pIndex = Int(Double(allCounts.count - 1) * 0.9)
+            return max(1, allCounts[pIndex])
+        }
+        return max(1, allCounts.max() ?? 1)
+    }
+
     var body: some View {
         let cal = Calendar(identifier: .gregorian)
         let today = cal.startOfDay(for: Date())
@@ -25,9 +39,7 @@ struct ActivityHeatmap: View {
         let weekday = cal.component(.weekday, from: today) // 1 = Sunday
         let daysSinceMonday = (weekday + 5) % 7 // Mon=0 ... Sun=6
         let mostRecentMonday = cal.date(byAdding: .day, value: -daysSinceMonday, to: today) ?? today
-
-        // Cap of the most-active day so we can scale shading.
-        let maxCount = max(1, buckets.values.max() ?? 1)
+        let maxCount = self.maxCount
 
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: cellSpacing) {
@@ -93,12 +105,15 @@ struct ActivityHeatmap: View {
         // corner.
         if intensity < 0 { return Color.clear }
         if intensity == 0 { return SmoothieColor.bgChip }
-        return SmoothieColor.accent.opacity(0.25 + intensity * 0.65)
+        // Mono density signal: white from 10% to 60% opacity. The narrow
+        // range keeps the card from screaming at the eye while still
+        // reading as a clear high-vs-low gradient.
+        return Color.white.opacity(0.10 + intensity * 0.50)
     }
 
     private func legendColor(step: Int) -> Color {
         if step == 0 { return SmoothieColor.bgChip }
         let intensity = Double(step) / 4.0
-        return SmoothieColor.accent.opacity(0.25 + intensity * 0.65)
+        return Color.white.opacity(0.10 + intensity * 0.50)
     }
 }

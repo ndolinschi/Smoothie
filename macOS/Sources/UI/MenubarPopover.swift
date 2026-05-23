@@ -1,10 +1,16 @@
 import SwiftUI
+import Shared
 
 struct MenubarPopover: View {
     @Environment(SmoothieHTTPServer.self) private var server
     @Environment(PairingService.self) private var pairing
     @State private var showingFullQR = false
     @State private var copiedField: CopiedField?
+    /// Periodically-refreshed list of active sessions on the daemon.
+    /// Surfaced as a compact list in the menubar so the user can see at
+    /// a glance what's running on their Mac without picking up the phone.
+    @State private var activeSessions: [SessionDescriptor] = []
+    @State private var refreshTask: Task<Void, Never>?
 
     private enum CopiedField: String {
         case host, token, url
@@ -18,12 +24,33 @@ struct MenubarPopover: View {
             Divider()
             tunnelSection
             Divider()
+            sessionsSection
+            Divider()
             pairingSection
             Divider()
             actions
         }
         .padding(14)
         .frame(width: 340)
+        .task {
+            // Refresh the sessions list on every popover open and then
+            // every 2s while the popover is mounted. SwiftUI tears down
+            // the `.task` automatically when the view goes away so the
+            // poll stops on close — no leak risk.
+            while !Task.isCancelled {
+                await refreshSessions()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private func refreshSessions() async {
+        do {
+            let list = try await server.manager.list()
+            await MainActor.run { activeSessions = list }
+        } catch {
+            await MainActor.run { activeSessions = [] }
+        }
     }
 
     private var header: some View {
@@ -235,6 +262,149 @@ struct MenubarPopover: View {
         let t = pairing.token
         guard t.count > 12 else { return t }
         return "\(t.prefix(6))…\(t.suffix(6))"
+    }
+
+    @ViewBuilder
+    private var sessionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text("ACTIVE SESSIONS")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("\(activeSessions.count)")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            if activeSessions.isEmpty {
+                Text("No sessions running. Start one from your phone.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 2)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(activeSessions.prefix(5), id: \.id) { descriptor in
+                        sessionRow(descriptor)
+                    }
+                    if activeSessions.count > 5 {
+                        Text("+ \(activeSessions.count - 5) more")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    private func sessionRow(_ d: SessionDescriptor) -> some View {
+        HStack(spacing: 8) {
+            providerBadge(d.cli)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(d.projectName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let model = d.model {
+                    Text(model)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            stateDot(d.state)
+                .help(stateLabel(d.state))
+            Menu {
+                Button("Open in Terminal") {
+                    Task { await handoffSession(d) }
+                }
+                Divider()
+                Button("Kill session", role: .destructive) {
+                    Task { await killSession(d) }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private func providerBadge(_ cli: CLIType) -> some View {
+        let (letter, color) = providerVisual(cli)
+        Text(letter)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundStyle(.white)
+            .frame(width: 18, height: 18)
+            .background(color, in: .rect(cornerRadius: 4))
+    }
+
+    private func providerVisual(_ cli: CLIType) -> (String, Color) {
+        switch cli.name.lowercased() {
+        case "claude_code": return ("C", Color(red: 0.55, green: 0.55, blue: 0.55))
+        case "gemini":      return ("G", Color(red: 0.40, green: 0.55, blue: 0.75))
+        case "open_code":   return ("O", Color(red: 0.50, green: 0.50, blue: 0.60))
+        case "antigravity": return ("A", Color(red: 0.50, green: 0.40, blue: 0.70))
+        default:            return ("?", Color.gray)
+        }
+    }
+
+    private func stateDot(_ state: SessionState) -> some View {
+        let color: Color = {
+            switch state.name.lowercased() {
+            case "starting", "thinking": return .blue
+            case "waiting":              return .green
+            case "done":                 return .gray
+            case "error", "limit_reached": return .red
+            default:                     return .gray
+            }
+        }()
+        return Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .shadow(color: color.opacity(0.45), radius: 3)
+    }
+
+    private func stateLabel(_ state: SessionState) -> String {
+        switch state.name.lowercased() {
+        case "starting":     return "Starting"
+        case "thinking":     return "Thinking"
+        case "waiting":      return "Waiting for input"
+        case "done":         return "Finished"
+        case "error":        return "Error"
+        case "limit_reached": return "Rate-limited"
+        default:             return state.name
+        }
+    }
+
+    private func killSession(_ d: SessionDescriptor) async {
+        _ = await server.processes.terminate(id: d.id)
+        await refreshSessions()
+    }
+
+    private func handoffSession(_ d: SessionDescriptor) async {
+        // Reuse the existing terminal handoff path — opens Terminal.app
+        // at the project root so the user can pick up where the agent
+        // left off in a real shell. Best-effort: swallow the throws so
+        // a missing osascript / blocked AppleScript doesn't crash the
+        // popover. `clear` lands the user at a fresh prompt without
+        // re-running the agent.
+        try? TerminalHandoff.openInTerminal(cwd: d.projectPath, command: "clear")
+        await refreshSessions()
     }
 
     private var actions: some View {

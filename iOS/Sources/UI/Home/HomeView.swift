@@ -18,6 +18,11 @@ struct HomeView: View {
     /// from a notification tap. HomeView resolves the id against the live
     /// `/sessions` list and pushes SessionView via its own NavigationStack.
     @Binding var deepLinkedSessionId: String?
+    /// Toast surfaced when a deep link can't resolve (session gone, daemon
+    /// unreachable). Cleared after the user dismisses the alert. Without
+    /// this, a tap on a notification for a killed session was a silent
+    /// no-op and the user had no idea why nothing happened.
+    @State private var deepLinkErrorMessage: String?
 
     init(deepLinkedSessionId: Binding<String?> = .constant(nil)) {
         self._deepLinkedSessionId = deepLinkedSessionId
@@ -188,6 +193,18 @@ struct HomeView: View {
             deepLinkedSessionId = nil
             Task { await resolveAndPush(sessionId: id) }
         }
+        .alert(
+            "Couldn't open session",
+            isPresented: Binding(
+                get: { deepLinkErrorMessage != nil },
+                set: { if !$0 { deepLinkErrorMessage = nil } }
+            ),
+            presenting: deepLinkErrorMessage
+        ) { _ in
+            Button("OK", role: .cancel) { deepLinkErrorMessage = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     /// Resolve a notification-tapped session id against the live list and
@@ -199,8 +216,19 @@ struct HomeView: View {
             return
         }
         let api = APIClient(store: pairing)
-        if let descriptor = try? await api.sessions().first(where: { $0.id == id }) {
-            selectedSession = descriptor
+        do {
+            let list = try await api.sessions()
+            if let descriptor = list.first(where: { $0.id == id }) {
+                selectedSession = descriptor
+            } else {
+                // Surface the no-op to the user — silent failure was the
+                // worst part of the prior behaviour: tap a notification,
+                // nothing happens, no way to tell whether the app froze
+                // or the session was already killed on the Mac.
+                deepLinkErrorMessage = "Session not found. It may have already been killed on your Mac."
+            }
+        } catch {
+            deepLinkErrorMessage = "Couldn't reach your Mac. \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
         }
     }
 
@@ -370,6 +398,7 @@ struct HomeView: View {
         case .done:                       return SmoothieColor.statusDone
         case .error, .limitReached:       return SmoothieColor.statusErr
         case .starting:                   return SmoothieColor.textSecondary
+        case .unknown:                    return SmoothieColor.textTertiary
         }
     }
 
