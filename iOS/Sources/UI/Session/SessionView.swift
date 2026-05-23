@@ -94,6 +94,16 @@ struct SessionView: View {
                     )
                     .animation(.easeInOut(duration: 0.2), value: store.connected)
                     .animation(.easeInOut(duration: 0.2), value: store.hasReceivedEvent)
+                    HStack(spacing: SmoothieMetrics.space8) {
+                        EnvPill(label: modeChipLabel.capitalized) {
+                            showingModeSheet = true
+                        }
+                        if store.state != .done, store.state != .error {
+                            StatusBadge(state: store.state, connected: store.connected)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, SmoothieMetrics.space2)
                     AgentStream(
                         events: store.events,
                         connection: store.connection,
@@ -134,66 +144,41 @@ struct SessionView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 4) {
-                    Button {
-                        showingModelDropdown = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(modelChipLabel)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(SmoothieColor.textPrimary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(SmoothieColor.textSecondary)
-                        }
-                        .contentShape(Rectangle())
+                Button {
+                    showingModelDropdown = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(modelChipLabel)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SmoothieColor.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                     }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showingModelDropdown, arrowEdge: .top) {
-                        if let f = features {
-                            ModelDropdownMenu(
-                                cli: currentSession.cli,
-                                currentModel: currentSession.model,
-                                features: f,
-                                onPickModel: { m in await applyRestart(.model(m)) },
-                                onMoreOptions: {
-                                    showingModelDropdown = false
-                                    showingModelSheet = true
-                                }
-                            )
-                            .presentationBackground(SmoothieColor.menuBg)
-                        } else {
-                            ProgressView()
-                                .tint(SmoothieColor.textSecondary)
-                                .padding(SmoothieMetrics.space24)
-                                .presentationCompactAdaptation(.popover)
-                                .presentationBackground(SmoothieColor.menuBg)
-                        }
-                    }
-                    HStack(spacing: 6) {
-                        Button {
-                            showingModeSheet = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "cloud")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(SmoothieColor.textSecondary)
-                                Text(modeChipLabel)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(SmoothieColor.textSecondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingModelDropdown, arrowEdge: .top) {
+                    if let f = features {
+                        ModelDropdownMenu(
+                            cli: currentSession.cli,
+                            currentModel: currentSession.model,
+                            features: f,
+                            onPickModel: { m in await applyRestart(.model(m)) },
+                            onMoreOptions: {
+                                showingModelDropdown = false
+                                showingModelSheet = true
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 3)
-                            .overlay(
-                                Capsule().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        if let store, store.state != .done, store.state != .error {
-                            StatusBadge(state: store.state, connected: store.connected)
-                        }
+                        )
+                        .presentationBackground(SmoothieColor.menuBg)
+                    } else {
+                        ProgressView()
+                            .tint(SmoothieColor.textSecondary)
+                            .padding(SmoothieMetrics.space24)
+                            .presentationCompactAdaptation(.popover)
+                            .presentationBackground(SmoothieColor.menuBg)
                     }
                 }
             }
