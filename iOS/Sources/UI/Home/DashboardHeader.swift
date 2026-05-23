@@ -46,6 +46,9 @@ struct DashboardHeader: View {
 
     // MARK: - Stats card
 
+    /// Inner stat tiles + heatmap. No outer surface — sits directly on
+    /// `bgPrimary` so the header flows into the filter row + session
+    /// cards below without a visible card boundary.
     private var statsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             LazyVGrid(columns: [
@@ -75,12 +78,6 @@ struct DashboardHeader: View {
                     .foregroundStyle(SmoothieColor.textTertiary)
             }
         }
-        .padding(14)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
     }
 
     private func tile(label: String, value: String) -> some View {

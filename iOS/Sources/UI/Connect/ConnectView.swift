@@ -67,12 +67,14 @@ struct ConnectView: View {
         }
         .fullScreenCover(isPresented: $presentingScanner) {
             ScannerSheet()
+                .smoothieThemed()
         }
         .sheet(isPresented: $presentingManual) {
             ManualPairView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(20)
+                .smoothieThemed()
         }
     }
 

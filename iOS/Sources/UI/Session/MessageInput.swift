@@ -17,18 +17,10 @@ struct MessageInput: View {
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
-    /// Recent project paths (excluding the active session's path) used to
-    /// render the multi-chip repo row above the composer (P25.e). Capped
-    /// upstream; this view renders them all in a horizontal scroller.
-    let otherProjects: [String]
     /// Opens the repository picker bottom sheet (the leading `+` on the
-    /// repo chips row, P25.e → P25.f).
+    /// repo chips row, P25.e → P25.f). The active `RepoChip` itself
+    /// is tappable and routes through the same handler.
     let onTapRepoPlus: () -> Void
-    /// Tap on a non-active repo chip — switches the user's focus to that
-    /// project. Implementation lives in SessionView; the visible effect
-    /// is the current session being dismissed and HomeView surfacing the
-    /// requested project.
-    let onSwitchRepo: (String) -> Void
 
     @State private var text: String = ""
     @State private var sending = false
@@ -48,11 +40,24 @@ struct MessageInput: View {
     /// and blocks other apps' audio playback until the user manually
     /// toggles the mic off.
     @Environment(\.scenePhase) private var scenePhase
+    /// Used by the inline MCP picker sheet — it builds an APIClient
+    /// against this store to talk to the daemon.
+    @Environment(PairingStore.self) private var pairing
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var canSend: Bool { !sending && (!trimmed.isEmpty || !attachments.isEmpty) }
+    private var canSend: Bool { !sending && !sessionEnded && (!trimmed.isEmpty || !attachments.isEmpty) }
     private var showSuggestions: Bool {
-        isFreshSession && trimmed.isEmpty && attachments.isEmpty
+        isFreshSession && trimmed.isEmpty && attachments.isEmpty && !sessionEnded
+    }
+
+    /// True when the daemon-side session is no longer accepting input.
+    /// Today that's only `.done` — `.error` may still be recoverable via
+    /// the connection banner's reconnect, and `.limitReached` is a
+    /// rate-limit pause not a hard stop. Driven by the SSE state machine
+    /// so a fresh `done` event flowing in mid-session disables sending
+    /// without requiring a view rebuild.
+    private var sessionEnded: Bool {
+        sessionState == .done
     }
 
     var body: some View {
@@ -68,7 +73,9 @@ struct MessageInput: View {
                 attachmentsRow
             }
 
-            if voice.isListening {
+            if sessionEnded {
+                endedSessionFooter
+            } else if voice.isListening {
                 voiceComposerRow
             } else {
                 projectRow
@@ -154,11 +161,12 @@ struct MessageInput: View {
             }
         }
         .sheet(isPresented: $showingMention) {
-            MentionPickerSheet(projectPath: session.projectPath) { entry, content in
+            MentionPickerSheet(session: session) { entry, content in
                 stage(file: entry, content: content, asMention: true)
             }
             .presentationDetents([.large])
             .presentationBackground(.clear)
+            .smoothieThemed()
         }
         .sheet(isPresented: $showingAttach) {
             AttachSheet(
@@ -175,6 +183,7 @@ struct MessageInput: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+            .smoothieThemed()
         }
         .sheet(item: $pendingImagePickerSource) { source in
             ImagePickerSheet(
@@ -185,18 +194,25 @@ struct MessageInput: View {
                 },
                 onCancel: { pendingImagePickerSource = nil }
             )
+            .smoothieThemed()
         }
         .sheet(isPresented: $showingSkills) {
             if let f = features {
                 SlashCommandSheet(commands: f.slashCommands, onPick: { insertAtCursor($0) })
                     .presentationDetents([.medium])
                     .presentationBackground(.clear)
+                    .smoothieThemed()
             }
         }
         .sheet(isPresented: $showingMCP) {
-            MCPComingSoonSheet()
-                .presentationDetents([.medium])
-                .presentationBackground(.clear)
+            MCPPickerSheet(
+                session: session,
+                pairing: pairing,
+                onDismiss: { showingMCP = false }
+            )
+            .presentationDetents([.large])
+            .presentationBackground(.clear)
+            .smoothieThemed()
         }
         .fileImporter(
             isPresented: $showingImporter,
@@ -223,31 +239,61 @@ struct MessageInput: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+            .smoothieThemed()
         }
     }
 
     // MARK: - Rows
 
-    /// REF-1's repo chips row — horizontally scrolling list of recent
-    /// projects. Leading `+` opens the repository picker (P25.f). The
-    /// active session's chip gets an accent stroke; other chips dismiss
-    /// the current session and surface the picked project on HomeView.
-    private var projectRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SmoothieMetrics.space8) {
-                repoPlusButton
-                RepoChip(projectPath: session.projectPath, isGit: true, isActive: true)
-                ForEach(otherProjects, id: \.self) { path in
-                    Button {
-                        onSwitchRepo(path)
-                    } label: {
-                        RepoChip(projectPath: path, isGit: true, isActive: false)
-                    }
-                    .buttonStyle(.plain)
-                }
+    /// Replaces the composer when the daemon-side session is `.done`
+    /// (handed off to Terminal, or ended naturally). Sending into a
+    /// dead session silently 404s, so the live text field was misleading
+    /// — the user typed, tapped send, nothing happened. The footer
+    /// explains the state and directs the user back to Home to start a
+    /// fresh session in the same project.
+    private var endedSessionFooter: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SmoothieColor.statusDone)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Session ended")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SmoothieColor.textPrimary)
+                Text("Tap + on Home to start a new session in this project.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(SmoothieColor.textSecondary)
+                    .lineLimit(2)
             }
-            .padding(.vertical, 1)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
+                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+        )
+    }
+
+    /// Repo chips row — only the currently-selected repo plus a
+    /// leading `+` button that opens the repository picker (P25.f).
+    /// Earlier revisions also rendered chips for every other recent
+    /// project so the user could one-tap switch from the composer; the
+    /// row was noisy and tapping a chip dismissed the active session
+    /// without warning. Switching is now picker-only.
+    private var projectRow: some View {
+        HStack(spacing: SmoothieMetrics.space8) {
+            repoPlusButton
+            Button(action: onTapRepoPlus) {
+                RepoChip(projectPath: session.projectPath, isGit: true, isActive: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Switch repository")
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 1)
     }
 
     private var repoPlusButton: some View {

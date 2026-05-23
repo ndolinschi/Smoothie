@@ -71,3 +71,70 @@ extension Color {
         self.init(red: r, green: g, blue: b)
     }
 }
+
+// MARK: - Glass card treatment (macOS only)
+
+/// macOS menubar popovers ride on top of the system's menubar window
+/// vibrancy. The inner sections used to render as flat solid blocks
+/// on that translucent backdrop, which made the popover read as a
+/// regular dark sheet instead of a Mac control surface. This modifier
+/// gives every section a layered glass treatment: `.ultraThinMaterial`
+/// behind the content, a soft hairline stroke for separation, a small
+/// rounded radius. iOS keeps the flat-dark-coral language (see
+/// `iOS/Sources/UI/Components/DesignTokens.swift`) — this token is
+/// macOS-only.
+struct GlassCardModifier: ViewModifier {
+    var corner: CGFloat
+    var paddingH: CGFloat
+    var paddingV: CGFloat
+    var strokeOpacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, paddingH)
+            .padding(.vertical, paddingV)
+            .background {
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(strokeOpacity), lineWidth: 0.5)
+            }
+    }
+}
+
+extension View {
+    /// Section-level glass card. Defaults match the menubar popover's
+    /// section spacing (12pt horizontal, 10pt vertical, 10pt corner).
+    func smoothieGlassSection(
+        corner: CGFloat = SmoothieMetrics.cornerMd,
+        paddingH: CGFloat = SmoothieMetrics.space12,
+        paddingV: CGFloat = SmoothieMetrics.space10,
+        strokeOpacity: Double = 0.08
+    ) -> some View {
+        modifier(GlassCardModifier(
+            corner: corner,
+            paddingH: paddingH,
+            paddingV: paddingV,
+            strokeOpacity: strokeOpacity
+        ))
+    }
+
+    /// Row-level glass card. Tighter padding + smaller corner; used
+    /// per-session-row inside the ACTIVE SESSIONS section so each row
+    /// reads as its own glass tile without dwarfing the parent card.
+    func smoothieGlassRow(
+        corner: CGFloat = SmoothieMetrics.cornerSm,
+        paddingH: CGFloat = SmoothieMetrics.space8,
+        paddingV: CGFloat = SmoothieMetrics.space6,
+        strokeOpacity: Double = 0.06
+    ) -> some View {
+        modifier(GlassCardModifier(
+            corner: corner,
+            paddingH: paddingH,
+            paddingV: paddingV,
+            strokeOpacity: strokeOpacity
+        ))
+    }
+}

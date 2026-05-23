@@ -12,6 +12,11 @@ final class Preferences {
         var allowedRoots: [String]
         var defaultModelByCli: [String: String]
         var geminiFlashApiKey: String?
+        /// Per-session enabled MCP server ids. Indexed by Smoothie
+        /// session id. Absent → "no override, use every discovered
+        /// server" (the picker treats `nil` as "all on"). Defaults to
+        /// an empty dictionary for fresh installs.
+        var mcpEnabledBySession: [String: [String]]?
 
         static var defaults: Stored {
             let home = NSHomeDirectory()
@@ -24,7 +29,8 @@ final class Preferences {
             return Stored(
                 allowedRoots: existing.isEmpty ? [home] : existing,
                 defaultModelByCli: [:],
-                geminiFlashApiKey: nil
+                geminiFlashApiKey: nil,
+                mcpEnabledBySession: [:]
             )
         }
     }
@@ -76,6 +82,25 @@ final class Preferences {
 
     func setGeminiFlashApiKey(_ key: String?) {
         stored.geminiFlashApiKey = key?.isEmpty == true ? nil : key
+        persist()
+    }
+
+    // MARK: - Per-session MCP overrides
+
+    /// Returns the user's enabled MCP server ids for this session, or
+    /// nil if no override has been recorded (caller should default to
+    /// every available server). Absence is meaningful: it lets a brand-
+    /// new session start with all MCP servers active without the user
+    /// having to toggle each one on.
+    func mcpEnabledServers(forSessionId id: String) -> [String]? {
+        stored.mcpEnabledBySession?[id]
+    }
+
+    func setMcpEnabledServers(_ enabled: [String], forSessionId id: String) {
+        if stored.mcpEnabledBySession == nil {
+            stored.mcpEnabledBySession = [:]
+        }
+        stored.mcpEnabledBySession?[id] = enabled
         persist()
     }
 

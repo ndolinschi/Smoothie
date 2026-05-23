@@ -17,20 +17,21 @@ struct MenubarPopover: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SmoothieMetrics.space12) {
+        VStack(alignment: .leading, spacing: SmoothieMetrics.space8) {
             header
-            Divider()
+                .padding(.horizontal, SmoothieMetrics.space4)
             statusSection
-            Divider()
+                .smoothieGlassSection()
             tunnelSection
-            Divider()
+                .smoothieGlassSection()
             sessionsSection
-            Divider()
+                .smoothieGlassSection()
             pairingSection
-            Divider()
+                .smoothieGlassSection()
             actions
+                .smoothieGlassSection(paddingV: SmoothieMetrics.space8)
         }
-        .padding(SmoothieMetrics.space14)
+        .padding(SmoothieMetrics.space10)
         .frame(width: SmoothieMetrics.popoverWidth)
         .task {
             // Refresh the sessions list on every popover open and then
@@ -374,9 +375,7 @@ struct MenubarPopover: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 6))
+        .smoothieGlassRow()
     }
 
     @ViewBuilder

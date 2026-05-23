@@ -147,7 +147,16 @@ struct SessionView: View {
                     MessageInput(
                         session: currentSession,
                         features: features,
-                        isFreshSession: store.events.isEmpty,
+                        // P28 fix — was `store.events.isEmpty`, which flipped
+                        // false the moment the daemon emitted any side-channel
+                        // event (CONTEXT_UPDATE snapshot, UNKNOWN forward-compat
+                        // ping, an early STARTING state). The SuggestionsBar
+                        // would render for one frame, then vanish before the
+                        // user could read it. `hasUserContent` only flips for
+                        // real conversation events (MESSAGE / THINKING / TOOL_*
+                        // / FILE_EDIT), so suggestions stay visible until the
+                        // first turn actually starts.
+                        isFreshSession: !store.hasUserContent,
                         sessionState: store.state,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
@@ -155,9 +164,7 @@ struct SessionView: View {
                         },
                         onAbort: { Task { await abortTurn() } },
                         onTapMode: { showingModeSheet = true },
-                        otherProjects: otherRecentProjects,
-                        onTapRepoPlus: { showingRepoPicker = true },
-                        onSwitchRepo: { path in switchToProject(path) }
+                        onTapRepoPlus: { showingRepoPicker = true }
                     )
                 }
             } else {
@@ -199,12 +206,14 @@ struct SessionView: View {
                             }
                         )
                         .presentationBackground(SmoothieColor.menuBg)
+                        .smoothieThemed()
                     } else {
                         ProgressView()
                             .tint(SmoothieColor.textSecondary)
                             .padding(SmoothieMetrics.space24)
                             .presentationCompactAdaptation(.popover)
                             .presentationBackground(SmoothieColor.menuBg)
+                            .smoothieThemed()
                     }
                 }
                 // Note: my earlier p25 work kept a small "cloud + mode"
@@ -282,6 +291,7 @@ struct SessionView: View {
                 ContextBudgetPanel(snapshot: snap, onDismiss: { showingBudget = false })
                     .presentationDetents([.medium, .large])
                     .presentationBackground(.clear)
+                    .smoothieThemed()
             }
         }
         .sheet(isPresented: $showingModeSheet) {
@@ -294,6 +304,7 @@ struct SessionView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+            .smoothieThemed()
         }
         .sheet(isPresented: $showingDiffSheet) {
             DiffSheet(
@@ -304,10 +315,12 @@ struct SessionView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+            .smoothieThemed()
         }
         .sheet(isPresented: $showingModelSheet) {
             if let f = features {
                 ModelPickerSheet(
+                    cli: currentSession.cli,
                     currentModel: currentSession.model,
                     currentEffort: currentSession.reasoningEffort,
                     features: f,
@@ -316,6 +329,7 @@ struct SessionView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationBackground(.clear)
+                .smoothieThemed()
             }
         }
         .sheet(isPresented: $showingRepoPicker) {
@@ -333,6 +347,7 @@ struct SessionView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(20)
+            .smoothieThemed()
         }
         .onAppear {
             // Remember which pairing this session belongs to so we can

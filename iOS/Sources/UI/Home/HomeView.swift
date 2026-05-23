@@ -168,6 +168,7 @@ struct HomeView: View {
                 .presentationDetents([.medium, .large])
                 .presentationBackground(.clear)
                 .presentationDragIndicator(.visible)
+                .smoothieThemed()
             }
             .sheet(isPresented: $presentingNew) {
                 NewSessionView(preselectedPath: pendingPath) { new in
@@ -178,6 +179,7 @@ struct HomeView: View {
                 }
                 .presentationDetents([.large])
                 .presentationBackground(.clear)
+                .smoothieThemed()
             }
             .sheet(isPresented: $presentingSettings) {
                 SettingsView(onAddPairing: {
@@ -185,9 +187,11 @@ struct HomeView: View {
                 })
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .smoothieThemed()
             }
             .fullScreenCover(isPresented: $presentingAddPair) {
                 AddPairingCover(onDismiss: { presentingAddPair = false })
+                    .smoothieThemed()
             }
         }
         .task { await refresh() }

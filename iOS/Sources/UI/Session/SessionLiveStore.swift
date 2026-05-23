@@ -55,6 +55,25 @@ final class SessionLiveStore {
         return false
     }
 
+    /// True once the session ring contains a content-bearing event —
+    /// MESSAGE, THINKING, TOOL_USE, TOOL_RESULT, or FILE_EDIT. Non-
+    /// content events (CONTEXT_UPDATE side-channel snapshots, UNKNOWN
+    /// forward-compat slots, WAITING/DONE/ERROR/LIMIT state pings) do
+    /// NOT flip this — they exist on a brand-new session that hasn't
+    /// had any user input yet. SessionView uses this in place of the
+    /// older `events.isEmpty` so the SuggestionsBar doesn't flicker
+    /// when the daemon emits an early context_update / state ping.
+    var hasUserContent: Bool {
+        events.contains { event in
+            switch event.type {
+            case .message, .thinking, .toolUse, .toolResult, .fileEdit:
+                return true
+            case .contextUpdate, .unknown, .waiting, .done, .error, .limitReached:
+                return false
+            }
+        }
+    }
+
     init(session: SessionDescriptorWire) {
         self.session = session
         self.state = session.state

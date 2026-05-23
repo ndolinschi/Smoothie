@@ -12,10 +12,13 @@ import SwiftUI
 /// New categories that need different payloads (e.g. Past Chats) will
 /// add their own callbacks alongside without breaking this one.
 struct MentionPickerSheet: View {
-    let projectPath: String
+    let session: SessionDescriptorWire
     let onPick: (FileEntryWire, FileContentWire) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(PairingStore.self) private var pairing
+    @State private var showingBranch = false
+    @State private var showingMCP = false
 
     var body: some View {
         NavigationStack {
@@ -31,7 +34,7 @@ struct MentionPickerSheet: View {
 
                     VStack(spacing: 6) {
                         NavigationLink {
-                            FilesAndFoldersPicker(projectPath: projectPath, onPick: { entry, content in
+                            FilesAndFoldersPicker(projectPath: session.projectPath, onPick: { entry, content in
                                 onPick(entry, content)
                                 dismiss()
                             })
@@ -45,24 +48,34 @@ struct MentionPickerSheet: View {
                         }
                         .buttonStyle(.plain)
 
-                        categoryRow(
-                            icon: "point.3.connected.trianglepath.dotted",
-                            title: "Branch",
-                            subtitle: "Use current branch diff as context — v1.5",
-                            enabled: false
-                        )
+                        Button {
+                            showingBranch = true
+                        } label: {
+                            categoryRow(
+                                icon: "point.3.connected.trianglepath.dotted",
+                                title: "Branch",
+                                subtitle: "Switch the project's git branch",
+                                enabled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            showingMCP = true
+                        } label: {
+                            categoryRow(
+                                icon: "server.rack",
+                                title: "MCP Servers",
+                                subtitle: "Toggle connectors for this session",
+                                enabled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
 
                         categoryRow(
                             icon: "bubble.left.and.bubble.right.fill",
                             title: "Past Chats",
                             subtitle: "Reference a previous session — v1.5",
-                            enabled: false
-                        )
-
-                        categoryRow(
-                            icon: "server.rack",
-                            title: "MCP Servers",
-                            subtitle: "Plug in a connector — v1.5",
                             enabled: false
                         )
                     }
@@ -80,6 +93,33 @@ struct MentionPickerSheet: View {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(SmoothieColor.textSecondary)
                 }
+            }
+            .sheet(isPresented: $showingBranch) {
+                BranchPickerSheet(
+                    session: session,
+                    pairing: pairing,
+                    onSwitched: { _ in
+                        showingBranch = false
+                        dismiss()
+                    },
+                    onDismiss: { showingBranch = false }
+                )
+                .presentationDetents([.large])
+                .presentationBackground(.clear)
+                .smoothieThemed()
+            }
+            .sheet(isPresented: $showingMCP) {
+                MCPPickerSheet(
+                    session: session,
+                    pairing: pairing,
+                    onDismiss: {
+                        showingMCP = false
+                        dismiss()
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationBackground(.clear)
+                .smoothieThemed()
             }
         }
     }

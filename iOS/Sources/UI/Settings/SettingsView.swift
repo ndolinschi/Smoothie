@@ -111,6 +111,7 @@ struct SettingsView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(20)
+                .smoothieThemed()
             }
             .alert("Delete local data?", isPresented: $confirmingWipe) {
                 Button("Delete", role: .destructive) {
@@ -121,6 +122,7 @@ struct SettingsView: View {
                 Text("This clears recents, custom titles, pin/archive flags, and your theme preference. It can't be undone, but everything is rebuilt from scratch as you use the app.")
             }
         }
+        .smoothieThemed()
     }
 
     private var appVersion: String {

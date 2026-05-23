@@ -9,6 +9,11 @@ import SwiftUI
 // MARK: - Model picker
 
 struct ModelPickerSheet: View {
+    /// Provider context for the row labels — `friendlyModelName` maps
+    /// per-CLI aliases (`sonnet`, `haiku`, `opus`) to family+version
+    /// strings (`Sonnet 4.6` etc). Without this, the rows showed the
+    /// raw alias.
+    let cli: CLIWire
     let currentModel: String?
     let currentEffort: String?
     let features: ProviderFeaturesWire
@@ -170,7 +175,7 @@ struct ModelPickerSheet: View {
                         .foregroundStyle(isCurrent ? .white : .white.opacity(0.35))
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model)
+                    Text(cli.friendlyModelName(model))
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(SmoothieColor.textPrimary)
                     if isLoading {
@@ -408,46 +413,6 @@ struct SlashCommandSheet: View {
     }
 }
 
-// MARK: - MCP placeholder
-
-struct MCPComingSoonSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                VStack(spacing: 16) {
-                    Image(systemName: "server.rack")
-                        .font(.system(size: 38))
-                        .foregroundStyle(SmoothieColor.textSecondary)
-                    Text("MCP Servers")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(SmoothieColor.textPrimary)
-                    Text("MCP connectors land after the v1 release. The Mac daemon will broker connections for each session and surface them here.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(SmoothieColor.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
-                    Button("Got it") { dismiss() }
-                        .buttonStyle(.glassProminent)
-                        .tint(SmoothieColor.accent)
-                        .foregroundStyle(SmoothieColor.onAccent)
-                        .padding(.top, 8)
-                }
-                .padding(.top, 40)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                }
-            }
-        }
-    }
-}
+// MCPComingSoonSheet was retired in this pass — the real picker lives
+// in `MCPPickerSheet.swift` and reads per-CLI MCP config from the
+// daemon. Composer's `showingMCP` now opens that sheet directly.

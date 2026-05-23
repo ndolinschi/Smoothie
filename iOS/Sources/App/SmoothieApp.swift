@@ -16,11 +16,6 @@ struct SmoothieApp: App {
                 .environment(recents)
                 .environment(sessionMeta)
                 .environment(settings)
-                // P27.d/f — preferredColorScheme follows the user's
-                // Settings override; `nil` means follow system. Tokens
-                // in DesignTokens are adaptive either way.
-                .preferredColorScheme(settings.theme.colorScheme)
-                .tint(SmoothieColor.accent)
                 .task {
                     await LocalNotifier.shared.ensureAuthorization()
                 }
@@ -72,6 +67,12 @@ private struct RootView: View {
                 ConnectView()
             }
         }
+        // Theme override is read INSIDE RootView's body so SwiftUI
+        // Observation registers a dependency on SettingsStore here;
+        // every sheet root re-applies via `.smoothieThemed()` because
+        // sheet presentations don't inherit preferredColorScheme
+        // reliably on iOS 26.
+        .smoothieThemed()
         .onChange(of: notifications.pendingSessionId) { _, new in
             guard let id = new else { return }
             notifications.pendingSessionId = nil

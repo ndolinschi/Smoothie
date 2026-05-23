@@ -181,11 +181,17 @@ enum Routes {
                     providerSessionId: descriptor.providerSessionId
                 )
                 // Graceful abort first (Claude SIGINT, Gemini one-shot
-                // exit), then terminate so the next process the user
+                // exit), then detach so the next process the user
                 // spawns from Terminal owns the conversation alone.
+                // `detachHost` stops the daemon-side process but keeps
+                // the Session record + event history in the manager so
+                // the iPhone can still surface the session afterwards
+                // as read-only history (the previous `terminate(id:)`
+                // also dropped the manager entry, which made the iOS
+                // SSE stream 404 and the view appear broken).
                 await host.abort()
                 try? await Task.sleep(for: .milliseconds(500))
-                _ = await handle.processes.terminate(id: id)
+                _ = await handle.processes.detachHost(id: id)
                 do {
                     try TerminalHandoff.openInTerminal(cwd: descriptor.projectPath, command: cmd)
                 } catch {
@@ -277,6 +283,11 @@ enum Routes {
                 body: ResponseBody(asyncSequence: stream)
             )
         }
+
+        // Branch + MCP endpoints live in WorkspaceRoutes.swift to keep
+        // this file focused on the core session lifecycle. They share the
+        // same Bearer-guarded `group` and the same `Routes.Handle`.
+        WorkspaceRoutes.mount(group, handle: handle)
     }
 }
 

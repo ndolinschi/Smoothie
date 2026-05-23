@@ -41,14 +41,17 @@ enum CLIWire: String, Codable, Sendable, CaseIterable, Identifiable {
 
     /// Pretty model name shown in the composer — the wire `id` (sent as
     /// `--model` to the CLI) is usually an alias like `sonnet` that's
-    /// useless to the user. Maps known aliases to the marketing name.
+    /// useless to the user. Maps known aliases to family+version
+    /// labels — the brand chip is conveyed by the provider context
+    /// (toolbar shows the CLI's display name elsewhere), so the model
+    /// label itself only needs to disambiguate within the family.
     func friendlyModelName(_ id: String) -> String {
         switch self {
         case .claudeCode:
             switch id.lowercased() {
-            case "sonnet":  return "Claude Sonnet 4.6"
-            case "haiku":   return "Claude Haiku 4.5"
-            case "opus":    return "Claude Opus 4.7"
+            case "sonnet":  return "Sonnet 4.6"
+            case "haiku":   return "Haiku 4.5"
+            case "opus":    return "Opus 4.7"
             default:        return id
             }
         case .gemini:
@@ -140,6 +143,37 @@ enum EventTypeWire: String, Codable, Sendable {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = EventTypeWire(rawValue: raw) ?? .unknown
     }
+}
+
+/// Reply from GET /sessions/:id/branches. `current` is nil for empty
+/// or non-git working trees; `branches` is empty in that case too.
+struct BranchListingWire: Codable, Sendable {
+    let current: String?
+    let branches: [String]
+}
+
+/// Single MCP server descriptor in `MCPListingWire.available`. The
+/// daemon discovers these from per-CLI config files (Claude:
+/// `~/.claude.json`; Gemini: `~/.gemini/settings.json`; opencode:
+/// `~/.config/opencode/config.json`). Antigravity returns nothing.
+struct MCPServerWire: Codable, Sendable, Identifiable, Hashable {
+    /// Stable id used by the picker's enable/disable toggle. Matches the
+    /// server's key in the originating CLI config.
+    let id: String
+    let name: String
+    let description: String?
+    let command: String?
+    /// File path the daemon read this entry from — surfaced in the
+    /// picker's subtitle as a debugging aid when discovery looks wrong.
+    let source: String
+}
+
+/// Reply from GET/POST /sessions/:id/mcp-servers. `available` is the
+/// full discovery set; `enabled` is the per-session override the
+/// daemon will pass to the CLI on the next host spawn.
+struct MCPListingWire: Codable, Sendable {
+    let available: [MCPServerWire]
+    let enabled: [String]
 }
 
 /// Per-category breakdown of how much of the model's context window is

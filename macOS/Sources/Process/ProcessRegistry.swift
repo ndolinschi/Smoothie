@@ -162,6 +162,24 @@ final class ProcessRegistry {
         return true
     }
 
+    /// Stop the running host but KEEP the session record in the manager
+    /// — used by the Terminal-handoff path. The user can still open the
+    /// session on iPhone afterwards (read-only) and see the full event
+    /// history. Without this, the prior `terminate(id:)` call also
+    /// dropped the session from the manager, so the iOS SSE stream
+    /// returned 404 and the view flipped to ERROR. The session is
+    /// marked DONE so the iOS state-machine renders it correctly.
+    @discardableResult
+    func detachHost(id: String) async -> Bool {
+        guard let host = hosts.removeValue(forKey: id) else { return false }
+        host.terminate()
+        activeCount = hosts.count
+        if let session = try? await manager.get(id: id) {
+            try? await session.markDone()
+        }
+        return true
+    }
+
     func terminateAll() async {
         for (id, host) in hosts {
             host.terminate()
