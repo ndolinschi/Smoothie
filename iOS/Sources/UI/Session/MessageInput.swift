@@ -24,6 +24,18 @@ struct MessageInput: View {
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
+    /// Recent project paths (excluding the active session's path) used to
+    /// render the multi-chip repo row above the composer (P25.e). Capped
+    /// upstream; this view renders them all in a horizontal scroller.
+    let otherProjects: [String]
+    /// Opens the repository picker bottom sheet (the leading `+` on the
+    /// repo chips row, P25.e → P25.f).
+    let onTapRepoPlus: () -> Void
+    /// Tap on a non-active repo chip — switches the user's focus to that
+    /// project. Implementation lives in SessionView; the visible effect
+    /// is the current session being dismissed and HomeView surfacing the
+    /// requested project.
+    let onSwitchRepo: (String) -> Void
 
     @State private var text: String = ""
     @State private var sending = false
@@ -176,15 +188,40 @@ struct MessageInput: View {
 
     // MARK: - Rows
 
-    /// REF-1's "connected repo" row — sits between attachments / suggestions
-    /// and the text field. Single tappable chip showing the current project;
-    /// no `+` to its left (that lives in the bottom actionsRow per the
-    /// user's preference for a compact bottom).
+    /// REF-1's repo chips row — horizontally scrolling list of recent
+    /// projects. Leading `+` opens the repository picker (P25.f). The
+    /// active session's chip gets an accent stroke; other chips dismiss
+    /// the current session and surface the picked project on HomeView.
     private var projectRow: some View {
-        HStack(spacing: 8) {
-            RepoChip(projectPath: session.projectPath, isGit: true)
-            Spacer(minLength: 0)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SmoothieMetrics.space8) {
+                repoPlusButton
+                RepoChip(projectPath: session.projectPath, isGit: true, isActive: true)
+                ForEach(otherProjects, id: \.self) { path in
+                    Button {
+                        onSwitchRepo(path)
+                    } label: {
+                        RepoChip(projectPath: path, isGit: true, isActive: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
         }
+    }
+
+    private var repoPlusButton: some View {
+        Button(action: onTapRepoPlus) {
+            Image(systemName: "plus")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(SmoothieColor.textSecondary)
+                .frame(width: 28, height: 28)
+                .background(SmoothieColor.chipBg, in: .circle)
+                .overlay(Circle().strokeBorder(SmoothieColor.chipStroke, lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Choose repository")
     }
 
     private var textField: some View {

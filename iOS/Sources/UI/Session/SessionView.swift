@@ -6,6 +6,7 @@ import SwiftUI
 struct SessionView: View {
     let session: SessionDescriptorWire
     @Environment(PairingStore.self) private var pairing
+    @Environment(RecentsStore.self) private var recents
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var currentSession: SessionDescriptorWire
@@ -22,6 +23,10 @@ struct SessionView: View {
     /// title. The full search-enabled `ModelPickerSheet` is still
     /// reachable from this dropdown's "All models…" footer.
     @State private var showingModelDropdown = false
+    /// P25.f — repository picker bottom sheet. Opened via the leading
+    /// `+` button on the repo chips row, or via tapping a non-active
+    /// chip directly (which goes through `onSwitchRepo` instead).
+    @State private var showingRepoPicker = false
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -82,6 +87,13 @@ struct SessionView: View {
             .replacingOccurrences(of: "_", with: " ")
     }
 
+    /// Recent project paths excluding the active session's path. Surfaced
+    /// as the trailing chips on the repo row (P25.e); the picker sheet
+    /// presents the same list under a search field.
+    private var otherRecentProjects: [String] {
+        recents.paths.filter { $0 != currentSession.projectPath }
+    }
+
     var body: some View {
         ZStack {
             SmoothieColor.bgPrimary.ignoresSafeArea()
@@ -131,7 +143,10 @@ struct SessionView: View {
                         onSwitchEffort: { e in await applyRestart(.effort(e)) },
                         onSwitchMode: { applyMode($0) },
                         onSwitchProvider: { c in await applyRestart(.provider(c)) },
-                        onTapMode: { showingModeSheet = true }
+                        onTapMode: { showingModeSheet = true },
+                        otherProjects: otherRecentProjects,
+                        onTapRepoPlus: { showingRepoPicker = true },
+                        onSwitchRepo: { path in switchToProject(path) }
                     )
                 }
             } else {
@@ -239,6 +254,22 @@ struct SessionView: View {
                 .presentationDetents([.medium, .large])
                 .presentationBackground(.clear)
             }
+        }
+        .sheet(isPresented: $showingRepoPicker) {
+            RepoPickerSheet(
+                currentPath: currentSession.projectPath,
+                recentPaths: otherRecentProjects,
+                onPick: { path in
+                    showingRepoPicker = false
+                    if path != currentSession.projectPath {
+                        switchToProject(path)
+                    }
+                },
+                onDismiss: { showingRepoPicker = false }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
         }
         .onAppear {
             // Remember which pairing this session belongs to so we can
@@ -371,6 +402,15 @@ struct SessionView: View {
     private func killSession() async {
         let api = APIClient(store: pairing)
         _ = try? await api.killSession(sessionId: currentSession.id)
+        dismiss()
+    }
+
+    /// Switch the user's focus to a different project (P25.e). The current
+    /// session keeps running on the daemon — we just stamp the recents
+    /// store so HomeView surfaces the picked project, then pop back. The
+    /// user re-enters via the session list there.
+    private func switchToProject(_ path: String) {
+        recents.touch(path)
         dismiss()
     }
 
