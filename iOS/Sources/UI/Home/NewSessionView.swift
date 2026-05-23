@@ -175,7 +175,11 @@ struct NewSessionView: View {
         let api = APIClient(store: pairing)
         loading = true
         do {
-            adapters = try await api.adapters()
+            // Antigravity is hidden from the picker for now — the agy
+            // one-shot host works but isn't ready for end users. The
+            // CLIWire case stays so existing Antigravity sessions still
+            // render correctly elsewhere in the app.
+            adapters = try await api.adapters().filter { $0.cli != .antigravity }
             // Default to the first installed adapter so the user lands
             // on a selectable row instead of an empty selection state.
             if let firstInstalled = adapters.first(where: { $0.installed }) {

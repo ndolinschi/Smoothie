@@ -1,10 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// REF-1 / REF-3 / REF-5 composer. Vertical stack: Suggestions (fresh
-/// session only) → attachment chips (when staged) → repo chips row
-/// (leading + button + active chip + recent chips) → rounded text
-/// field → mode chip + paperclip + mic + coral send.
+/// Composer. Vertical stack: Suggestions (fresh session only) →
+/// attachment chips (when staged) → rounded text field → mode chip +
+/// paperclip + mic + coral send. The repo chip row that used to sit
+/// above the text field was retired — the user didn't want the
+/// project name restated; the picker now lives in the toolbar menu.
 struct MessageInput: View {
     let session: SessionDescriptorWire
     let features: ProviderFeaturesWire?
@@ -17,10 +18,6 @@ struct MessageInput: View {
     /// Opens the mode picker (owned by SessionView so the action-chips row
     /// can share the same sheet anchor).
     let onTapMode: () -> Void
-    /// Opens the repository picker bottom sheet (the leading `+` on the
-    /// repo chips row, P25.e → P25.f). The active `RepoChip` itself
-    /// is tappable and routes through the same handler.
-    let onTapRepoPlus: () -> Void
 
     @State private var text: String = ""
     @State private var sending = false
@@ -34,6 +31,13 @@ struct MessageInput: View {
     @State private var voice = VoiceDictator()
     @State private var voiceError: String?
     @State private var pendingImagePickerSource: ImagePickerSheet.Source?
+    /// Set to true the first time the user taps send in this view's
+    /// lifetime. Used by `showSuggestions` so the starter chips stay
+    /// visible until the user actually sends something — independent
+    /// of whatever state events the daemon is pushing in the meantime
+    /// (the prior @Observable-based gate had subtle propagation issues
+    /// that left suggestions hidden on fresh sessions).
+    @State private var hasUserSent = false
     @FocusState private var focused: Bool
     /// Used to stop dictation when the app goes to the background. Without
     /// this, the `AVAudioSession` stays in `.record` mode across launches
@@ -46,8 +50,14 @@ struct MessageInput: View {
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool { !sending && !sessionEnded && (!trimmed.isEmpty || !attachments.isEmpty) }
+    /// Show the starter chips until either the daemon-side session has
+    /// real conversation content (parent passes `isFreshSession = false`)
+    /// OR the user has tapped send in this view's lifetime. The local
+    /// `hasUserSent` flag is the belt that the suspenders couldn't —
+    /// `isFreshSession` rides on the live event stream and was leaving
+    /// suggestions hidden in some flows even on a brand-new session.
     private var showSuggestions: Bool {
-        isFreshSession && trimmed.isEmpty && attachments.isEmpty && !sessionEnded
+        isFreshSession && !hasUserSent && trimmed.isEmpty && attachments.isEmpty && !sessionEnded
     }
 
     /// True when the daemon-side session is no longer accepting input.
@@ -78,7 +88,10 @@ struct MessageInput: View {
             } else if voice.isListening {
                 voiceComposerRow
             } else {
-                projectRow
+                // Repo chip row was retired in this iteration — the user
+                // didn't want the project name re-stated in the composer
+                // (it's already visible in the toolbar / Home). To switch
+                // repos, pop back to Home and pick a different session.
                 textField
                 actionsRow
             }
@@ -275,39 +288,6 @@ struct MessageInput: View {
             RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
                 .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
         )
-    }
-
-    /// Repo chips row — only the currently-selected repo plus a
-    /// leading `+` button that opens the repository picker (P25.f).
-    /// Earlier revisions also rendered chips for every other recent
-    /// project so the user could one-tap switch from the composer; the
-    /// row was noisy and tapping a chip dismissed the active session
-    /// without warning. Switching is now picker-only.
-    private var projectRow: some View {
-        HStack(spacing: SmoothieMetrics.space8) {
-            repoPlusButton
-            Button(action: onTapRepoPlus) {
-                RepoChip(projectPath: session.projectPath, isGit: true, isActive: true)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Switch repository")
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 1)
-    }
-
-    private var repoPlusButton: some View {
-        Button(action: onTapRepoPlus) {
-            Image(systemName: "plus")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(SmoothieColor.textSecondary)
-                .frame(width: 28, height: 28)
-                .background(SmoothieColor.chipBg, in: .circle)
-                .overlay(Circle().strokeBorder(SmoothieColor.chipStroke, lineWidth: 0.5))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Choose repository")
     }
 
     private var textField: some View {
@@ -551,6 +531,11 @@ struct MessageInput: View {
         let staged = attachments
         guard !value.isEmpty || !staged.isEmpty else { return }
         sending = true
+        // Flip the local freshness flag the moment the user commits a
+        // message — independent of whatever state the SSE stream is in.
+        // The animation on `showSuggestions` smooths the fade-out so the
+        // bar doesn't blink off as the message lands.
+        hasUserSent = true
         Task {
             await onSend(value, staged)
             text = ""

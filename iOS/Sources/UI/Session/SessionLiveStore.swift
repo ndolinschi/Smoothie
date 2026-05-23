@@ -190,27 +190,22 @@ final class SessionLiveStore {
         }
         if state != priorState {
             publishWidgetSnapshot()
-            // Drain a queued mode change once the turn has finished
-            // thinking — the divider lands AFTER the visible work.
-            if pendingMode != nil, state != .thinking {
-                Task { await flushModeChange() }
-            }
+            // Mode instructions are now lazy — the buffer is drained by
+            // SessionView.sendMessage prepending the preamble to the
+            // user's next outgoing turn (consumePendingModePreamble).
+            // No SSE-driven auto-flush.
         }
     }
 
-    /// Queue a soft mode switch. If the session is idle (any state other
-    /// than `.thinking`) we flush immediately; otherwise the next
-    /// `ingest(_:)` state transition will trigger the flush.
+    /// Queue a soft mode switch. The divider is drawn immediately so the
+    /// transcript marks the boundary, but the actual instruction text
+    /// is buffered and prepended to the user's NEXT outgoing message
+    /// (see `consumePendingModePreamble`). The previous behaviour fired
+    /// off the "Switch to Plan mode…" prompt the moment the user
+    /// flipped the toggle, which burned a turn and surprised the agent
+    /// with an unexpected directive before any user intent had landed.
     func queueModeChange(_ mode: String) {
         pendingMode = mode
-        if state != .thinking {
-            Task { await flushModeChange() }
-        }
-    }
-
-    private func flushModeChange() async {
-        guard let mode = pendingMode else { return }
-        pendingMode = nil
 
         let label = mode.lowercased() == "plan" ? "plan mode" : "code mode"
         // Mark the divider via metadata rather than the sentinel-prefix
@@ -227,16 +222,21 @@ final class SessionLiveStore {
             timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
         )
         events.append(divider)
+    }
 
-        guard let api else { return }
-        let instruction: String
+    /// Called by SessionView's send path just before the user's text
+    /// hits the daemon. Returns the buffered mode instruction (if any)
+    /// so the caller can prepend it to the outgoing message. Clears the
+    /// buffer so the same instruction isn't re-sent on the next turn.
+    func consumePendingModePreamble() -> String? {
+        guard let mode = pendingMode else { return nil }
+        pendingMode = nil
         switch mode.lowercased() {
         case "plan":
-            instruction = "Switch to Plan mode. From now on, explore the code and present a plan before making any edits. Do not modify any files until I explicitly approve a step. Keep replies focused on planning."
+            return "Switch to Plan mode. From now on, explore the code and present a plan before making any edits. Do not modify any files until I explicitly approve a step. Keep replies focused on planning."
         default:
-            instruction = "Switch back to Code mode. You may apply edits directly again."
+            return "Switch back to Code mode. You may apply edits directly again."
         }
-        _ = try? await api.sendMessage(sessionId: session.id, content: instruction)
     }
 
     /// Mirror the most-recent session state into the App Group container for

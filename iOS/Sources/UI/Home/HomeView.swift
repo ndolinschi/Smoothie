@@ -551,7 +551,9 @@ struct HomeView: View {
             async let s = api.sessions()
             async let a = api.adapters()
             sessions = try await s
-            adapters = try await a
+            // Mirror NewSessionView's filter so dashboard counts don't
+            // include Antigravity (hidden from users for now).
+            adapters = try await a.filter { $0.cli != .antigravity }
         } catch {
             if isCancellation(error) {
                 loading = false

@@ -147,24 +147,25 @@ struct SessionView: View {
                     MessageInput(
                         session: currentSession,
                         features: features,
-                        // P28 fix — was `store.events.isEmpty`, which flipped
-                        // false the moment the daemon emitted any side-channel
-                        // event (CONTEXT_UPDATE snapshot, UNKNOWN forward-compat
-                        // ping, an early STARTING state). The SuggestionsBar
-                        // would render for one frame, then vanish before the
-                        // user could read it. `hasUserContent` only flips for
-                        // real conversation events (MESSAGE / THINKING / TOOL_*
-                        // / FILE_EDIT), so suggestions stay visible until the
-                        // first turn actually starts.
-                        isFreshSession: !store.hasUserContent,
+                        // The freshness gate is intentionally narrow: only
+                        // a real assistant MESSAGE event counts as "this
+                        // session has had a turn." Daemon-side starting /
+                        // waiting / context_update / thinking events
+                        // happen before the user has even typed and used
+                        // to suppress the SuggestionsBar prematurely
+                        // (which is what the user reported as "I don't
+                        // see suggestions at all"). The local @State
+                        // `hasUserSent` flag in MessageInput is the
+                        // belt-and-suspenders for cases where the
+                        // assistant has already spoken.
+                        isFreshSession: !store.events.contains { $0.type == .message },
                         sessionState: store.state,
                         onSend: { text, attachments in
                             let composed = attachments.composedMessage(with: text)
                             await sendMessage(composed, images: attachments.images)
                         },
                         onAbort: { Task { await abortTurn() } },
-                        onTapMode: { showingModeSheet = true },
-                        onTapRepoPlus: { showingRepoPicker = true }
+                        onTapMode: { showingModeSheet = true }
                     )
                 }
             } else {
@@ -268,6 +269,16 @@ struct SessionView: View {
                         Task { await handoffToTerminal() }
                     } label: {
                         Label("Open in Terminal on Mac", systemImage: "terminal")
+                    }
+                    // Repo picker moved out of the composer in this
+                    // iteration — the user didn't want the active repo
+                    // chip restated above the text field. Surface the
+                    // picker here so users can still switch projects
+                    // without popping back to Home.
+                    Button {
+                        showingRepoPicker = true
+                    } label: {
+                        Label("Switch repository…", systemImage: "folder")
                     }
                     Divider()
                     Button(role: .destructive) {
@@ -475,10 +486,22 @@ struct SessionView: View {
 
     private func sendMessage(_ content: String, images: [StagedImage] = []) async {
         let api = APIClient(store: pairing)
+        // If the user just toggled Plan/Code mode, the directive is
+        // buffered in the live store. Prepend it to this outgoing turn
+        // (separated by a blank line) so the agent sees the instruction
+        // and the user's actual request in the same message. Toggling
+        // mode without sending anything afterwards is a no-op — that's
+        // the "lazy" behaviour the user asked for.
+        let body: String
+        if let preamble = store?.consumePendingModePreamble() {
+            body = preamble + "\n\n" + content
+        } else {
+            body = content
+        }
         do {
             try await api.sendMessage(
                 sessionId: currentSession.id,
-                content: content,
+                content: body,
                 images: images
             )
         } catch {
