@@ -69,22 +69,26 @@ enum SmoothieColor {
     /// Tile tints for `SheetRow` glyph backgrounds. Each pairs with a
     /// foreground token (modeCode / modePlan / accent / statusDone /
     /// statusErr) but renders the small 32-pt square behind the glyph.
-    /// These were designed for the dark palette — they read as quiet
-    /// muted blocks in dark mode and as accent-tinted blocks in light
-    /// mode (asset-catalog overrides would be a cleaner follow-up).
-    static let glyphModeCode  = Color(hex: 0x1F1F2E)
-    static let glyphModePlan  = Color(hex: 0x1F2A3E)
-    static let glyphModeRun   = Color(hex: 0x2E1717)
+    /// P27.k — derived from the matching foreground at 18% opacity so
+    /// the tile is a soft tint of the glyph colour in both modes
+    /// rather than a fixed dark block that turned into a near-black
+    /// square on a white card in light mode.
+    static let glyphModeCode  = modeCode.opacity(0.18)
+    static let glyphModePlan  = modePlan.opacity(0.18)
+    static let glyphModeRun   = statusErr.opacity(0.18)
     static let glyphAmber     = Color(hex: 0xFBBF24)
-    static let glyphAmberSoft = Color(hex: 0x2A2415)
-    static let glyphGreenSoft = Color(hex: 0x152A22)
+    static let glyphAmberSoft = Color(hex: 0xFBBF24).opacity(0.18)
+    static let glyphGreenSoft = statusDone.opacity(0.18)
 
     // MARK: - Code-block surfaces (adaptive)
 
     /// Markdown code-block surfaces. `codeBg` for fenced blocks,
-    /// `codeBgDim` for inline `code` spans.
-    static let codeBg         = Color.primary.opacity(0.07)
-    static let codeBgDim      = Color.primary.opacity(0.04)
+    /// `codeBgDim` for inline `code` spans. P27.k — switched from
+    /// `Color.primary.opacity(0.07)` to system fills so the
+    /// differentiation reads at the same strength in both modes;
+    /// 7% black on white was barely visible in light mode.
+    static let codeBg         = Color(uiColor: .secondarySystemFill)
+    static let codeBgDim      = Color(uiColor: .tertiarySystemFill)
 
     /// Subtle screen veil used by dashed banners / decorative surfaces.
     static let overlayVeil    = Color.primary.opacity(0.02)

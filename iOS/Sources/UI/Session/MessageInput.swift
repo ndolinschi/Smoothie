@@ -352,11 +352,19 @@ struct MessageInput: View {
             .buttonStyle(.plain)
         } else {
             Button(action: send) {
+                // P27.k — disabled state previously rendered as
+                // white@40% on black@35% in light mode (grey-on-grey,
+                // failed WCAG). Use a separate, less-translucent bg
+                // tint and keep the fg at full onAccent opacity so the
+                // glyph stays readable in both modes.
                 Image(systemName: sending ? "ellipsis" : "arrow.up")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(canSend ? SmoothieColor.onAccent : SmoothieColor.onAccent.opacity(0.4))
+                    .foregroundStyle(SmoothieColor.onAccent)
                     .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
-                    .background(SmoothieColor.accent.opacity(canSend ? 1.0 : 0.35), in: .circle)
+                    .background(
+                        SmoothieColor.accent.opacity(canSend ? 1.0 : 0.55),
+                        in: .circle
+                    )
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
