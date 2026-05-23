@@ -1,12 +1,13 @@
 import SwiftUI
 
 enum HomeFilter: Hashable {
-    case all, completed
+    case all, completed, archived
 
     var title: String {
         switch self {
         case .all: return "All"
         case .completed: return "Completed"
+        case .archived: return "Archived"
         }
     }
 }
@@ -14,6 +15,7 @@ enum HomeFilter: Hashable {
 struct HomeView: View {
     @Environment(PairingStore.self) private var pairing
     @Environment(RecentsStore.self) private var recents
+    @Environment(SessionMetaStore.self) private var sessionMeta
     /// Set by SmoothieApp when a `smoothie://session/<id>` deep link fires
     /// from a notification tap. HomeView resolves the id against the live
     /// `/sessions` list and pushes SessionView via its own NavigationStack.
@@ -47,10 +49,20 @@ struct HomeView: View {
         sessions.filter { $0.state.isCompleted }.count
     }
     private var filteredSessions: [SessionDescriptorWire] {
+        // P27.j — archived sessions are hidden from .all and .completed.
+        // The .archived bucket lists them on demand, regardless of state.
         switch filter {
-        case .all: return sessions
-        case .completed: return sessions.filter { $0.state.isCompleted }
+        case .all:
+            return sessions.filter { !sessionMeta.isArchived($0.id) }
+        case .completed:
+            return sessions.filter { $0.state.isCompleted && !sessionMeta.isArchived($0.id) }
+        case .archived:
+            return sessions.filter { sessionMeta.isArchived($0.id) }
         }
+    }
+
+    private var archivedCount: Int {
+        sessions.filter { sessionMeta.isArchived($0.id) }.count
     }
 
     var body: some View {
@@ -252,6 +264,9 @@ struct HomeView: View {
         HStack(spacing: 8) {
             filterChip(.all, count: allCount)
             filterChip(.completed, count: completedCount)
+            if archivedCount > 0 {
+                filterChip(.archived, count: archivedCount)
+            }
             Spacer()
         }
         .padding(.top, 2)
@@ -366,7 +381,14 @@ struct HomeView: View {
     /// themselves are ordered by their most-recent session's timestamp
     /// so the project you just touched bubbles to the top.
     private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionDescriptorWire])] {
-        let sorted = ss.sorted(by: { $0.createdAt > $1.createdAt })
+        // P27.j — pinned sessions float to the top of their project
+        // group. Two-key sort: pinned-desc first, then createdAt-desc.
+        let sorted = ss.sorted { lhs, rhs in
+            let lp = sessionMeta.isPinned(lhs.id)
+            let rp = sessionMeta.isPinned(rhs.id)
+            if lp != rp { return lp && !rp }
+            return lhs.createdAt > rhs.createdAt
+        }
         var grouped: [String: [SessionDescriptorWire]] = [:]
         var firstSeen: [String: Int64] = [:]
         for s in sorted {
@@ -385,7 +407,7 @@ struct HomeView: View {
 
     private var emptyState: some View {
         VStack(spacing: 6) {
-            Text(filter == .completed ? "No completed sessions yet." : "Tap + to start.")
+            Text(emptyStateMessage)
                 .font(.system(size: 14))
                 .foregroundStyle(SmoothieColor.textSecondary)
         }
@@ -393,17 +415,34 @@ struct HomeView: View {
         .padding(.vertical, 60)
     }
 
+    private var emptyStateMessage: String {
+        switch filter {
+        case .all:       return "Tap + to start."
+        case .completed: return "No completed sessions yet."
+        case .archived:  return "Archived sessions land here. Use the chat ‘…’ menu to archive one."
+        }
+    }
+
     /// REF-4 task row: dashed-circle icon + title + cloud-style project label + relative time.
     private func taskRow(_ s: SessionDescriptorWire) -> some View {
         let date = Date(timeIntervalSince1970: TimeInterval(s.createdAt) / 1000.0)
+        let pinned = sessionMeta.isPinned(s.id)
+        let title = sessionMeta.displayName(for: s.id, fallback: s.projectName)
         return HStack(spacing: 12) {
             DashedCircleIcon(dotColor: dotColor(for: s.state))
             VStack(alignment: .leading, spacing: 2) {
-                Text(s.projectName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(SmoothieColor.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: SmoothieMetrics.space4) {
+                    if pinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(SmoothieColor.accent)
+                    }
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SmoothieColor.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.system(size: 10))
