@@ -29,6 +29,11 @@ struct ToolCallCard: View {
     /// neutral soft stroke. Used for subagent invocations so they
     /// visually pop out of the regular tool-call cadence.
     var emphasised: Bool = false
+    /// P29 §5 — the CLI that produced this tool call. Drives the
+    /// 2pt top-line brand accent shown while the call is `.running`
+    /// or `emphasised`. Optional so previews / tests can omit it;
+    /// nil falls back to `SmoothieColor.accent`.
+    var cli: CLIWire? = nil
 
     /// Externally-owned expand state — required so the card's expanded /
     /// collapsed status survives `LazyVStack` view recycling when the user
@@ -58,6 +63,17 @@ struct ToolCallCard: View {
             }
         }
         .background(SmoothieColor.bgCard)
+        // P29 §5 — 2pt brand-color stripe pinned to the card's top
+        // edge while the tool call is `.running` or `emphasised`.
+        // Placed BEFORE the .clipShape so the rounded corners trim
+        // the stripe to match the card's chrome.
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(topAccentColor)
+                .frame(height: 2)
+                .opacity(showTopAccent ? 1 : 0)
+                .animation(.easeInOut(duration: 0.2), value: showTopAccent)
+        }
         .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd, style: .continuous)
@@ -66,6 +82,24 @@ struct ToolCallCard: View {
                     lineWidth: emphasised ? 1 : 0.5
                 )
         )
+    }
+
+    /// P29 §5 — show the brand stripe while a tool is actively
+    /// running OR when the card is otherwise emphasised (subagent
+    /// Task invocations). Completed non-emphasised cards keep their
+    /// neutral chrome.
+    private var showTopAccent: Bool {
+        status == .running || emphasised
+    }
+
+    /// Resolved brand color for the top stripe. Falls back to the
+    /// neutral accent when the call site didn't thread a CLI
+    /// through (e.g. previews).
+    private var topAccentColor: Color {
+        if let cli {
+            return SmoothieColor.brand(for: cli)
+        }
+        return SmoothieColor.accent
     }
 
     private var canExpand: Bool {

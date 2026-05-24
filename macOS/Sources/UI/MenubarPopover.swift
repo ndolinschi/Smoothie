@@ -163,16 +163,40 @@ struct MenubarPopover: View {
         switch pairing.cloudflared.status {
         case .off:
             // Local mode. Phone has to reach the daemon directly — show
-            // the install hint only when the user might want to switch
-            // to Remote later.
-            VStack(alignment: .leading, spacing: SmoothieMetrics.space2) {
+            // install + reload controls when cloudflared isn't found yet.
+            VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
                 Text("Local — phone must be on the same network (LAN or Tailscale).")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.textSecondary)
                 if !pairing.cloudflared.isInstalled {
-                    Text("Remote needs `cloudflared` — run `brew install cloudflared`.")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(SmoothieColor.textTertiary)
+                    VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
+                        Text("Remote needs `cloudflared` — not found in PATH.")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(SmoothieColor.textTertiary)
+                        HStack(spacing: SmoothieMetrics.space6) {
+                            Button {
+                                try? TerminalHandoff.openInTerminal(
+                                    cwd: NSHomeDirectory(),
+                                    command: "brew install cloudflared"
+                                )
+                            } label: {
+                                Label("Install", systemImage: "arrow.down.circle")
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(SmoothieColor.accent)
+                            .controlSize(.mini)
+
+                            Button {
+                                pairing.cloudflared.recheck()
+                            } label: {
+                                Label("Reload", systemImage: "arrow.clockwise")
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                        }
+                    }
                 }
             }
         case .starting:
@@ -442,6 +466,46 @@ struct MenubarPopover: View {
         await refreshSessions()
     }
 
+    /// Start / Stop / Restart controls that adapt to the current server state.
+    @ViewBuilder
+    private var serverControls: some View {
+        switch server.status {
+        case .stopped, .failed:
+            actionButton(
+                label: "Start server",
+                systemImage: "play.fill",
+                tint: SmoothieColor.statusDone
+            ) {
+                server.start()
+            }
+
+        case .starting:
+            actionButton(
+                label: "Starting…",
+                systemImage: "circle.dotted",
+                tint: SmoothieColor.textSecondary
+            ) {}
+            .disabled(true)
+
+        case .running:
+            actionButton(
+                label: "Stop server",
+                systemImage: "stop.fill",
+                tint: SmoothieColor.statusErr
+            ) {
+                server.stop()
+            }
+
+            actionButton(
+                label: "Restart server",
+                systemImage: "arrow.clockwise",
+                tint: SmoothieColor.statusWaiting
+            ) {
+                server.restart()
+            }
+        }
+    }
+
     private var actions: some View {
         VStack(alignment: .leading, spacing: SmoothieMetrics.space6) {
             actionButton(
@@ -470,6 +534,8 @@ struct MenubarPopover: View {
             }
 
             Divider().padding(.vertical, SmoothieMetrics.space2)
+
+            serverControls
 
             actionButton(
                 label: "Quit Smoothie",

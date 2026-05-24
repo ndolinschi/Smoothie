@@ -118,6 +118,14 @@ final class PairingService {
             return (cgnat, true)
         }
 
+        // Path C — No Tailscale at all. Scan for the Mac's primary LAN
+        // address (RFC 1918 private ranges) so the QR code encodes a host
+        // the phone can actually reach on the same network. Prefer en0
+        // (Wi-Fi) then en1 (Ethernet), then accept any private-range match.
+        if let lan = lanAddressFromInterfaces() {
+            return (lan, false)
+        }
+
         return ("127.0.0.1", false)
     }
 
@@ -164,5 +172,50 @@ final class PairingService {
         guard octets.count == 4 else { return false }
         // RFC 6598: 100.64.0.0/10 — the range Tailscale uses by default.
         return octets[0] == 100 && octets[1] >= 64 && octets[1] <= 127
+    }
+
+    /// Scan network interfaces for a private LAN IPv4 address. Tries the
+    /// canonical Wi-Fi (en0) and Ethernet (en1) interfaces first so we
+    /// return the "primary" adapter on most Macs, then falls back to any
+    /// other interface that carries a private-range address.
+    private static func lanAddressFromInterfaces() -> String? {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let start = head else { return nil }
+        defer { freeifaddrs(head) }
+
+        // Two-pass: preferred interfaces first, then anything else.
+        let preferred = ["en0", "en1"]
+        var fallback: String?
+
+        var node: UnsafeMutablePointer<ifaddrs>? = start
+        while let current = node {
+            defer { node = current.pointee.ifa_next }
+            guard let addrPtr = current.pointee.ifa_addr,
+                  addrPtr.pointee.sa_family == sa_family_t(AF_INET) else { continue }
+
+            var buf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(
+                addrPtr, socklen_t(addrPtr.pointee.sa_len),
+                &buf, socklen_t(buf.count),
+                nil, 0, NI_NUMERICHOST
+            ) == 0 else { continue }
+
+            let ip = String(cString: buf)
+            guard isPrivateLAN(ip) else { continue }
+
+            let name = String(cString: current.pointee.ifa_name)
+            if preferred.contains(name) { return ip }
+            if fallback == nil { fallback = ip }
+        }
+        return fallback
+    }
+
+    /// True for RFC 1918 private ranges (10/8, 172.16/12, 192.168/16).
+    private static func isPrivateLAN(_ ip: String) -> Bool {
+        let o = ip.split(separator: ".").compactMap { UInt8($0) }
+        guard o.count == 4 else { return false }
+        return o[0] == 10
+            || (o[0] == 172 && o[1] >= 16 && o[1] <= 31)
+            || (o[0] == 192 && o[1] == 168)
     }
 }

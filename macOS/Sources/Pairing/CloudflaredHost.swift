@@ -43,7 +43,16 @@ final class CloudflaredHost {
         return nil
     }
 
-    var isInstalled: Bool { Self.locateBinary() != nil }
+    // Stored so SwiftUI tracks changes — a plain computed property reading
+    // the filesystem is invisible to @Observable and the view never re-renders
+    // after the user installs cloudflared. Call recheck() to refresh.
+    private(set) var isInstalled: Bool = (CloudflaredHost.locateBinary() != nil)
+
+    /// Re-probe the filesystem. Call this after the user installs cloudflared
+    /// so the menubar reflects the new state without requiring a daemon restart.
+    func recheck() {
+        isInstalled = Self.locateBinary() != nil
+    }
 
     func start() {
         guard case .off = status else { return }

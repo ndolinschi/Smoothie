@@ -40,6 +40,9 @@ struct HomeView: View {
     @State private var pendingPath: String?
     @State private var selectedSession: SessionDescriptorWire?
     @State private var filter: HomeFilter = .all
+    /// P29 §1 — when set, the session list is narrowed to sessions for
+    /// this CLI. Driven by the ProviderStrip in DashboardHeader.
+    @State private var selectedCLI: CLIWire?
     /// Renamed in P27.f: the leading toolbar button now opens
     /// SettingsView, which presents PairingsSheet from one of its rows.
     /// The legacy "presentingPairings" sheet attachment further down is
@@ -59,14 +62,20 @@ struct HomeView: View {
     private var filteredSessions: [SessionDescriptorWire] {
         // P27.j — archived sessions are hidden from .all and .completed.
         // The .archived bucket lists them on demand, regardless of state.
+        // P29 §1 — when a brand filter is active, narrow to that CLI.
+        let base: [SessionDescriptorWire]
         switch filter {
         case .all:
-            return sessions.filter { !sessionMeta.isArchived($0.id) }
+            base = sessions.filter { !sessionMeta.isArchived($0.id) }
         case .completed:
-            return sessions.filter { $0.state.isCompleted && !sessionMeta.isArchived($0.id) }
+            base = sessions.filter { $0.state.isCompleted && !sessionMeta.isArchived($0.id) }
         case .archived:
-            return sessions.filter { sessionMeta.isArchived($0.id) }
+            base = sessions.filter { sessionMeta.isArchived($0.id) }
         }
+        if let selectedCLI {
+            return base.filter { $0.cli == selectedCLI }
+        }
+        return base
     }
 
     private var archivedCount: Int {
@@ -119,10 +128,15 @@ struct HomeView: View {
                         // 4 stat tiles, activity heatmap. Hidden during
                         // the initial fetch so the skeleton state is
                         // just a spinner.
-                        DashboardHeader(me: me, sessions: sessions, adapters: adapters)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
-                            .listRowSeparator(.hidden)
+                        DashboardHeader(
+                            me: me,
+                            sessions: sessions,
+                            adapters: adapters,
+                            selectedCLI: $selectedCLI
+                        )
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                        .listRowSeparator(.hidden)
                         filterRow
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16))
@@ -337,8 +351,12 @@ struct HomeView: View {
             let buckets = bucketed(filteredSessions)
             ForEach(buckets, id: \.key) { bucket in
                 Section {
-                    ForEach(bucket.value) { s in
-                        Button { selectedSession = s } label: { taskRow(s) }
+                    ForEach(bucket.value) { node in
+                        Button { selectedSession = node.descriptor } label: {
+                            SessionTreeRow(depth: node.depth) {
+                                taskRow(node.descriptor)
+                            }
+                        }
                             .buttonStyle(.plain)
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
@@ -352,7 +370,7 @@ struct HomeView: View {
                             // its native red affordance.
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    Task { await deleteSession(s) }
+                                    Task { await deleteSession(node.descriptor) }
                                 } label: {
                                     Label("Delete session", systemImage: "trash")
                                 }
@@ -378,7 +396,7 @@ struct HomeView: View {
                         // folder from scratch via the global + button —
                         // the user already has visual context for the
                         // project they want to extend.
-                        if let sample = bucket.value.first {
+                        if let sample = bucket.value.first?.descriptor {
                             Button {
                                 pendingPath = sample.projectPath
                                 presentingNew = true
@@ -404,22 +422,34 @@ struct HomeView: View {
         }
     }
 
+    /// P29 §2 — a session bucket entry annotated with its tree depth.
+    /// `depth == 0` is a root row; `depth >= 1` is a child indented
+    /// under its parent. The `id` mirrors the descriptor so SwiftUI's
+    /// ForEach can identify rows stably even as the parent/child
+    /// graph reshapes.
+    struct SessionTreeEntry: Identifiable {
+        let descriptor: SessionDescriptorWire
+        let depth: Int
+        var id: String { descriptor.id }
+    }
+
     /// Group sessions by their project (last path component) — mirrors
     /// the left-rail layout in Claude Code desktop. Within each project
     /// group, sessions are sorted by most-recent first. Projects
     /// themselves are ordered by their most-recent session's timestamp
     /// so the project you just touched bubbles to the top.
-    private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionDescriptorWire])] {
+    ///
+    /// P29 §2 — children (sessions with `parentSessionId` set to another
+    /// session in the same bucket) are folded into a tree: each parent
+    /// row is immediately followed by its children at `depth + 1`. An
+    /// orphan child (parent missing from the bucket) is promoted to a
+    /// root so it still shows up.
+    private func bucketed(_ ss: [SessionDescriptorWire]) -> [(key: String, value: [SessionTreeEntry])] {
         // P27.k — project order MUST be derived from each project's
         // most recent createdAt, independent of pin state. The earlier
         // P27.j implementation conflated the two by computing
         // firstSeen on the pinned-first sorted list, which caused a
         // project with any pinned-old session to sink in the list.
-        //
-        // Two passes:
-        //   1. firstSeen[project] = max(createdAt) — pin-agnostic.
-        //   2. Bucket then sort within each bucket: pinned-desc first,
-        //      then createdAt-desc.
         var firstSeen: [String: Int64] = [:]
         var grouped: [String: [SessionDescriptorWire]] = [:]
         for s in ss {
@@ -429,18 +459,76 @@ struct HomeView: View {
                 firstSeen[s.projectName] = s.createdAt
             }
         }
-        for key in grouped.keys {
-            grouped[key]?.sort { lhs, rhs in
+
+        // Within each bucket, build a parent → children index. Sessions
+        // whose parent isn't in this bucket (or who have no parent) are
+        // roots; everything else attaches under its parent.
+        var bucketEntries: [String: [SessionTreeEntry]] = [:]
+        for (key, list) in grouped {
+            let idsInBucket = Set(list.map(\.id))
+            var childrenByParent: [String: [SessionDescriptorWire]] = [:]
+            var roots: [SessionDescriptorWire] = []
+            for s in list {
+                if let pid = s.parentSessionId, idsInBucket.contains(pid) {
+                    childrenByParent[pid, default: []].append(s)
+                } else {
+                    roots.append(s)
+                }
+            }
+
+            // Sort roots — pinned first, then createdAt descending.
+            roots.sort { lhs, rhs in
                 let lp = sessionMeta.isPinned(lhs.id)
                 let rp = sessionMeta.isPinned(rhs.id)
                 if lp != rp { return lp && !rp }
                 return lhs.createdAt > rhs.createdAt
             }
+            // Children always sorted createdAt ascending (so a thread
+            // reads parent → first follow-up → next follow-up). Pinned
+            // state doesn't reorder children — the tree stays
+            // chronological under each parent.
+            for pid in childrenByParent.keys {
+                childrenByParent[pid]?.sort { $0.createdAt < $1.createdAt }
+            }
+
+            var entries: [SessionTreeEntry] = []
+            for root in roots {
+                appendSubtree(
+                    descriptor: root,
+                    depth: 0,
+                    childrenByParent: childrenByParent,
+                    into: &entries
+                )
+            }
+            bucketEntries[key] = entries
         }
+
         let orderedKeys = grouped.keys.sorted {
             (firstSeen[$0] ?? 0) > (firstSeen[$1] ?? 0)
         }
-        return orderedKeys.map { (key: $0, value: grouped[$0] ?? []) }
+        return orderedKeys.map { (key: $0, value: bucketEntries[$0] ?? []) }
+    }
+
+    /// Depth-first walk of the sub-session tree. Caps depth at 4 to
+    /// avoid runaway indentation on pathological data — beyond that
+    /// we clamp the visual depth without dropping rows.
+    private func appendSubtree(
+        descriptor: SessionDescriptorWire,
+        depth: Int,
+        childrenByParent: [String: [SessionDescriptorWire]],
+        into entries: inout [SessionTreeEntry]
+    ) {
+        entries.append(SessionTreeEntry(descriptor: descriptor, depth: min(depth, 4)))
+        if let kids = childrenByParent[descriptor.id] {
+            for kid in kids {
+                appendSubtree(
+                    descriptor: kid,
+                    depth: depth + 1,
+                    childrenByParent: childrenByParent,
+                    into: &entries
+                )
+            }
+        }
     }
 
     private var emptyState: some View {

@@ -8,11 +8,28 @@ struct DashboardHeader: View {
     let me: MeWire?
     let sessions: [SessionDescriptorWire]
     let adapters: [AdapterInfoWire]
+    /// P29 §1 — current CLI brand filter from HomeView. Bound so the
+    /// provider strip's chip toggles flow back up to the session list.
+    @Binding var selectedCLI: CLIWire?
+
+    init(
+        me: MeWire?,
+        sessions: [SessionDescriptorWire],
+        adapters: [AdapterInfoWire],
+        selectedCLI: Binding<CLIWire?> = .constant(nil)
+    ) {
+        self.me = me
+        self.sessions = sessions
+        self.adapters = adapters
+        self._selectedCLI = selectedCLI
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             greeting
+                .smoothieAppearFade(delay: 0.00)
             statsCard
+                .smoothieAppearFade(delay: 0.05)
         }
     }
 
@@ -66,6 +83,16 @@ struct DashboardHeader: View {
             // monochromatically (P25 mono palette).
             ActivityHeatmap(buckets: stats.weeklyBuckets, weeks: 12)
                 .padding(.top, 4)
+
+            // P29 §1 — provider chip strip. Brand-tinted dots, taps
+            // filter the session list below. Hidden until adapters
+            // arrive so we don't flash a row of empty chips on first
+            // paint.
+            if !adapters.isEmpty {
+                ProviderStrip(adapters: adapters, selected: $selectedCLI)
+                    .padding(.top, 2)
+                    .smoothieAppearFade(delay: 0.10)
+            }
 
             // Gentle scale comparison — same vibe as Claude Code
             // desktop's "You've used 1341× more tokens than The Great

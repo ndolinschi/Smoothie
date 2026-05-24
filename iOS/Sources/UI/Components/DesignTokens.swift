@@ -61,6 +61,35 @@ enum SmoothieColor {
     static let statusDone     = Color(hex: 0x34D399)
     static let statusErr      = Color(hex: 0xEF4444)
 
+    // MARK: - CLI brand colors (P29 — pinned hex)
+    //
+    // Per-CLI brand tints used by the provider strip on Home and the
+    // top-line accent on `ToolCallCard`. Chosen to be visually distinct
+    // from each other AND from the status/mode tokens above so the
+    // provider chip dots don't collide with semantic meaning.
+
+    static let brandClaude    = Color(hex: 0xED7C5C)   // Anthropic coral
+    static let brandCodex     = Color(hex: 0x10A37F)   // OpenAI deep teal
+    static let brandCursor    = Color(hex: 0x6366F1)   // Cursor indigo
+    static let brandGemini    = Color(hex: 0x4285F4)   // Google blue
+    static let brandOpenCode  = Color(hex: 0xF97316)   // OpenCode orange
+
+    /// Returns the brand tint for a CLI. Falls back to `textSecondary`
+    /// for `.unknown` / `.antigravity` — both are intentionally
+    /// neutral (Antigravity is hidden from the picker; unknown is the
+    /// forward-compat sentinel from the wire decoder).
+    static func brand(for cli: CLIWire) -> Color {
+        switch cli {
+        case .claudeCode:  return brandClaude
+        case .codex:       return brandCodex
+        case .cursor:      return brandCursor
+        case .gemini:      return brandGemini
+        case .openCode:    return brandOpenCode
+        case .antigravity: return textSecondary
+        case .unknown:     return textSecondary
+        }
+    }
+
     // MARK: - Sheet checkmark + tile tints (P24.c)
 
     /// Blue used for selection checkmarks on sheet rows (Tailwind-blue-600).

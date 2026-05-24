@@ -42,4 +42,25 @@ extension APIClient {
         struct R: Decodable { let transcript: String }
         return try decode(R.self, from: data).transcript
     }
+
+    // MARK: - P29 §8 — Create PR
+
+    /// Precheck for the Create-PR composer chip. Hits
+    /// `GET /git/pr-ready`, which on the daemon side runs `gh
+    /// --version` and `gh auth status`. iOS caches the response for
+    /// the app session — there's no live toolchain reload.
+    func prReady() async throws -> PRReadyWire {
+        let data = try await get("/git/pr-ready")
+        return try decode(PRReadyWire.self, from: data)
+    }
+
+    /// Run the full create-PR pipeline on the daemon: optional new
+    /// branch, `git add -A`, `git commit -m <title>`, `git push -u
+    /// origin <branch>`, `gh pr create`. Returns the resulting PR
+    /// URL. On failure the daemon returns 4xx/5xx with a stage hint
+    /// in the body — the APIClient turns that into `APIError.http`.
+    func createPR(sessionId: String, _ request: CreatePRRequestWire) async throws -> CreatePRResponseWire {
+        let data = try await post("/sessions/\(sessionId)/create-pr", json: request)
+        return try decode(CreatePRResponseWire.self, from: data)
+    }
 }

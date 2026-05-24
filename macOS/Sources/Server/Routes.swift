@@ -270,7 +270,23 @@ enum Routes {
                     continuation.yield(encodeSSE(event: event))
                 }
                 let subBox = SubscriptionBox(sub: sub)
-                continuation.onTermination = { _ in subBox.close() }
+                // Cloudflare Quick Tunnels (trycloudflare.com) close idle
+                // connections after ~30 seconds. Sending a comment ping
+                // every 20 s keeps the stream alive without producing
+                // visible output in the iOS client (SSE comments are
+                // silently skipped by URLSession's event parser).
+                let ping = ByteBuffer(bytes: Array(": keep-alive\n\n".utf8))
+                let keepaliveTask = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(20))
+                        guard !Task.isCancelled else { break }
+                        continuation.yield(ping)
+                    }
+                }
+                continuation.onTermination = { _ in
+                    subBox.close()
+                    keepaliveTask.cancel()
+                }
             }
 
             return Response(

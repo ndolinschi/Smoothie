@@ -40,6 +40,14 @@ data class SessionDescriptor(
     /// iPhone↔Terminal handoff and Terminal-session discovery.
     val providerSessionId: String? = null,
     val origin: SessionOrigin = SessionOrigin.SMOOTHIE,
+    /// P29 §2 — id of the session this one was spawned from. `null`
+    /// for top-level sessions (the user started a fresh chat). When
+    /// set, the iOS Home view groups this session as a child of its
+    /// parent inside the project bucket with a 16pt indent + vertical
+    /// guide. Future work plumbs auto-tagging when a user creates a
+    /// new session from inside an existing SessionView; today the
+    /// field is dormant for sessions the daemon creates on its own.
+    val parentSessionId: String? = null,
 )
 
 @Serializable
@@ -55,6 +63,10 @@ data class CreateSessionRequest(
     /// iPhone-take-back-from-Terminal flow and by Terminal-session
     /// discovery → resume.
     val providerSessionId: String? = null,
+    /// P29 §2 — when set, the spawned Session is tagged as a child of
+    /// the named session for tree rendering on iOS. The daemon stores
+    /// the id verbatim; no validation that the parent exists.
+    val parentSessionId: String? = null,
 )
 
 @Serializable

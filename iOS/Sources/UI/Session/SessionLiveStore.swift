@@ -45,6 +45,18 @@ final class SessionLiveStore {
     /// than interrupting it.
     private var pendingMode: String?
 
+    /// P29 §8 — exposed read-only flag so the composer action strip can
+    /// surface a `Plan` chip while a mode preamble is staged. The
+    /// preamble itself is consumed by `consumePendingModePreamble()`
+    /// on the next outgoing turn.
+    var hasPendingModePreamble: Bool { pendingMode != nil }
+
+    /// P29 §8 — drop the staged preamble without sending it. Backs the
+    /// "Clear" button in the Plan chip's popover.
+    func clearPendingModePreamble() {
+        pendingMode = nil
+    }
+
     private var sse: SSEClient?
     private var api: APIClient?
     let session: SessionDescriptorWire

@@ -312,6 +312,11 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
     /// Tags Terminal-discovered sessions (vs Smoothie-spawned). The
     /// HomeView surfaces a small Terminal badge on `.terminal` rows.
     let origin: SessionOriginWire
+    /// P29 §2 — id of the session this one was spawned from (nil for
+    /// top-level / fresh sessions). When set, HomeView groups this
+    /// session as a child of its parent inside the project bucket
+    /// with a 16pt indent and a soft vertical guide.
+    let parentSessionId: String?
 
     /// Custom decoder so older daemons (pre-P22) that don't emit the new
     /// fields still parse — both default to nil / `.smoothie`.
@@ -328,13 +333,15 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
         createdAt = try c.decode(Int64.self, forKey: .createdAt)
         providerSessionId = try c.decodeIfPresent(String.self, forKey: .providerSessionId)
         origin = (try c.decodeIfPresent(SessionOriginWire.self, forKey: .origin)) ?? .smoothie
+        parentSessionId = try c.decodeIfPresent(String.self, forKey: .parentSessionId)
     }
 
     init(
         id: String, projectPath: String, projectName: String, cli: CLIWire,
         model: String?, reasoningEffort: String?, mode: String?,
         state: SessionStateWire, createdAt: Int64,
-        providerSessionId: String? = nil, origin: SessionOriginWire = .smoothie
+        providerSessionId: String? = nil, origin: SessionOriginWire = .smoothie,
+        parentSessionId: String? = nil
     ) {
         self.id = id
         self.projectPath = projectPath
@@ -347,6 +354,7 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.providerSessionId = providerSessionId
         self.origin = origin
+        self.parentSessionId = parentSessionId
     }
 
     /// Return a copy with `mode` swapped. Used by the soft mode-switch path
@@ -356,7 +364,8 @@ struct SessionDescriptorWire: Codable, Sendable, Identifiable, Hashable {
             id: id, projectPath: projectPath, projectName: projectName, cli: cli,
             model: model, reasoningEffort: reasoningEffort, mode: newMode,
             state: state, createdAt: createdAt,
-            providerSessionId: providerSessionId, origin: origin
+            providerSessionId: providerSessionId, origin: origin,
+            parentSessionId: parentSessionId
         )
     }
 }
@@ -397,14 +406,18 @@ struct CreateSessionRequestWire: Codable, Sendable {
     /// subprocess picks up an existing conversation. Used by the
     /// Terminal-session → iPhone resume flow.
     let providerSessionId: String?
+    /// P29 §2 — when set, the spawned session is tagged as a child of
+    /// the named session for tree rendering on the Home dashboard.
+    let parentSessionId: String?
 
-    init(projectPath: String, cli: CLIWire, model: String? = nil, reasoningEffort: String? = nil, mode: String? = nil, providerSessionId: String? = nil) {
+    init(projectPath: String, cli: CLIWire, model: String? = nil, reasoningEffort: String? = nil, mode: String? = nil, providerSessionId: String? = nil, parentSessionId: String? = nil) {
         self.projectPath = projectPath
         self.cli = cli
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.mode = mode
         self.providerSessionId = providerSessionId
+        self.parentSessionId = parentSessionId
     }
 }
 
@@ -443,6 +456,32 @@ struct FileContentWire: Codable, Sendable {
     let content: String
     let size: Int
     let truncated: Bool
+}
+
+// MARK: - P29 §8 — Create PR
+
+/// Result of `GET /git/pr-ready`. `ready == true` means `gh` is
+/// installed and `gh auth status` succeeded; iOS surfaces the
+/// CreatePR chip in that case. When false, `missing` lists the human
+/// readable hints (e.g. "gh", "auth") so iOS can render a useful
+/// install / login pointer.
+struct PRReadyWire: Codable, Sendable {
+    let ready: Bool
+    let missing: [String]
+}
+
+struct CreatePRRequestWire: Codable, Sendable {
+    let title: String
+    let body: String
+    /// New branch to push under (e.g. `smoothie/<sessionId-prefix>`).
+    /// Ignored when `useCurrentBranch == true`.
+    let branch: String
+    let useCurrentBranch: Bool
+}
+
+struct CreatePRResponseWire: Codable, Sendable {
+    /// GitHub PR URL returned by `gh pr create`.
+    let url: String
 }
 
 /// Type-erased JSON value for `metadata`. Decode-only.

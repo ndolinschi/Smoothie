@@ -58,10 +58,13 @@ final class SmoothieHTTPServer {
             prefs: prefs
         )
 
+        // Always bind to all interfaces so the phone can reach the daemon
+        // over LAN or Tailscale regardless of which address `pairing.host`
+        // resolved to. `pairing.host` is used only for the QR code display.
         let app = Application(
             router: router,
             configuration: .init(
-                address: .hostname(host, port: port),
+                address: .hostname("0.0.0.0", port: port),
                 serverName: "Smoothie"
             )
         )

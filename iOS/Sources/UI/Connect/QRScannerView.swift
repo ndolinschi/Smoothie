@@ -33,6 +33,13 @@ struct QRScannerView: UIViewControllerRepresentable {
         var onPermissionDenied: (() -> Void)?
         private var lastEmitted: String?
         private var emittedAt: Date = .distantPast
+        // Guards against starting an empty session in viewDidAppear before
+        // configureSession() has actually added inputs/outputs. Without this,
+        // the session starts with no inputs (notDetermined path), and adding
+        // inputs to an already-running session without beginConfiguration/
+        // commitConfiguration causes the metadata output to silently stop
+        // producing QR callbacks on real devices.
+        private var sessionConfigured = false
 
         override func viewDidLoad() {
             super.viewDidLoad()
@@ -42,6 +49,7 @@ struct QRScannerView: UIViewControllerRepresentable {
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
+            guard sessionConfigured else { return }
             if !session.isRunning {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     self?.session.startRunning()
@@ -93,11 +101,27 @@ struct QRScannerView: UIViewControllerRepresentable {
                 onPermissionDenied?()
                 return
             }
+
+            // Wrap all session mutations in beginConfiguration/commitConfiguration.
+            // This is required when modifying a session that may already be running
+            // (the notDetermined race: viewDidAppear fires before permission resolves,
+            // and on some paths startRunning can be called on the empty session).
+            // Without this wrapper, adding inputs/outputs to a running session can
+            // cause AVCaptureMetadataOutput to silently produce no callbacks on
+            // real devices even though the camera feed is visible.
+            session.beginConfiguration()
             session.addInput(input)
 
             let output = AVCaptureMetadataOutput()
-            guard session.canAddOutput(output) else { return }
+            guard session.canAddOutput(output) else {
+                session.commitConfiguration()
+                return
+            }
             session.addOutput(output)
+            session.commitConfiguration()
+
+            // metadataObjectTypes and the delegate must be set after the output
+            // is added to the session (setting types before add is silently ignored).
             output.metadataObjectTypes = [.qr]
             output.setMetadataObjectsDelegate(self, queue: .main)
 
@@ -105,6 +129,10 @@ struct QRScannerView: UIViewControllerRepresentable {
             layer.videoGravity = .resizeAspectFill
             view.layer.addSublayer(layer)
             previewLayer = layer
+
+            // Mark configured before starting so viewDidAppear's guard passes
+            // on subsequent presentations (back-to-foreground etc.).
+            sessionConfigured = true
 
             // `viewDidAppear` may have already fired (presented before
             // permission resolved) — kick the session ourselves so the

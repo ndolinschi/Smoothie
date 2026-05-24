@@ -89,6 +89,7 @@ class Session(
             createdAt = createdAt,
             providerSessionId = _providerSessionId,
             origin = SessionOrigin.SMOOTHIE,
+            parentSessionId = request.parentSessionId,
         )
     }
 

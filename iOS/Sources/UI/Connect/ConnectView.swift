@@ -9,8 +9,8 @@ struct ConnectView: View {
         ZStack {
             SmoothieColor.bgPrimary.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 28) {
-                Spacer(minLength: 80)
+            VStack(alignment: .leading, spacing: 24) {
+                Spacer(minLength: 60)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Smoothie")
@@ -22,6 +22,22 @@ struct ConnectView: View {
                         .font(.system(size: 17))
                         .foregroundStyle(SmoothieColor.textSecondary)
                 }
+                .smoothieAppearFade(delay: 0.00)
+
+                // P29 §6 — terminal install card. Shows the user the
+                // brew incantation they need to run on their Mac to
+                // install the Smoothie daemon. Lives above the
+                // QR / manual buttons because installing the daemon is
+                // a prerequisite to pairing.
+                TerminalCard(
+                    title: "Terminal",
+                    lines: [
+                        .init(kind: .command, text: "$ brew install smoothie-mac"),
+                        .init(kind: .command, text: "$ smoothie pair --iphone"),
+                    ],
+                    copyValue: "brew install smoothie-mac"
+                )
+                .smoothieAppearFade(delay: 0.06)
 
                 if let error = pairing.lastError {
                     HStack(spacing: 8) {
@@ -158,7 +174,7 @@ private struct ScannerSheet: View {
                     }
                     .padding()
                     Spacer()
-                    VStack(spacing: 4) {
+                    VStack(spacing: 8) {
                         Text("Scan the QR from the Mac menu bar")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(SmoothieColor.textPrimary)
@@ -167,10 +183,34 @@ private struct ScannerSheet: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(SmoothieColor.statusErr)
                                 .multilineTextAlignment(.center)
+                            // Retry without re-scanning — useful for Cloudflare
+                            // tunnels that were still warming up on first attempt.
+                            if let url = lastSeen {
+                                Button {
+                                    failed = false
+                                    accepted = true
+                                    Task {
+                                        let ok = await pairing.tryPairFromURL(url)
+                                        if ok { dismiss() }
+                                        else { accepted = false; failed = true }
+                                    }
+                                } label: {
+                                    Text("Retry")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(SmoothieColor.onAccent)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 8)
+                                        .background(SmoothieColor.accent, in: .capsule)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         } else if accepted {
-                            Text("Got it — verifying…")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.7))
+                            HStack(spacing: 6) {
+                                ProgressView().tint(.white).controlSize(.mini)
+                                Text("Verifying…")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.7))
+                            }
                         } else {
                             Text("Tap \u{201C}Show full QR\u{201D} in the Mac popover for a bigger code.")
                                 .font(.system(size: 11))

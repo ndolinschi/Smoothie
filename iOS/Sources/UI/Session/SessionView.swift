@@ -36,6 +36,15 @@ struct SessionView: View {
     /// `showingRename` controls presentation.
     @State private var showingRename = false
     @State private var renameDraft = ""
+    /// P29 §8 — drives the CreatePRSheet presentation from the action
+    /// chips row. The sheet posts to the daemon's `/sessions/:id/
+    /// create-pr` endpoint and returns the resulting PR URL.
+    @State private var showingCreatePR = false
+    /// P29 §8 — daemon precheck result for `gh` availability. Fetched
+    /// once when the view appears; `nil` = unknown (chip hidden),
+    /// `false` = explicitly not ready, `true` = chip surfaces when
+    /// there are fileEdits.
+    @State private var prReady: Bool?
 
     enum SwitchTarget: Identifiable, Equatable {
         case model(String)
@@ -135,13 +144,19 @@ struct SessionView: View {
                         events: store.events,
                         connection: store.connection,
                         state: store.state,
-                        expandStore: store
+                        expandStore: store,
+                        cli: currentSession.cli,
+                        onShowDiff: { showingDiffSheet = true }
                     )
                     if !store.events.isEmpty {
                         ActionChipsRow(
                             events: store.events,
-                            onPlanTap: { showingModeSheet = true },
-                            onDiffTap: { showingDiffSheet = true }
+                            hasPendingPlanPreamble: store.hasPendingModePreamble,
+                            prReady: prReady,
+                            onPlanTap: { /* popover-driven; no-op */ },
+                            onClearPlan: { store.clearPendingModePreamble() },
+                            onDiffTap: { showingDiffSheet = true },
+                            onCreatePRTap: { showingCreatePR = true }
                         )
                     }
                     MessageInput(
@@ -325,6 +340,17 @@ struct SessionView: View {
             .presentationCornerRadius(20)
             .smoothieThemed()
         }
+        .sheet(isPresented: $showingCreatePR) {
+            CreatePRSheet(
+                session: currentSession,
+                events: store?.events ?? [],
+                onCreated: { _ in }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(20)
+            .smoothieThemed()
+        }
         .sheet(isPresented: $showingModelSheet) {
             if let f = features {
                 ModelPickerSheet(
@@ -366,6 +392,7 @@ struct SessionView: View {
             }
             connectStore()
             Task { await loadFeatures() }
+            Task { await loadPRReadiness() }
         }
         .onDisappear {
             store?.disconnect()
@@ -429,6 +456,23 @@ struct SessionView: View {
             features = adapters.first { $0.cli == currentSession.cli }?.features
         } catch {
             // non-fatal; ComposerMenu degrades gracefully
+        }
+    }
+
+    /// P29 §8 — single-shot precheck for the Create-PR chip. The
+    /// result is cached on `prReady` for the lifetime of the view;
+    /// no re-check on every session change because `gh` toolchain
+    /// availability doesn't shift under us within a session.
+    private func loadPRReadiness() async {
+        guard prReady == nil else { return }
+        let api = APIClient(store: pairing)
+        do {
+            let result = try await api.prReady()
+            prReady = result.ready
+        } catch {
+            // Don't surface — the chip just stays hidden when the
+            // precheck fails, which is the same UX as `ready == false`.
+            prReady = false
         }
     }
 

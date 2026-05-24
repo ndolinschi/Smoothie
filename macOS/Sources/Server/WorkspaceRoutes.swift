@@ -195,6 +195,79 @@ enum WorkspaceRoutes {
             }
         }
 
+        // MARK: - P29 §8 — Create PR
+
+        // GET /git/pr-ready
+        // Lightweight precheck for the iOS composer's "Create PR" chip.
+        // Hides the chip when `gh` is missing or the user hasn't run
+        // `gh auth login`. iOS caches this for the app session.
+        group.get("/git/pr-ready") { _, _ -> Response in
+            let result = await Task { @MainActor in
+                GitPRCreator.ghReady()
+            }.value
+            return jsonResponse(encodePRReady(result))
+        }
+
+        // POST /sessions/:id/create-pr
+        // Runs the full git → gh pipeline (branch / add / commit /
+        // push / pr create) in the session's project directory.
+        // Returns the resulting PR URL or a stage-tagged error so the
+        // iOS CreatePRSheet can surface a precise diagnostic.
+        group.post("/sessions/:id/create-pr") { request, context -> Response in
+            guard let id = context.parameters.get("id") else {
+                return errorResponse(.badRequest, "missing id")
+            }
+            let body = try await readBody(request, max: 16_384)
+            guard let payload = decodeCreatePRBody(body) else {
+                return errorResponse(.badRequest, "invalid create-pr body")
+            }
+            let result: Result<String, Error> = await Task { @MainActor in
+                guard let session = try? await handle.manager.get(id: id) else {
+                    return .failure(NSError(
+                        domain: "Smoothie", code: 404,
+                        userInfo: [NSLocalizedDescriptionKey: "session not found"]
+                    ))
+                }
+                let descriptor: SessionDescriptor
+                do {
+                    descriptor = try await session.descriptor()
+                } catch {
+                    return .failure(error)
+                }
+                do {
+                    let url = try GitPRCreator.createPR(
+                        cwd: descriptor.projectPath,
+                        title: payload.title,
+                        body: payload.body,
+                        branch: payload.branch,
+                        useCurrentBranch: payload.useCurrentBranch
+                    )
+                    return .success(url)
+                } catch let err as GitPRCreator.PRCreationError {
+                    return .failure(NSError(
+                        domain: "Smoothie", code: 409,
+                        userInfo: [NSLocalizedDescriptionKey: "\(err.stage.rawValue): \(err.message)"]
+                    ))
+                } catch {
+                    return .failure(error)
+                }
+            }.value
+            switch result {
+            case .success(let url):
+                let payload = "{\"url\":\(jsonString(url))}"
+                return jsonResponse(payload)
+            case .failure(let err):
+                let nsErr = err as NSError
+                let status: HTTPResponse.Status
+                switch nsErr.code {
+                case 404: status = .notFound
+                case 409: status = .conflict
+                default:  status = .internalServerError
+                }
+                return errorResponse(status, nsErr.localizedDescription)
+            }
+        }
+
         // POST /sessions/:id/mcp-servers  { "enabled": ["id1", "id2"] }
         // Persists the per-session enabled subset. Takes effect on the
         // next host spawn (so the user typically follows this with a
@@ -306,6 +379,40 @@ func encodeMCPServer(_ s: MCPServerInfo) -> String {
 func decodeMCPEnabledBody(_ data: Data) -> [String]? {
     struct Body: Decodable { let enabled: [String] }
     return (try? JSONDecoder().decode(Body.self, from: data))?.enabled
+}
+
+// MARK: - P29 §8 — Create PR encoders / decoders
+
+/// Parsed `POST /sessions/:id/create-pr` body.
+struct CreatePRPayload {
+    let title: String
+    let body: String
+    let branch: String
+    let useCurrentBranch: Bool
+}
+
+func decodeCreatePRBody(_ data: Data) -> CreatePRPayload? {
+    struct Body: Decodable {
+        let title: String
+        let body: String
+        let branch: String
+        let useCurrentBranch: Bool
+    }
+    guard let parsed = try? JSONDecoder().decode(Body.self, from: data) else { return nil }
+    let title = parsed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = parsed.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !title.isEmpty else { return nil }
+    return CreatePRPayload(
+        title: title,
+        body: parsed.body,
+        branch: branch,
+        useCurrentBranch: parsed.useCurrentBranch
+    )
+}
+
+func encodePRReady(_ result: GitPRCreator.ReadyResult) -> String {
+    let missingJSON = jsonStringArray(result.missing)
+    return "{\"ready\":\(result.ready),\"missing\":\(missingJSON)}"
 }
 
 // MARK: - Transcript assembly

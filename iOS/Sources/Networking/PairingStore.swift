@@ -203,7 +203,10 @@ final class PairingStore {
     func verify() async -> Bool {
         guard let pairing = current else { return false }
         var req = URLRequest(url: pairing.baseURL.appendingPathComponent("health"))
-        req.timeoutInterval = 5
+        // HTTPS = Cloudflare tunnel: allow 30 s for cold-start (first request
+        // through a new trycloudflare.com tunnel takes 15-25 s in practice).
+        // HTTP = LAN/Tailscale: 12 s is plenty; failing fast is better UX.
+        req.timeoutInterval = pairing.scheme == "https" ? 30 : 12
         do {
             let (_, response) = try await URLSession.shared.data(for: req)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
@@ -212,9 +215,42 @@ final class PairingStore {
             }
             lastError = "Server returned non-200"
             return false
+        } catch let urlErr as URLError {
+            lastError = friendlyURLError(urlErr, pairing: pairing)
+            return false
         } catch {
             lastError = error.localizedDescription
             return false
+        }
+    }
+
+    /// Translates URLError codes into messages that tell the user what to do
+    /// rather than quoting the raw system error string. Uses the actual
+    /// baseURL so the address shown always matches what was tried.
+    private func friendlyURLError(_ err: URLError, pairing: Pairing) -> String {
+        // Show the exact URL that was probed, not a hand-assembled string.
+        // This catches cases where the pairing was stored with a bad host
+        // (e.g. "https://xxx.trycloudflare.com" as the host field, which
+        // URLComponents folds into http://smoothie-invalid-host.local).
+        let addr = pairing.baseURL.absoluteString
+        let isRemote = pairing.scheme == "https"
+        switch err.code {
+        case .timedOut:
+            if isRemote {
+                return "Timed out reaching \(addr) — the Cloudflare tunnel may still be warming up. Tap Retry."
+            }
+            return "Timed out reaching \(addr). Make sure your phone and Mac are on the same network, or switch to Remote (Cloudflare) mode on the Mac."
+        case .cannotConnectToHost:
+            return "Connection refused at \(addr). Is the Smoothie daemon running on your Mac?"
+        case .notConnectedToInternet, .networkConnectionLost:
+            return "No network connection. Check your phone's WiFi or cellular."
+        case .cannotFindHost, .dnsLookupFailed:
+            if isRemote {
+                return "Could not reach \(addr). The Cloudflare tunnel URL may have expired — re-scan the QR."
+            }
+            return "Could not find \(addr). Check the host address or switch to Remote mode."
+        default:
+            return "\(addr) — \(err.localizedDescription)"
         }
     }
 

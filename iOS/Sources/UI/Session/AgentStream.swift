@@ -7,6 +7,32 @@ struct AgentStream: View {
     /// Lives on `SessionLiveStore` so tool-card expanded chevrons survive
     /// `LazyVStack` view recycling. AgentStream is the only consumer.
     @Bindable var expandStore: SessionLiveStore
+    /// P29 §5 — drives the brand-color top stripe on every
+    /// ToolCallCard rendered inside the stream. Defaults to nil so
+    /// existing previews / call sites without a session context
+    /// keep their neutral accent fallback.
+    var cli: CLIWire? = nil
+    /// P29 §3 — invoked from a `FileChangesPanel`'s "Show all"
+    /// footer. SessionView wires this to its existing DiffSheet
+    /// presentation so the full review surface (with comments) stays
+    /// reachable inline from any file change.
+    var onShowDiff: () -> Void = {}
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// P29 §4 — bottom-anchor + viewport tracking for the smart
+    /// auto-hide pill. `bottomMaxY` is the global Y of the BOTTOM
+    /// sentinel; `viewportMaxY` is the global Y of the ScrollView
+    /// itself. When the sentinel is below the viewport's bottom edge
+    /// (with a small slack), the user has scrolled away and we surface
+    /// the jump-to-latest pill.
+    @State private var bottomMaxY: CGFloat = 0
+    @State private var viewportMaxY: CGFloat = 0
+
+    private var isAtBottom: Bool {
+        guard viewportMaxY > 0, bottomMaxY > 0 else { return true }
+        return bottomMaxY <= viewportMaxY + 60
+    }
 
     /// Memoised tool-stack collapse output. We rebuild it only when the
     /// event count or the trailing event identity actually changes —
@@ -96,6 +122,7 @@ struct AgentStream: View {
                                 ToolStackRow(
                                     name: name,
                                     members: members,
+                                    cli: cli,
                                     expandBinding: expandBinding(for: item.id),
                                     resultExpandBinding: resultExpandBinding(for: item.id)
                                 ).id(item.id)
@@ -110,10 +137,14 @@ struct AgentStream: View {
                                     tint: isSubagent ? SmoothieColor.accent : SmoothieColor.textPrimary.opacity(0.85),
                                     subtitleBadge: isSubagent ? EventRow.subagentType(from: use) : nil,
                                     emphasised: isSubagent,
+                                    cli: cli,
                                     expanded: expandBinding(for: use.id),
                                     resultExpanded: resultExpandBinding(for: use.id)
                                 )
                                 .id(item.id)
+                            case .fileChanges(let e):
+                                FileChangesPanel(event: e, onShowAll: onShowDiff)
+                                    .id(item.id)
                             }
                         }
                         if showsThinkingPulse {
@@ -121,11 +152,40 @@ struct AgentStream: View {
                                 .id("THINKING")
                                 .transition(.opacity)
                         }
-                        Color.clear.frame(height: 1).id("BOTTOM")
+                        Color.clear
+                            .frame(height: 1)
+                            .id("BOTTOM")
+                            // P29 §4 — publish the BOTTOM sentinel's
+                            // global Y so the jump-to-latest pill knows
+                            // whether the user is at the bottom.
+                            .background(
+                                GeometryReader { g in
+                                    Color.clear.preference(
+                                        key: AgentStreamBottomMaxYKey.self,
+                                        value: g.frame(in: .global).maxY
+                                    )
+                                }
+                            )
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
                 }
+            }
+            // P29 §4 — publish the ScrollView's global bounds so we
+            // can decide whether the BOTTOM sentinel is inside the
+            // visible viewport.
+            .background(
+                GeometryReader { g in
+                    Color.clear.preference(
+                        key: AgentStreamViewportMaxYKey.self,
+                        value: g.frame(in: .global).maxY
+                    )
+                }
+            )
+            .onPreferenceChange(AgentStreamBottomMaxYKey.self) { bottomMaxY = $0 }
+            .onPreferenceChange(AgentStreamViewportMaxYKey.self) { viewportMaxY = $0 }
+            .overlay(alignment: .bottomTrailing) {
+                jumpToLatestPill(proxy: proxy)
             }
             .onChange(of: scrollKey) { _, _ in
                 // One runloop tick so LazyVStack lays out the new row before
@@ -150,6 +210,37 @@ struct AgentStream: View {
             .onChange(of: events.count) { _, _ in refreshItemsIfNeeded() }
             .onChange(of: events.last?.content.count ?? 0) { _, _ in refreshItemsIfNeeded() }
         }
+    }
+
+    /// P29 §4 — floating "jump to latest" pill. Hidden when the user
+    /// is already at the bottom; appears with a soft fade when they
+    /// scroll up. Tap → smoothly scrolls back to the BOTTOM anchor.
+    @ViewBuilder
+    private func jumpToLatestPill(proxy: ScrollViewProxy) -> some View {
+        Button {
+            let animation: Animation? = reduceMotion ? nil : .easeOut(duration: 0.22)
+            withAnimation(animation) {
+                proxy.scrollTo("BOTTOM", anchor: .bottom)
+            }
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SmoothieColor.textSecondary)
+                .frame(width: 36, height: 36)
+                .background(SmoothieColor.bgCard, in: .circle)
+                .overlay(
+                    Circle().strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 16)
+        .padding(.bottom, 16)
+        .opacity(isAtBottom ? 0 : 1)
+        .scaleEffect(isAtBottom ? 0.85 : 1)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isAtBottom)
+        .allowsHitTesting(!isAtBottom)
+        .accessibilityLabel("Jump to latest message")
     }
 
     /// Build a Set<id> ↔ Bool binding for the per-card expanded chevron.
@@ -345,11 +436,40 @@ private struct ThinkingPulseRow: View {
 /// One visual row in the agent stream. Either a single event, a single
 /// tool invocation paired with its optional result, or a collapsed run
 /// of same-name tool calls (`Bash ×3`).
+// P29 §4 — PreferenceKeys used by AgentStream to track the BOTTOM
+// sentinel's position relative to the ScrollView's viewport. When
+// the sentinel sits below the visible region, the jump-to-latest
+// pill becomes visible. Both keys store a single CGFloat (last
+// reporter wins).
+
+private struct AgentStreamBottomMaxYKey: PreferenceKey {
+    // Swift 6 strict-concurrency: PreferenceKey's `defaultValue` is
+    // declared `{ get }`, so a stored `let` constant satisfies the
+    // requirement without the "nonisolated global shared mutable
+    // state" error a `var` would produce.
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct AgentStreamViewportMaxYKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct AgentStreamItem: Identifiable {
     enum Kind {
         case event(SmoothieEventWire)
         case toolStack(name: String, members: [SmoothieEventWire])
         case toolCard(use: SmoothieEventWire, result: SmoothieEventWire?)
+        /// P29 §3 — `.fileEdit` events render via the new
+        /// `FileChangesPanel` instead of a generic `.toolCard`. The
+        /// panel pulls the diff out of the event's metadata and
+        /// shows inline +/- rows.
+        case fileChanges(event: SmoothieEventWire)
     }
     let kind: Kind
     let id: String
@@ -372,7 +492,10 @@ struct AgentStreamItem: Identifiable {
             let e = events[i]
 
             if e.type == .fileEdit {
-                out.append(AgentStreamItem(kind: .toolCard(use: e, result: nil), id: e.id))
+                // P29 §3 — emit the inline FileChangesPanel item instead
+                // of a generic .toolCard. The panel renders the real
+                // before/after diff inline in the stream.
+                out.append(AgentStreamItem(kind: .fileChanges(event: e), id: e.id))
                 i += 1
                 continue
             }
@@ -440,6 +563,10 @@ struct AgentStreamItem: Identifiable {
 private struct ToolStackRow: View {
     let name: String
     let members: [SmoothieEventWire]
+    /// P29 §5 — propagated from AgentStream so the stacked tool
+    /// card uses the same brand-color top stripe as its singleton
+    /// peers.
+    var cli: CLIWire? = nil
     let expandBinding: Binding<Bool>
     let resultExpandBinding: Binding<Bool>
 
@@ -487,6 +614,7 @@ private struct ToolStackRow: View {
                 ? (firstUse.flatMap { EventRow.subagentType(from: $0) } ?? "subagent")
                 : nil,
             emphasised: isSubagentStack,
+            cli: cli,
             expanded: expandBinding,
             resultExpanded: resultExpandBinding
         )
