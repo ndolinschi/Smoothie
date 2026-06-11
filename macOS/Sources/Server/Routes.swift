@@ -693,6 +693,8 @@ func parseCLIType(_ raw: String) -> CLIType? {
     case "gemini":                                              return .gemini
     case "opencode", "open_code", "open-code":                  return .openCode
     case "antigravity", "agy":                                  return .antigravity
+    case "codex":                                               return .codex
+    case "cursor", "cursor-agent", "cursor_agent":              return .cursor
     default:                                                    return nil
     }
 }
