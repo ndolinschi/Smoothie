@@ -111,9 +111,11 @@ final class SmoothieHTTPServer {
         let router = Router(context: BasicRequestContext.self)
 
         // /health is intentionally public so the iOS app can probe before
-        // submitting the Bearer header.
+        // submitting the Bearer header. Version comes from the bundle so
+        // project.yml stays the single source of truth.
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0"
         router.get("/health") { _, _ -> Response in
-            jsonResponse("{\"healthy\":true,\"version\":\"0.2.0\"}")
+            jsonResponse("{\"healthy\":true,\"version\":\(jsonString(version))}")
         }
 
         let group = router.group()
@@ -127,6 +129,9 @@ final class SmoothieHTTPServer {
 
 struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
     let token: String
+    /// Shared across all requests for the lifetime of the router so the
+    /// failure window survives between connections.
+    let failureGate = AuthFailureGate()
 
     func handle(
         _ request: Request,
@@ -135,9 +140,37 @@ struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
     ) async throws -> Response {
         let header = request.headers[.authorization]
         guard let header, Self.constantTimeEqual(header, "Bearer \(token)") else {
+            // Throttle brute-force guessing: after a burst of bad tokens,
+            // answer 429 instead of 401 until the window cools down.
+            // Valid tokens are never affected — only failures count.
+            if failureGate.registerFailureAndCheckBlocked() {
+                return errorResponse(.tooManyRequests, "too many failed auth attempts — try again later")
+            }
             return errorResponse(.unauthorized, "unauthorized")
         }
         return try await next(request, context)
+    }
+
+    /// Sliding-window counter of failed bearer attempts. Lock-guarded
+    /// because Hummingbird handlers run concurrently across connections.
+    /// 10 failures within 60 s flips subsequent failures to 429 until
+    /// the window drains — slow enough to make brute-forcing the
+    /// 32-byte token impractical even on a hostile LAN, loose enough
+    /// that a phone with a stale token just sees a few 401s.
+    final class AuthFailureGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var failures: [Date] = []
+        private let window: TimeInterval = 60
+        private let maxFailures = 10
+
+        func registerFailureAndCheckBlocked() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            let now = Date()
+            failures.removeAll { now.timeIntervalSince($0) >= window }
+            failures.append(now)
+            return failures.count > maxFailures
+        }
     }
 
     /// Constant-time byte comparison. The naive `==` on `String` short-

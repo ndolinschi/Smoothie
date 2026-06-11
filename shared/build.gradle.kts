@@ -40,5 +40,9 @@ kotlin {
         appleMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }

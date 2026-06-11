@@ -28,6 +28,13 @@ targets:
       - path: Sources
     resources:
       - path: Resources/Assets.xcassets
+      # Safety + per-CLI system prompts. Bundled as a folder reference so
+      # SafetyHost's `Bundle.main.resourceURL/prompts` lookup works in an
+      # installed .app — without this, release builds silently ran every
+      # agent with no safety rules (the dev fallback only finds prompts/
+      # when the binary runs next to the repo checkout).
+      - path: ../prompts
+        type: folder
     info:
       path: Resources/Info.plist
       properties:

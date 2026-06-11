@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    # Apple-silicon runner — the K/N targets (macosArm64 / iosArm64) only
+    # compile on an arm64 macOS host.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Shared framework + parser tests
+        run: ./gradlew :shared:assemble :shared:macosArm64Test
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode projects
+        run: |
+          xcodegen --spec macOS/project.yml --project macOS
+          xcodegen --spec iOS/project.yml   --project iOS
+
+      - name: Build macOS daemon
+        run: |
+          xcodebuild -workspace Smoothie.xcworkspace -scheme SmoothieMac \
+            -configuration Debug -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Build iOS app
+        run: |
+          xcodebuild -workspace Smoothie.xcworkspace -scheme SmoothieiOS \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build

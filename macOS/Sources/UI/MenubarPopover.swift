@@ -63,7 +63,7 @@ struct MenubarPopover: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(SmoothieColor.textPrimary)
             Spacer()
-            Text("v0.2.0")
+            Text("v" + ((Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0"))
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(SmoothieColor.textTertiary)
         }
@@ -86,7 +86,7 @@ struct MenubarPopover: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.statusWaiting)
-                Text("Tailscale not detected — phone must be on the same LAN, or switch the Network selector to Remote.")
+                Text("Tailscale not detected — serving plain HTTP on the LAN, so anyone on this network who captures the pairing token can control this Mac. Prefer Tailscale, or switch the Network selector to Remote.")
                     .font(.system(size: 10))
                     .foregroundStyle(SmoothieColor.textSecondary)
             }
