@@ -38,6 +38,13 @@ final class AntigravityOneshotHost: SessionHost {
     /// memory across turns.
     private var hasCompletedFirstTurn = false
 
+    /// Assembled Smoothie safety/system prompt. `agy -p` has no
+    /// system-prompt flag, so it's prepended to the first turn's text;
+    /// `-c` threading then carries it across turns. Skipped entirely
+    /// for resumed conversations (the original first turn had it).
+    private let systemPrompt: String?
+    private var sentSystemPrompt = false
+
     var isRunning: Bool { current?.isRunning ?? false }
 
     init(
@@ -46,7 +53,8 @@ final class AntigravityOneshotHost: SessionHost {
         cwd: String,
         baseArgs: [String],
         env: [String: String],
-        resumeExisting: Bool = false
+        resumeExisting: Bool = false,
+        systemPrompt: String? = nil
     ) {
         self.session = session
         self.executable = executable
@@ -58,6 +66,8 @@ final class AntigravityOneshotHost: SessionHost {
         // the Terminal-session resume flow (agy doesn't expose a per-id
         // resume in `-p`; we rely on cwd-based threading).
         self.hasCompletedFirstTurn = resumeExisting
+        self.systemPrompt = systemPrompt
+        self.sentSystemPrompt = resumeExisting
     }
 
     func start() throws {
@@ -76,7 +86,14 @@ final class AntigravityOneshotHost: SessionHost {
         if hasCompletedFirstTurn {
             args.append("-c")
         }
-        args.append(contentsOf: ["-p", content])
+        var outgoing = content
+        if !sentSystemPrompt {
+            sentSystemPrompt = true
+            if let systemPrompt, !systemPrompt.isEmpty {
+                outgoing = systemPrompt + "\n\n---\n\n" + content
+            }
+        }
+        args.append(contentsOf: ["-p", outgoing])
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)

@@ -30,6 +30,13 @@ final class CodexOneshotHost: SessionHost {
     private var stderrBuffer = Data()
     private let stderrCap = 8 * 1024
 
+    /// Assembled Smoothie safety/system prompt. `codex exec` has no
+    /// system-prompt flag, so it's prepended to the first turn's prompt
+    /// text; the server-side thread then carries it across `--thread`
+    /// turns.
+    private let systemPrompt: String?
+    private var sentSystemPrompt = false
+
     var isRunning: Bool { current?.isRunning ?? false }
 
     init(
@@ -37,13 +44,15 @@ final class CodexOneshotHost: SessionHost {
         executable: String,
         cwd: String,
         baseArgs: [String],
-        env: [String: String]
+        env: [String: String],
+        systemPrompt: String? = nil
     ) {
         self.session = session
         self.executable = executable
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
+        self.systemPrompt = systemPrompt
     }
 
     func start() throws {
@@ -62,7 +71,14 @@ final class CodexOneshotHost: SessionHost {
         if let threadId, !threadId.isEmpty {
             args.append(contentsOf: ["--thread", threadId])
         }
-        args.append(content)
+        var outgoing = content
+        if !sentSystemPrompt {
+            sentSystemPrompt = true
+            if let systemPrompt, !systemPrompt.isEmpty {
+                outgoing = systemPrompt + "\n\n---\n\n" + content
+            }
+        }
+        args.append(outgoing)
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)

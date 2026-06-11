@@ -54,10 +54,17 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     var isRunning: Bool { process?.isRunning ?? false }
 
-    init(session: Session, executable: String, cwd: String) {
+    /// Assembled Smoothie safety/system prompt. The opencode server has
+    /// no per-session system-prompt parameter on the endpoints we drive,
+    /// so it's prepended to the first prompt's text instead.
+    private let systemPrompt: String?
+    private var sentSystemPrompt = false
+
+    init(session: Session, executable: String, cwd: String, systemPrompt: String? = nil) {
         self.session = session
         self.executable = executable
         self.cwd = cwd
+        self.systemPrompt = systemPrompt
         super.init()
     }
 
@@ -112,12 +119,19 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     func write(_ content: String) async throws {
         try? await session.noteUserMessageSent()
+        var outgoing = content
+        if !sentSystemPrompt {
+            sentSystemPrompt = true
+            if let systemPrompt, !systemPrompt.isEmpty {
+                outgoing = systemPrompt + "\n\n---\n\n" + content
+            }
+        }
         guard let port, let id = ocSessionId else {
             // Queue until the server is ready.
-            pendingWrites.append(content)
+            pendingWrites.append(outgoing)
             return
         }
-        try await postPrompt(port: port, sessionID: id, content: content)
+        try await postPrompt(port: port, sessionID: id, content: outgoing)
     }
 
     func terminate() {

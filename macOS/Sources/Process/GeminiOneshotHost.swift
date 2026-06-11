@@ -26,6 +26,13 @@ final class GeminiOneshotHost: SessionHost {
     private var stderrBuffer = Data()
     private let stderrCap = 8 * 1024
 
+    /// Assembled Smoothie safety/system prompt. Gemini's CLI has no
+    /// `--append-system-prompt` equivalent, so the host prepends it to
+    /// the first turn's `-p` text instead; the conversation memory then
+    /// carries it across `--resume` turns.
+    private let systemPrompt: String?
+    private var sentSystemPrompt = false
+
     var isRunning: Bool { current?.isRunning ?? false }
 
     init(
@@ -34,7 +41,8 @@ final class GeminiOneshotHost: SessionHost {
         executable: String,
         cwd: String,
         baseArgs: [String],
-        env: [String: String]
+        env: [String: String],
+        systemPrompt: String? = nil
     ) {
         self.session = session
         self.parser = parser
@@ -42,6 +50,10 @@ final class GeminiOneshotHost: SessionHost {
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
+        self.systemPrompt = systemPrompt
+        // A resumed conversation (Terminal take-back) already received
+        // the prompt on its original first turn — don't re-send.
+        self.sentSystemPrompt = baseArgs.contains("--resume")
     }
 
     func start() throws {
@@ -60,7 +72,14 @@ final class GeminiOneshotHost: SessionHost {
         if let resumeSessionId {
             args.append(contentsOf: ["--resume", resumeSessionId])
         }
-        args.append(contentsOf: ["-p", content])
+        var outgoing = content
+        if !sentSystemPrompt {
+            sentSystemPrompt = true
+            if let systemPrompt, !systemPrompt.isEmpty {
+                outgoing = systemPrompt + "\n\n---\n\n" + content
+            }
+        }
+        args.append(contentsOf: ["-p", outgoing])
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)

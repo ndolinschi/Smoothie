@@ -48,6 +48,12 @@ final class CursorACPHost: NSObject, SessionHost {
     private var pendingPrompts: [String] = []
     private var handshakeComplete = false
 
+    /// Assembled Smoothie safety/system prompt. ACP has no system-prompt
+    /// channel in the surface we drive, so it's prepended to the first
+    /// `session/prompt` text; the ACP session then carries it.
+    private let systemPrompt: String?
+    private var sentSystemPrompt = false
+
     var isRunning: Bool { process?.isRunning ?? false }
 
     init(
@@ -55,13 +61,15 @@ final class CursorACPHost: NSObject, SessionHost {
         executable: String,
         cwd: String,
         baseArgs: [String],
-        env: [String: String]
+        env: [String: String],
+        systemPrompt: String? = nil
     ) {
         self.session = session
         self.executable = executable
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
+        self.systemPrompt = systemPrompt
         super.init()
     }
 
@@ -108,11 +116,18 @@ final class CursorACPHost: NSObject, SessionHost {
 
     func write(_ content: String) async throws {
         try? await session.noteUserMessageSent()
+        var outgoing = content
+        if !sentSystemPrompt {
+            sentSystemPrompt = true
+            if let systemPrompt, !systemPrompt.isEmpty {
+                outgoing = systemPrompt + "\n\n---\n\n" + content
+            }
+        }
         guard let acpSessionId, handshakeComplete else {
-            pendingPrompts.append(content)
+            pendingPrompts.append(outgoing)
             return
         }
-        sendPrompt(sessionId: acpSessionId, content: content)
+        sendPrompt(sessionId: acpSessionId, content: outgoing)
     }
 
     func terminate() {

@@ -59,6 +59,12 @@ final class SessionLiveStore {
 
     private var sse: SSEClient?
     private var api: APIClient?
+    /// True once any SSE handshake has completed. The daemon replays the
+    /// full event backlog on EVERY new connection, so on re-connects the
+    /// ring must be cleared first — otherwise each reconnect (manual, or
+    /// the automatic one URLSession forces at the 10-minute resource
+    /// timeout) appends a second copy of the entire history.
+    private var hadConnection = false
     let session: SessionDescriptorWire
 
     /// Convenience flag — true once the SSE handshake has completed.
@@ -310,7 +316,18 @@ final class SessionLiveStore {
         connection = connectionState
         switch connectionState {
         case .connecting, .stopped: break
-        case .connected:            error = nil
+        case .connected:
+            error = nil
+            if hadConnection {
+                // Fresh connection → the server is about to replay its
+                // whole backlog. Drop the current ring (and its expand
+                // bookkeeping) so the replay repopulates it instead of
+                // duplicating every row.
+                events.removeAll()
+                expandedCardIds.removeAll()
+                expandedResultIds.removeAll()
+            }
+            hadConnection = true
         case .retrying(let s):      error = "Reconnecting in \(s)s…"
         case .gone(let reason):
             // SSE landed on a terminal 404/401/410. Flip the visible

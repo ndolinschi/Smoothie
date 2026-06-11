@@ -80,6 +80,11 @@ final class ProcessRegistry {
 
         do {
             let host: any SessionHost
+            // Claude consumes the assembled prompt via launchArguments
+            // (`--append-system-prompt`). Every other CLI lacks such a
+            // flag, so the hosts prepend it to the first outgoing turn —
+            // without this the safety rules never reached those agents.
+            let hostPrompt = systemPrompt.isEmpty ? nil : systemPrompt
             if effective.cli == CLIType.gemini, let geminiParser = parser as? GeminiAdapter {
                 host = GeminiOneshotHost(
                     session: session,
@@ -87,13 +92,15 @@ final class ProcessRegistry {
                     executable: exec,
                     cwd: effective.projectPath,
                     baseArgs: args,
-                    env: envMap
+                    env: envMap,
+                    systemPrompt: hostPrompt
                 )
             } else if effective.cli == CLIType.openCode {
                 host = OpenCodeServeHost(
                     session: session,
                     executable: exec,
-                    cwd: effective.projectPath
+                    cwd: effective.projectPath,
+                    systemPrompt: hostPrompt
                 )
             } else if effective.cli == CLIType.antigravity {
                 // If the request carries a providerSessionId (Terminal
@@ -106,7 +113,8 @@ final class ProcessRegistry {
                     cwd: effective.projectPath,
                     baseArgs: args,
                     env: envMap,
-                    resumeExisting: resume
+                    resumeExisting: resume,
+                    systemPrompt: hostPrompt
                 )
             } else if effective.cli == CLIType.codex {
                 host = CodexOneshotHost(
@@ -114,7 +122,8 @@ final class ProcessRegistry {
                     executable: exec,
                     cwd: effective.projectPath,
                     baseArgs: args,
-                    env: envMap
+                    env: envMap,
+                    systemPrompt: hostPrompt
                 )
             } else if effective.cli == CLIType.cursor {
                 host = CursorACPHost(
@@ -122,7 +131,8 @@ final class ProcessRegistry {
                     executable: exec,
                     cwd: effective.projectPath,
                     baseArgs: args,
-                    env: envMap
+                    env: envMap,
+                    systemPrompt: hostPrompt
                 )
             } else {
                 host = try ProcessHost(
