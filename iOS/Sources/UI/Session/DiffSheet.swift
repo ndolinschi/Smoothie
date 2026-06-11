@@ -72,14 +72,14 @@ struct DiffSheet: View {
                     if sending {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(totalComments > 0 ? SmoothieColor.onAccent : .white)
+                            .tint(SmoothieColor.onAccent)
                     }
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 13, weight: .bold))
                     Text(sending ? "Sending…" : "Send feedback to Claude")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                .foregroundStyle(totalComments > 0 ? SmoothieColor.onAccent : .white.opacity(0.5))
+                .foregroundStyle(totalComments > 0 ? SmoothieColor.onAccent : SmoothieColor.onAccent.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(

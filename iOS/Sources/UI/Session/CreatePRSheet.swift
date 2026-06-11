@@ -135,7 +135,7 @@ struct CreatePRSheet: View {
                             .fontWeight(.semibold)
                     }
                     .disabled(!canSubmit || inflight)
-                    .foregroundStyle(canSubmit ? .white : .white.opacity(0.3))
+                    .foregroundStyle(canSubmit ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                 }
             }
         }

@@ -43,7 +43,7 @@ struct MarkdownText: View {
     private func blockView(_ block: Block) -> some View {
         switch block {
         case .paragraph(let text):
-            InlineMarkdownFlow(raw: text, font: .system(size: 15), lineSpacing: 3, textColor: .white)
+            InlineMarkdownFlow(raw: text, font: .system(size: 15), lineSpacing: 3, textColor: SmoothieColor.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         case .heading(let text, let level):
@@ -57,8 +57,8 @@ struct MarkdownText: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: .white)
+                            .foregroundStyle(SmoothieColor.textSecondary)
+                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: SmoothieColor.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
@@ -70,9 +70,9 @@ struct MarkdownText: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(index + 1).")
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                             .frame(minWidth: 18, alignment: .trailing)
-                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: .white)
+                        InlineMarkdownFlow(raw: item, font: .system(size: 15), lineSpacing: 2, textColor: SmoothieColor.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
@@ -128,7 +128,7 @@ struct MarkdownText: View {
                     Text(language.lowercased())
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .tracking(0.5)
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                     Spacer()
                 }
                 .padding(.horizontal, 12)

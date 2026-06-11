@@ -74,7 +74,7 @@ struct EventRow: View {
             // tool_use) and divider events handled above.
             Text(event.content)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(SmoothieColor.textSecondary)
                 .lineLimit(expanded ? nil : 4)
                 .onTapGesture { expanded.toggle() }
         case .waiting:
@@ -85,7 +85,7 @@ struct EventRow: View {
                 Text(event.content.isEmpty ? "Done" : event.content)
             }
             .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(SmoothieColor.textSecondary)
         case .error, .limitReached:
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -244,7 +244,7 @@ extension EventRow {
                 Text(event.content)
                     .font(.system(size: 13))
                     .italic()
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(SmoothieColor.textSecondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 14)

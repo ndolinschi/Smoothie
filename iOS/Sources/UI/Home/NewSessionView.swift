@@ -78,7 +78,7 @@ struct NewSessionView: View {
                         }
                     }
                     .disabled(!canStart || starting)
-                    .foregroundStyle(canStart ? .white : .white.opacity(0.3))
+                    .foregroundStyle(canStart ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                 }
             }
         }

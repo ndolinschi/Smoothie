@@ -172,7 +172,7 @@ struct ModelPickerSheet: View {
                 } else {
                     Image(systemName: isCurrent ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 17))
-                        .foregroundStyle(isCurrent ? .white : .white.opacity(0.35))
+                        .foregroundStyle(isCurrent ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cli.friendlyModelName(model))
@@ -187,7 +187,7 @@ struct ModelPickerSheet: View {
                         Text("default")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .tracking(0.3)
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                     }
                 }
                 Spacer()
@@ -406,7 +406,7 @@ struct SlashCommandSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(SmoothieColor.textSecondary)
                 }
             }
         }

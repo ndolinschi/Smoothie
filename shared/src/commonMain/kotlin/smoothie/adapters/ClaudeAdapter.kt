@@ -53,7 +53,7 @@ class ClaudeAdapter : AdapterParser {
             val line = buffer.substring(0, nl).trim()
             buffer.deleteRange(0, nl + 1)
             if (line.isEmpty()) continue
-            parseLine(line)?.let { events += it }
+            events += parseLine(line)
         }
         return events
     }
@@ -117,9 +117,9 @@ class ClaudeAdapter : AdapterParser {
 
     // MARK: - Internal parsing
 
-    private fun parseLine(line: String): SmoothieEvent? {
-        val obj = runCatching { json.parseToJsonElement(line) }.getOrNull()?.jsonObject ?: return null
-        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return null
+    private fun parseLine(line: String): List<SmoothieEvent> {
+        val obj = runCatching { json.parseToJsonElement(line) }.getOrNull()?.jsonObject ?: return emptyList()
+        val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
         val now = nowEpochMillis()
 
         return when (type) {
@@ -131,23 +131,23 @@ class ClaudeAdapter : AdapterParser {
                     obj["session_id"]?.jsonPrimitive?.contentOrNull?.let {
                         lastSessionId = it
                     }
-                    SmoothieEvent(EventType.THINKING, "starting", null, now)
-                } else null
+                    listOf(SmoothieEvent(EventType.THINKING, "starting", null, now))
+                } else emptyList()
             }
 
-            "assistant" -> assistantBlocksToEvent(obj, now)
+            "assistant" -> assistantBlocksToEvents(obj, now)
 
-            "user" -> null     // echo of our message — skip
+            "user" -> emptyList()     // echo of our message — skip
 
             "result" -> {
                 val subtype = obj["subtype"]?.jsonPrimitive?.contentOrNull
                 if (subtype == "success") {
-                    SmoothieEvent(EventType.WAITING, "", null, now)
+                    listOf(SmoothieEvent(EventType.WAITING, "", null, now))
                 } else {
                     val errText = obj["result"]?.jsonPrimitive?.contentOrNull
                         ?: obj["error"]?.jsonPrimitive?.contentOrNull
                         ?: "result: $subtype"
-                    SmoothieEvent(EventType.ERROR, errText, null, now)
+                    listOf(SmoothieEvent(EventType.ERROR, errText, null, now))
                 }
             }
 
@@ -155,22 +155,27 @@ class ClaudeAdapter : AdapterParser {
                 val info = obj["rate_limit_info"]?.jsonObject
                 val status = info?.get("status")?.jsonPrimitive?.contentOrNull
                 if (status == "blocked" || status == "limit_reached") {
-                    SmoothieEvent(EventType.LIMIT_REACHED, "Claude rate limit reached", null, now)
-                } else null
+                    listOf(SmoothieEvent(EventType.LIMIT_REACHED, "Claude rate limit reached", null, now))
+                } else emptyList()
             }
 
-            "stream_event" -> null    // partial chunks — ignore in v1
+            "stream_event" -> emptyList()    // partial chunks — ignore in v1
 
-            else -> null
+            else -> emptyList()
         }
     }
 
-    private fun assistantBlocksToEvent(obj: JsonObject, now: Long): SmoothieEvent? {
-        val blocks = obj["message"]?.jsonObject?.get("content")?.jsonArray ?: return null
+    /// One assistant message can carry several content blocks in a single
+    /// stream-json line (e.g. thinking + tool_use, or text + tool_use), so
+    /// every block maps to its own event — returning after the first block
+    /// silently dropped the rest.
+    private fun assistantBlocksToEvents(obj: JsonObject, now: Long): List<SmoothieEvent> {
+        val blocks = obj["message"]?.jsonObject?.get("content")?.jsonArray ?: return emptyList()
+        val events = mutableListOf<SmoothieEvent>()
         for (block in blocks) {
             val b = block.jsonObject
             val t = b["type"]?.jsonPrimitive?.contentOrNull ?: continue
-            return when (t) {
+            val event = when (t) {
                 "text" -> {
                     val text = b["text"]?.jsonPrimitive?.contentOrNull ?: ""
                     if (text.isBlank()) null else SmoothieEvent(EventType.MESSAGE, text, null, now)
@@ -199,9 +204,10 @@ class ClaudeAdapter : AdapterParser {
                     SmoothieEvent(eventType, name, metadata.ifEmpty { null }, now)
                 }
                 else -> null
-            } ?: continue
+            }
+            if (event != null) events += event
         }
-        return null
+        return events
     }
 
     companion object {

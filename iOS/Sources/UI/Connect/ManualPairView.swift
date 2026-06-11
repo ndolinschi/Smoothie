@@ -61,11 +61,11 @@ struct ManualPairView: View {
                                 if verifying {
                                     ProgressView()
                                         .controlSize(.small)
-                                        .tint(canSubmit ? SmoothieColor.onAccent : .white)
+                                        .tint(canSubmit ? SmoothieColor.onAccent : SmoothieColor.textSecondary)
                                 }
                                 Text(verifying ? "Verifying…" : "Connect")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(canSubmit ? SmoothieColor.onAccent : .white.opacity(0.6))
+                                    .foregroundStyle(canSubmit ? SmoothieColor.onAccent : SmoothieColor.textSecondary)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)

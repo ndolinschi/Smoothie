@@ -106,6 +106,10 @@ final class VoiceDictator {
         request = nil
         level = 0
         state = .idle
+        // Hand the audio session back. `setupAudioSession` activates it
+        // with `.duckOthers`, so skipping this leaves every other app's
+        // audio ducked (and the session in `.record`) until iOS kills us.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     /// Compute the per-buffer RMS amplitude, mapped into 0...1 with a gain that

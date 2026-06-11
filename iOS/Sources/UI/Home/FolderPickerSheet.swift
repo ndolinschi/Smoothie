@@ -298,7 +298,7 @@ struct FolderPickerSheet: View {
                         .foregroundStyle(SmoothieColor.textPrimary)
                     Text("Drill into any subfolder")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(SmoothieColor.textTertiary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -321,11 +321,11 @@ struct FolderPickerSheet: View {
     private var browseContent: some View {
         Group {
             if loading {
-                ProgressView().tint(.white.opacity(0.5)).frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().tint(SmoothieColor.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = loadError {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.circle").foregroundStyle(.red)
-                    Text(error).font(.system(size: 13)).foregroundStyle(.white.opacity(0.55))
+                    Text(error).font(.system(size: 13)).foregroundStyle(SmoothieColor.textSecondary)
                 }
                 .padding()
             } else if let response = browseResponse {
@@ -334,7 +334,7 @@ struct FolderPickerSheet: View {
                         if filteredBrowseEntries(response).isEmpty {
                             Text(query.isEmpty ? "Empty folder." : "No matches.")
                                 .font(.system(size: 13))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(SmoothieColor.textTertiary)
                                 .padding(.vertical, 40)
                         } else {
                             ForEach(filteredBrowseEntries(response), id: \.path) { entry in
@@ -374,7 +374,7 @@ struct FolderPickerSheet: View {
         Text(text.uppercased())
             .font(.system(size: 11, weight: .bold))
             .tracking(0.8)
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(SmoothieColor.textTertiary)
             .padding(.top, 14)
             .padding(.leading, 6)
             .padding(.bottom, 2)

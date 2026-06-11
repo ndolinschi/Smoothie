@@ -144,7 +144,7 @@ struct MCPPickerSheet: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 17))
-                    .foregroundStyle(isOn ? .white : .white.opacity(0.35))
+                    .foregroundStyle(isOn ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(server.name)

@@ -124,7 +124,7 @@ struct BranchPickerSheet: View {
                 } else {
                     Image(systemName: current ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 17))
-                        .foregroundStyle(current ? .white : .white.opacity(0.35))
+                        .foregroundStyle(current ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(branch)
@@ -141,7 +141,7 @@ struct BranchPickerSheet: View {
                         Text("current")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .tracking(0.3)
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(SmoothieColor.textSecondary)
                     }
                 }
                 Spacer()

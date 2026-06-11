@@ -175,6 +175,15 @@ struct MessageInput: View {
                 voice.stop()
             }
         }
+        .onDisappear {
+            // scenePhase never fires when the composer simply leaves the
+            // hierarchy (session view dismissed mid-dictation), so release
+            // the mic here too — otherwise the audio session stays in
+            // `.record` and keeps every other app's audio ducked.
+            if voice.isListening {
+                voice.stop()
+            }
+        }
         .sheet(isPresented: $showingMention) {
             MentionPickerSheet(
                 session: session,

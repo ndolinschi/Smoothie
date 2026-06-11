@@ -25,7 +25,10 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
 
     private var session: URLSession?
     private var task: URLSessionDataTask?
-    private var lineBuffer = ""
+    /// Raw bytes pending a complete line. Kept as Data (not String) so a
+    /// multi-byte UTF-8 character split across two network chunks survives
+    /// the boundary — decoding happens per complete line only.
+    private var lineBuffer = Data()
     private var currentEvent: String?
     private var dataBuffer: [String] = []
     private var backoffStep: Int = 0
@@ -168,6 +171,14 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
             backoffStep = 0
             retryCount = 0
             lock.unlock()
+            // Drop any partial frame left over from the previous
+            // connection — the server replays its backlog on reconnect,
+            // and a stale half-line would corrupt the first frame.
+            // Safe without the lock: this and didReceive(data:) both run
+            // on URLSession's serial delegate queue.
+            lineBuffer.removeAll()
+            currentEvent = nil
+            dataBuffer.removeAll()
             onState(.connected)
             completionHandler(.allow)
         case 404:
@@ -202,12 +213,16 @@ final class SSEClient: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard let chunk = String(data: data, encoding: .utf8) else { return }
-        lineBuffer.append(chunk)
-        while let nl = lineBuffer.firstIndex(of: "\n") {
-            let line = String(lineBuffer[lineBuffer.startIndex..<nl])
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+        // Accumulate bytes and only decode complete lines. Decoding the
+        // chunk eagerly dropped the whole chunk whenever a multi-byte
+        // character straddled the boundary (String(data:encoding:)
+        // returns nil), silently corrupting the frame stream.
+        lineBuffer.append(data)
+        while let nl = lineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+            let lineData = lineBuffer[lineBuffer.startIndex..<nl]
             lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
+            guard let raw = String(data: lineData, encoding: .utf8) else { continue }
+            let line = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
             processLine(line)
         }
     }

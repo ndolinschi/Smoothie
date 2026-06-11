@@ -206,15 +206,15 @@ private struct ScannerSheet: View {
                             }
                         } else if accepted {
                             HStack(spacing: 6) {
-                                ProgressView().tint(.white).controlSize(.mini)
+                                ProgressView().tint(SmoothieColor.textSecondary).controlSize(.mini)
                                 Text("Verifying…")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.7))
+                                    .foregroundStyle(SmoothieColor.textSecondary)
                             }
                         } else {
                             Text("Tap \u{201C}Show full QR\u{201D} in the Mac popover for a bigger code.")
                                 .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(SmoothieColor.textSecondary)
                                 .multilineTextAlignment(.center)
                         }
                     }
