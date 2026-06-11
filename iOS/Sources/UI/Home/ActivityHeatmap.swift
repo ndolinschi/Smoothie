@@ -121,15 +121,15 @@ struct ActivityHeatmap: View {
         // corner.
         if intensity < 0 { return Color.clear }
         if intensity == 0 { return SmoothieColor.bgChip }
-        // Mono density signal: white from 10% to 60% opacity. The narrow
-        // range keeps the card from screaming at the eye while still
-        // reading as a clear high-vs-low gradient.
-        return Color.primary.opacity(0.10 + intensity * 0.50)
+        // Terracotta density signal (Claude-style): 20% to 100% accent.
+        // The floor keeps quiet days visible against the card without
+        // the busy days screaming at the eye.
+        return SmoothieColor.accent.opacity(0.20 + intensity * 0.80)
     }
 
     private func legendColor(step: Int) -> Color {
         if step == 0 { return SmoothieColor.bgChip }
         let intensity = Double(step) / 4.0
-        return Color.primary.opacity(0.10 + intensity * 0.50)
+        return SmoothieColor.accent.opacity(0.20 + intensity * 0.80)
     }
 }

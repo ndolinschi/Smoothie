@@ -13,13 +13,17 @@ import SwiftUI
 /// "pressable primary action" and `linkBlue` for "current selection in a
 /// list" — a two-axis convention to avoid conflation.
 enum SmoothieColor {
-    // MARK: - Surfaces (adaptive, P27.d)
+    // MARK: - Surfaces (adaptive, warm "Claude" palette)
+    //
+    // Claude-app-style warm neutrals replace the cold system grays:
+    // cream paper in light mode, warm charcoal in dark mode. Each pair
+    // is (light, dark).
 
-    static let bgPrimary     = Color(uiColor: .systemBackground)
-    static let bgCard        = Color(uiColor: .secondarySystemBackground)
-    static let bgChip        = Color(uiColor: .tertiarySystemBackground)
-    static let bgSheet       = Color(uiColor: .secondarySystemGroupedBackground)
-    static let bgGlyph       = Color(uiColor: .quaternarySystemFill)
+    static let bgPrimary     = dynamic(light: 0xFAF9F5, dark: 0x262624)
+    static let bgCard        = dynamic(light: 0xFFFFFF, dark: 0x30302E)
+    static let bgChip        = dynamic(light: 0xF0EEE6, dark: 0x393937)
+    static let bgSheet       = dynamic(light: 0xFAF9F5, dark: 0x30302E)
+    static let bgGlyph       = dynamic(light: 0xEAE8E1, dark: 0x3A3A38)
 
     // MARK: - Strokes (adaptive)
 
@@ -27,20 +31,26 @@ enum SmoothieColor {
     static let strokeSoft    = Color.primary.opacity(0.06)
     static let strokeDashed  = Color.primary.opacity(0.20)
 
-    // MARK: - Primary action / accent (adaptive)
+    // MARK: - Primary action / accent
 
-    /// Primary action fill / "pressable" hue. Black in light mode, white in
-    /// dark mode. Used as a background fill for buttons; pair with
-    /// `onAccent` for the foreground.
-    static let accent        = Color.primary
-    static let accentSoft    = Color.primary.opacity(0.10)
+    /// Primary action fill / "pressable" hue — Claude's terracotta.
+    /// Reads on both the cream and charcoal surfaces, so it's pinned
+    /// rather than adaptive. Pair with `onAccent` for the foreground.
+    static let accent        = Color(hex: 0xD97757)
+    static let accentSoft    = Color(hex: 0xD97757).opacity(0.15)
     /// Outline for "this is the currently active variant" (e.g. selected mode
     /// chip).
     static let activeBorder  = Color.primary.opacity(0.30)
-    /// Foreground colour that sits ON TOP of an `accent` fill. Inverts with
-    /// the system mode so contrast always holds: light surface in light mode
-    /// (over a dark accent), dark surface in dark mode (over a white accent).
-    static let onAccent      = Color(uiColor: .systemBackground)
+    /// Foreground colour that sits ON TOP of an `accent` fill. White holds
+    /// contrast on terracotta in both modes.
+    static let onAccent      = Color.white
+
+    // MARK: - Chat bubbles
+
+    /// User-authored message bubble. Claude-style quiet warm gray —
+    /// the conversation's loud color is reserved for the send button,
+    /// not the user's own words.
+    static let bubbleUser    = dynamic(light: 0xF0EEE6, dark: 0x393937)
 
     // MARK: - Text (adaptive)
 
@@ -112,12 +122,12 @@ enum SmoothieColor {
     // MARK: - Code-block surfaces (adaptive)
 
     /// Markdown code-block surfaces. `codeBg` for fenced blocks,
-    /// `codeBgDim` for inline `code` spans. P27.k — switched from
-    /// `Color.primary.opacity(0.07)` to system fills so the
-    /// differentiation reads at the same strength in both modes;
-    /// 7% black on white was barely visible in light mode.
-    static let codeBg         = Color(uiColor: .secondarySystemFill)
-    static let codeBgDim      = Color(uiColor: .tertiarySystemFill)
+    /// `codeBgDim` for inline `code` spans. Warm pairs matching the
+    /// Claude palette: fenced blocks sit a step darker than the body in
+    /// dark mode (and a step warmer in light) so code reads as its own
+    /// surface.
+    static let codeBg         = dynamic(light: 0xF0EEE6, dark: 0x1F1E1B)
+    static let codeBgDim      = dynamic(light: 0xEAE8E1, dark: 0x393937)
 
     /// Subtle screen veil used by dashed banners / decorative surfaces.
     static let overlayVeil    = Color.primary.opacity(0.02)
@@ -127,7 +137,7 @@ enum SmoothieColor {
     static let surface0      = bgPrimary
     static let surface1      = bgCard
     static let surface2      = bgChip
-    static let surface3      = Color(uiColor: .tertiarySystemGroupedBackground)
+    static let surface3      = dynamic(light: 0xEAE8E1, dark: 0x3A3A38)
 
     // MARK: - P25.a chip + pill styles
 
@@ -191,5 +201,22 @@ extension Color {
         let g = Double((hex >> 8) & 0xFF) / 255.0
         let b = Double(hex & 0xFF) / 255.0
         self.init(red: r, green: g, blue: b)
+    }
+}
+
+extension SmoothieColor {
+    /// Light/dark hex pair resolved through UIKit's trait system so the
+    /// warm palette follows the user's theme override (SmoothieThemed
+    /// re-applies `preferredColorScheme` per presentation tree).
+    static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        Color(uiColor: UIColor { trait in
+            let hex = trait.userInterfaceStyle == .dark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255.0,
+                green: CGFloat((hex >> 8) & 0xFF) / 255.0,
+                blue: CGFloat(hex & 0xFF) / 255.0,
+                alpha: 1
+            )
+        })
     }
 }

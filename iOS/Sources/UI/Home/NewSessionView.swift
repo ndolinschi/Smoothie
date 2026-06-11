@@ -71,7 +71,7 @@ struct NewSessionView: View {
                             if starting {
                                 ProgressView()
                                     .controlSize(.mini)
-                                    .tint(SmoothieColor.onAccent)
+                                    .tint(SmoothieColor.textSecondary)
                             }
                             Text(starting ? "Starting…" : "Start")
                                 .fontWeight(.semibold)

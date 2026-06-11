@@ -25,8 +25,8 @@ enum SmoothieColor {
     static let strokeSoft    = Color.primary.opacity(0.06)
 
     // MARK: - Accent (pinned to iOS hex)
-    static let accent        = Color(hex: 0xED7C5C)
-    static let accentSoft    = Color(hex: 0xED7C5C).opacity(0.18)
+    static let accent        = Color(hex: 0xD97757)
+    static let accentSoft    = Color(hex: 0xD97757).opacity(0.18)
 
     // MARK: - Status (pinned to iOS hex)
     static let statusThinking = Color(hex: 0x3B82F6)

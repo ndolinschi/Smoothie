@@ -52,9 +52,11 @@ struct InlineMarkdownFlow: View {
 
         for run in attr.runs {
             if let intent = run.inlinePresentationIntent, intent.contains(.code) {
+                // Claude-style inline code: terracotta mono on a soft
+                // terracotta wash, so identifiers pop out of prose.
                 attr[run.range].font = .system(size: 13, weight: .regular, design: .monospaced)
-                attr[run.range].backgroundColor = SmoothieColor.codeBgDim
-                attr[run.range].foregroundColor = SmoothieColor.textPrimary
+                attr[run.range].backgroundColor = SmoothieColor.accentSoft
+                attr[run.range].foregroundColor = SmoothieColor.accent
                 // Strip the code intent so SwiftUI doesn't add its own
                 // mono styling on top (which on iOS 26 sometimes inverts
                 // the background or adds extra padding we don't want).

@@ -11,12 +11,12 @@ struct CodeChip: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12, design: .monospaced))
-            .foregroundStyle(SmoothieColor.textPrimary)
+            .foregroundStyle(SmoothieColor.accent)
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
             .background(
                 RoundedRectangle(cornerRadius: SmoothieMetrics.cornerXS, style: .continuous)
-                    .fill(SmoothieColor.codeBgDim)
+                    .fill(SmoothieColor.accentSoft)
             )
             .fixedSize(horizontal: true, vertical: true)
     }

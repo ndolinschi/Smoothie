@@ -115,24 +115,25 @@ struct EventRow: View {
     }
 
     /// Right-aligned chat bubble for MESSAGE events authored by the
-    /// user. Solid coral fill, white-on-coral text, no stroke — same
-    /// shape language as iMessage / WhatsApp user bubbles so the chat
-    /// stream reads as a proper conversation rather than two columns
-    /// of agent prose. The bottom-trailing corner is tightened so the
-    /// bubble reads as "from this side" without needing a tail.
-    /// Width is capped at 80% of the row by the leading spacer so long
-    /// prompts wrap inside the bubble.
+    /// user. Quiet warm-gray fill (Claude-app style — terracotta is
+    /// reserved for the send button), no stroke — same shape language
+    /// as iMessage / WhatsApp user bubbles so the chat stream reads as
+    /// a proper conversation rather than two columns of agent prose.
+    /// The bottom-trailing corner is tightened so the bubble reads as
+    /// "from this side" without needing a tail. Width is capped at 80%
+    /// of the row by the leading spacer so long prompts wrap inside
+    /// the bubble.
     private var userMessageBubble: some View {
         HStack(alignment: .top, spacing: 0) {
             Spacer(minLength: 48)
             Text(event.content)
                 .font(.system(size: 15))
-                .foregroundStyle(SmoothieColor.onAccent)
+                .foregroundStyle(SmoothieColor.textPrimary)
                 .multilineTextAlignment(.leading)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(SmoothieColor.accent, in: BubbleShape())
+                .background(SmoothieColor.bubbleUser, in: BubbleShape())
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
