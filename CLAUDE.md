@@ -14,9 +14,12 @@ notes that don't generalise to other agents.
   `.claude/plans/smoothie-mvp-prompt-soft-melody.md`. **Read it before
   starting anything substantial.** The plan documents P0 → P21 with
   per-phase checkpoints; P21 (Antigravity adapter) is the latest.
-- Design language is **flat dark coral**, not glass. Tokens in
-  `iOS/Sources/UI/Components/DesignTokens.swift`. Don't reintroduce
-  `.glassEffect()` / `.ultraThinMaterial`.
+- Design language is **warm Claude-style** — terracotta `#D97757` accent
+  on adaptive cream (light) / charcoal (dark) surfaces, not glass. Tokens
+  in `iOS/Sources/UI/Components/DesignTokens.swift` (surfaces resolve via
+  `dynamic(light:dark:)`). Don't reintroduce `.glassEffect()` /
+  `.ultraThinMaterial`, and don't inline raw `.white.opacity(...)` — pull
+  from `SmoothieColor`.
 - iOS target is **26.0 locked**; macOS daemon target is **14+**.
 
 ## Build cycle Claude should follow
