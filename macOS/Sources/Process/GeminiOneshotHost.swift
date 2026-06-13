@@ -22,16 +22,13 @@ final class GeminiOneshotHost: SessionHost {
     private var current: Process?
     private var currentStdout: Pipe?
     private var resumeSessionId: String?
-    private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private let stderrCap = 8 * 1024
+    private var stdoutLines = StdoutLineBuffer()
+    private var stderr = BoundedStderr()
 
-    /// Assembled Smoothie safety/system prompt. Gemini's CLI has no
-    /// `--append-system-prompt` equivalent, so the host prepends it to
-    /// the first turn's `-p` text instead; the conversation memory then
-    /// carries it across `--resume` turns.
-    private let systemPrompt: String?
-    private var sentSystemPrompt = false
+    /// Gemini's CLI has no `--append-system-prompt`, so the safety/system
+    /// prompt is prepended to the first turn's `-p` text; conversation
+    /// memory carries it across `--resume` turns.
+    private var promptInjector: SystemPromptInjector
 
     var isRunning: Bool { current?.isRunning ?? false }
 
@@ -50,10 +47,12 @@ final class GeminiOneshotHost: SessionHost {
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
-        self.systemPrompt = systemPrompt
-        // A resumed conversation (Terminal take-back) already received
-        // the prompt on its original first turn — don't re-send.
-        self.sentSystemPrompt = baseArgs.contains("--resume")
+        // A resumed conversation (Terminal take-back) already received the
+        // prompt on its original first turn — don't re-send.
+        self.promptInjector = SystemPromptInjector(
+            prompt: systemPrompt,
+            alreadySent: baseArgs.contains("--resume")
+        )
     }
 
     func start() throws {
@@ -72,14 +71,7 @@ final class GeminiOneshotHost: SessionHost {
         if let resumeSessionId {
             args.append(contentsOf: ["--resume", resumeSessionId])
         }
-        var outgoing = content
-        if !sentSystemPrompt {
-            sentSystemPrompt = true
-            if let systemPrompt, !systemPrompt.isEmpty {
-                outgoing = systemPrompt + "\n\n---\n\n" + content
-            }
-        }
-        args.append(contentsOf: ["-p", outgoing])
+        args.append(contentsOf: ["-p", promptInjector.decorate(content)])
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)
@@ -95,10 +87,10 @@ final class GeminiOneshotHost: SessionHost {
         proc.standardOutput = stdoutPipe
         proc.standardError = stderrPipe
 
-        stdoutBuffer.removeAll(keepingCapacity: true)
-        stderrBuffer.removeAll(keepingCapacity: true)
+        stdoutLines = StdoutLineBuffer()
+        stderr = BoundedStderr()
 
-        let weakSelfRef = WeakGeminiBox(self)
+        let weakSelfRef = WeakHostRef(self)
         stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -120,14 +112,8 @@ final class GeminiOneshotHost: SessionHost {
     }
 
     func terminate() {
-        guard let proc = current, proc.isRunning else { return }
-        proc.terminate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
-            }
-        }
+        guard let proc = current else { return }
+        SubprocessLifecycle.terminateWithGrace(proc)
     }
 
     /// Abort the in-flight one-shot spawn. The Smoothie session is kept;
@@ -141,24 +127,22 @@ final class GeminiOneshotHost: SessionHost {
     // MARK: - Internals
 
     private func handleStdout(_ data: Data) async {
-        stdoutBuffer.append(data)
-        if let text = String(data: stdoutBuffer, encoding: .utf8) {
-            stdoutBuffer.removeAll(keepingCapacity: true)
-            _ = try? await session.ingestText(text: text)
-        }
+        let lines = stdoutLines.feed(data)
+        guard !lines.isEmpty else { return }
+        _ = try? await session.ingestText(text: lines.map { $0 + "\n" }.joined())
     }
 
     private func handleStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        if stderrBuffer.count > stderrCap {
-            stderrBuffer.removeFirst(stderrBuffer.count - stderrCap)
-        }
+        stderr.append(data)
     }
 
     private func handleTermination(code: Int32) async {
         if let stdout = currentStdout {
             let leftover = stdout.fileHandleForReading.availableData
             if !leftover.isEmpty { await handleStdout(leftover) }
+            if let tail = stdoutLines.drain(), !tail.isEmpty {
+                _ = try? await session.ingestText(text: tail + "\n")
+            }
             stdout.fileHandleForReading.readabilityHandler = nil
         }
 
@@ -168,8 +152,7 @@ final class GeminiOneshotHost: SessionHost {
         }
 
         if code != 0 {
-            let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
-            let detail = stderrText.isEmpty ? "" : "\n\(stderrText)"
+            let detail = stderr.text.isEmpty ? "" : "\n\(stderr.text)"
             try? await session.markError(message: "gemini exited with code \(code)\(detail)")
         }
         // On a clean exit the K/N parser has already emitted a WAITING event
@@ -179,10 +162,4 @@ final class GeminiOneshotHost: SessionHost {
         self.current = nil
         self.currentStdout = nil
     }
-}
-
-@MainActor
-private final class WeakGeminiBox {
-    weak var value: GeminiOneshotHost?
-    init(_ value: GeminiOneshotHost) { self.value = value }
 }

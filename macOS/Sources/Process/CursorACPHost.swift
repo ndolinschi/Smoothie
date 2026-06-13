@@ -34,9 +34,11 @@ final class CursorACPHost: NSObject, SessionHost {
 
     private var process: Process?
     private var stdinHandle: FileHandle?
+    // ACP frames are newline-delimited JSON-RPC; this host does its own
+    // frame splitting on stdoutBuffer below (it must dispatch requests vs
+    // responses vs notifications, not just hand lines to a parser).
     private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private let stderrCap = 8 * 1024
+    private var stderr = BoundedStderr()
     /// Monotonically increasing JSON-RPC request ids. Even ids are
     /// requests we send; odd ids come from the server.
     private var nextRequestId: Int = 0
@@ -48,11 +50,10 @@ final class CursorACPHost: NSObject, SessionHost {
     private var pendingPrompts: [String] = []
     private var handshakeComplete = false
 
-    /// Assembled Smoothie safety/system prompt. ACP has no system-prompt
-    /// channel in the surface we drive, so it's prepended to the first
-    /// `session/prompt` text; the ACP session then carries it.
-    private let systemPrompt: String?
-    private var sentSystemPrompt = false
+    /// ACP has no system-prompt channel in the surface we drive, so the
+    /// safety/system prompt is prepended to the first `session/prompt`
+    /// text; the ACP session then carries it.
+    private var promptInjector: SystemPromptInjector
 
     var isRunning: Bool { process?.isRunning ?? false }
 
@@ -69,7 +70,7 @@ final class CursorACPHost: NSObject, SessionHost {
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
-        self.systemPrompt = systemPrompt
+        self.promptInjector = SystemPromptInjector(prompt: systemPrompt)
         super.init()
     }
 
@@ -90,7 +91,7 @@ final class CursorACPHost: NSObject, SessionHost {
         proc.standardOutput = stdoutPipe
         proc.standardError = stderrPipe
 
-        let weakSelfRef = WeakCursorBox(self)
+        let weakSelfRef = WeakHostRef(self)
         stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -116,13 +117,7 @@ final class CursorACPHost: NSObject, SessionHost {
 
     func write(_ content: String) async throws {
         try? await session.noteUserMessageSent()
-        var outgoing = content
-        if !sentSystemPrompt {
-            sentSystemPrompt = true
-            if let systemPrompt, !systemPrompt.isEmpty {
-                outgoing = systemPrompt + "\n\n---\n\n" + content
-            }
-        }
+        let outgoing = promptInjector.decorate(content)
         guard let acpSessionId, handshakeComplete else {
             pendingPrompts.append(outgoing)
             return
@@ -131,14 +126,8 @@ final class CursorACPHost: NSObject, SessionHost {
     }
 
     func terminate() {
-        guard let proc = process, proc.isRunning else { return }
-        proc.terminate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
-            }
-        }
+        guard let proc = process else { return }
+        SubprocessLifecycle.terminateWithGrace(proc)
     }
 
     /// ACP `session/cancel` cancels the current turn but keeps the
@@ -332,25 +321,15 @@ final class CursorACPHost: NSObject, SessionHost {
     }
 
     private func handleStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        if stderrBuffer.count > stderrCap {
-            stderrBuffer.removeFirst(stderrBuffer.count - stderrCap)
-        }
+        stderr.append(data)
     }
 
     private func handleTermination(code: Int32) async {
         if code != 0 {
-            let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
-            let detail = stderrText.isEmpty ? "" : "\n\(stderrText)"
+            let detail = stderr.text.isEmpty ? "" : "\n\(stderr.text)"
             try? await session.markError(message: "cursor-agent exited with code \(code)\(detail)")
         }
         process = nil
         stdinHandle = nil
     }
-}
-
-@MainActor
-private final class WeakCursorBox {
-    weak var value: CursorACPHost?
-    init(_ value: CursorACPHost) { self.value = value }
 }

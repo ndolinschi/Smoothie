@@ -29,21 +29,22 @@ final class AntigravityOneshotHost: SessionHost {
 
     private var current: Process?
     private var currentStdout: Pipe?
+    // agy emits plain markdown, not line-framed JSON, so we buffer the
+    // whole stdout and decode once at exit (handled below) rather than
+    // line-by-line.
     private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private let stderrCap = 8 * 1024
+    private var stderr = BoundedStderr()
 
     /// Antigravity tracks the conversation per-cwd internally; we just need
     /// to flip to `-c` after the first successful spawn so the agent gets
     /// memory across turns.
     private var hasCompletedFirstTurn = false
 
-    /// Assembled Smoothie safety/system prompt. `agy -p` has no
-    /// system-prompt flag, so it's prepended to the first turn's text;
-    /// `-c` threading then carries it across turns. Skipped entirely
-    /// for resumed conversations (the original first turn had it).
-    private let systemPrompt: String?
-    private var sentSystemPrompt = false
+    /// `agy -p` has no system-prompt flag, so the safety/system prompt is
+    /// prepended to the first turn's text; `-c` threading carries it across
+    /// turns. Skipped for resumed conversations (the original first turn
+    /// had it).
+    private var promptInjector: SystemPromptInjector
 
     var isRunning: Bool { current?.isRunning ?? false }
 
@@ -66,8 +67,7 @@ final class AntigravityOneshotHost: SessionHost {
         // the Terminal-session resume flow (agy doesn't expose a per-id
         // resume in `-p`; we rely on cwd-based threading).
         self.hasCompletedFirstTurn = resumeExisting
-        self.systemPrompt = systemPrompt
-        self.sentSystemPrompt = resumeExisting
+        self.promptInjector = SystemPromptInjector(prompt: systemPrompt, alreadySent: resumeExisting)
     }
 
     func start() throws {
@@ -86,14 +86,7 @@ final class AntigravityOneshotHost: SessionHost {
         if hasCompletedFirstTurn {
             args.append("-c")
         }
-        var outgoing = content
-        if !sentSystemPrompt {
-            sentSystemPrompt = true
-            if let systemPrompt, !systemPrompt.isEmpty {
-                outgoing = systemPrompt + "\n\n---\n\n" + content
-            }
-        }
-        args.append(contentsOf: ["-p", outgoing])
+        args.append(contentsOf: ["-p", promptInjector.decorate(content)])
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)
@@ -110,9 +103,9 @@ final class AntigravityOneshotHost: SessionHost {
         proc.standardError = stderrPipe
 
         stdoutBuffer.removeAll(keepingCapacity: true)
-        stderrBuffer.removeAll(keepingCapacity: true)
+        stderr = BoundedStderr()
 
-        let weakSelfRef = WeakAntigravityBox(self)
+        let weakSelfRef = WeakHostRef(self)
         stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -134,14 +127,8 @@ final class AntigravityOneshotHost: SessionHost {
     }
 
     func terminate() {
-        guard let proc = current, proc.isRunning else { return }
-        proc.terminate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
-            }
-        }
+        guard let proc = current else { return }
+        SubprocessLifecycle.terminateWithGrace(proc)
     }
 
     /// Cancel the in-flight one-shot spawn. The next `write(_:)` respawns
@@ -158,10 +145,7 @@ final class AntigravityOneshotHost: SessionHost {
     }
 
     private func appendStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        if stderrBuffer.count > stderrCap {
-            stderrBuffer.removeFirst(stderrBuffer.count - stderrCap)
-        }
+        stderr.append(data)
     }
 
     private func handleTermination(code: Int32) async {
@@ -171,8 +155,8 @@ final class AntigravityOneshotHost: SessionHost {
             stdout.fileHandleForReading.readabilityHandler = nil
         }
 
-        let stdoutText = String(data: stdoutBuffer, encoding: .utf8) ?? ""
-        let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
+        let stdoutText = String(decoding: stdoutBuffer, as: UTF8.self)
+        let stderrText = stderr.text
 
         if code == 0 {
             let trimmed = stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,10 +197,4 @@ final class AntigravityOneshotHost: SessionHost {
         self.current = nil
         self.currentStdout = nil
     }
-}
-
-@MainActor
-private final class WeakAntigravityBox {
-    weak var value: AntigravityOneshotHost?
-    init(_ value: AntigravityOneshotHost) { self.value = value }
 }

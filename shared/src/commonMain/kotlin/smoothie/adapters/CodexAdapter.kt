@@ -57,26 +57,16 @@ class CodexAdapter : AdapterParser {
         features = DEFAULT_FEATURES,
     )
 
-    private var buffer: ByteArray = ByteArray(0)
+    private val lineBuffer = LineByteBuffer()
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
 
     override fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
-        if (stdoutBytes.isEmpty()) return emptyList()
-        buffer += stdoutBytes
-        val text = buffer.decodeToString()
-        val lines = text.split('\n')
-        // Keep the trailing partial line (if any) in the buffer for the
-        // next call. Codex emits one JSON object per line; a chunk
-        // boundary mid-line shouldn't drop the event.
-        val complete = if (text.endsWith('\n')) lines else lines.dropLast(1)
-        buffer = if (text.endsWith('\n')) ByteArray(0) else lines.last().encodeToByteArray()
-
         val now = nowEpochMillis()
         val out = mutableListOf<SmoothieEvent>()
-        for (raw in complete) {
+        for (raw in lineBuffer.feed(stdoutBytes)) {
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) continue
             val obj = parseObject(trimmed) ?: continue

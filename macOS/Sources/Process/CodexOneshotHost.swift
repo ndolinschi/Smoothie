@@ -26,16 +26,13 @@ final class CodexOneshotHost: SessionHost {
     /// Persisted across turns so the second `codex exec` carries
     /// `--thread <id>` and the agent has context.
     private var threadId: String?
-    private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private let stderrCap = 8 * 1024
+    private var stdoutLines = StdoutLineBuffer()
+    private var stderr = BoundedStderr()
 
-    /// Assembled Smoothie safety/system prompt. `codex exec` has no
-    /// system-prompt flag, so it's prepended to the first turn's prompt
-    /// text; the server-side thread then carries it across `--thread`
-    /// turns.
-    private let systemPrompt: String?
-    private var sentSystemPrompt = false
+    /// `codex exec` has no system-prompt flag, so the safety/system prompt
+    /// is prepended to the first turn's prompt text; the server-side thread
+    /// carries it across `--thread` turns.
+    private var promptInjector: SystemPromptInjector
 
     var isRunning: Bool { current?.isRunning ?? false }
 
@@ -52,7 +49,7 @@ final class CodexOneshotHost: SessionHost {
         self.cwd = cwd
         self.baseArgs = baseArgs
         self.env = env
-        self.systemPrompt = systemPrompt
+        self.promptInjector = SystemPromptInjector(prompt: systemPrompt)
     }
 
     func start() throws {
@@ -71,14 +68,7 @@ final class CodexOneshotHost: SessionHost {
         if let threadId, !threadId.isEmpty {
             args.append(contentsOf: ["--thread", threadId])
         }
-        var outgoing = content
-        if !sentSystemPrompt {
-            sentSystemPrompt = true
-            if let systemPrompt, !systemPrompt.isEmpty {
-                outgoing = systemPrompt + "\n\n---\n\n" + content
-            }
-        }
-        args.append(outgoing)
+        args.append(promptInjector.decorate(content))
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)
@@ -94,10 +84,10 @@ final class CodexOneshotHost: SessionHost {
         proc.standardOutput = stdoutPipe
         proc.standardError = stderrPipe
 
-        stdoutBuffer.removeAll(keepingCapacity: true)
-        stderrBuffer.removeAll(keepingCapacity: true)
+        stdoutLines = StdoutLineBuffer()
+        stderr = BoundedStderr()
 
-        let weakSelfRef = WeakCodexBox(self)
+        let weakSelfRef = WeakHostRef(self)
         stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -119,14 +109,8 @@ final class CodexOneshotHost: SessionHost {
     }
 
     func terminate() {
-        guard let proc = current, proc.isRunning else { return }
-        proc.terminate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
-            }
-        }
+        guard let proc = current else { return }
+        SubprocessLifecycle.terminateWithGrace(proc)
     }
 
     /// Cancel the in-flight `codex exec` spawn. The Smoothie session
@@ -140,19 +124,17 @@ final class CodexOneshotHost: SessionHost {
     // MARK: - Internals
 
     private func handleStdout(_ data: Data) async {
-        stdoutBuffer.append(data)
-        if let text = String(data: stdoutBuffer, encoding: .utf8) {
-            stdoutBuffer.removeAll(keepingCapacity: true)
-            // Best-effort thread id capture before passing the chunk to
-            // the K/N parser — looks for `"thread_id":"..."` in the raw
-            // JSONL. The parser doesn't currently expose this field but
-            // grepping it out lets us stitch turns together.
-            if threadId == nil, let id = Self.extractThreadId(from: text) {
-                threadId = id
-                session.setProviderSessionId(id: id)
-            }
-            _ = try? await session.ingestText(text: text)
+        let lines = stdoutLines.feed(data)
+        guard !lines.isEmpty else { return }
+        let text = lines.map { $0 + "\n" }.joined()
+        // Best-effort thread id capture before passing to the K/N parser —
+        // looks for `"thread_id":"..."` in the raw JSONL so turns stitch
+        // together across one-shot spawns.
+        if threadId == nil, let id = Self.extractThreadId(from: text) {
+            threadId = id
+            session.setProviderSessionId(id: id)
         }
+        _ = try? await session.ingestText(text: text)
     }
 
     /// Pull the `thread_id` out of a `thread.started` event without
@@ -177,22 +159,21 @@ final class CodexOneshotHost: SessionHost {
     }
 
     private func handleStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        if stderrBuffer.count > stderrCap {
-            stderrBuffer.removeFirst(stderrBuffer.count - stderrCap)
-        }
+        stderr.append(data)
     }
 
     private func handleTermination(code: Int32) async {
         if let stdout = currentStdout {
             let leftover = stdout.fileHandleForReading.availableData
             if !leftover.isEmpty { await handleStdout(leftover) }
+            if let tail = stdoutLines.drain(), !tail.isEmpty {
+                _ = try? await session.ingestText(text: tail + "\n")
+            }
             stdout.fileHandleForReading.readabilityHandler = nil
         }
 
         if code != 0 {
-            let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
-            let detail = stderrText.isEmpty ? "" : "\n\(stderrText)"
+            let detail = stderr.text.isEmpty ? "" : "\n\(stderr.text)"
             try? await session.markError(message: "codex exited with code \(code)\(detail)")
         }
         // On clean exit the parser has already emitted a turn.completed →
@@ -201,10 +182,4 @@ final class CodexOneshotHost: SessionHost {
         self.current = nil
         self.currentStdout = nil
     }
-}
-
-@MainActor
-private final class WeakCodexBox {
-    weak var value: CodexOneshotHost?
-    init(_ value: CodexOneshotHost) { self.value = value }
 }

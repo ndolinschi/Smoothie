@@ -110,4 +110,23 @@ class ClaudeAdapterTest {
         )
         assertTrue(events.isEmpty())
     }
+
+    @Test
+    fun multiByteMessageSplitMidCodepointSurvives() {
+        // Regression for the StringBuilder-decode-per-chunk bug: an
+        // assistant message containing an emoji + accented + CJK text,
+        // fed one byte at a time, must reassemble byte-perfectly.
+        val adapter = ClaudeAdapter()
+        val line =
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"résumé 日本語 🚀"}]}}""" + "\n"
+        val whole = line.encodeToByteArray()
+        var produced: List<SmoothieEvent> = emptyList()
+        for (b in whole) {
+            produced = adapter.ingest(byteArrayOf(b))
+            if (produced.isNotEmpty()) break
+        }
+        assertEquals(1, produced.size)
+        assertEquals(EventType.MESSAGE, produced[0].type)
+        assertEquals("résumé 日本語 🚀", produced[0].content)
+    }
 }

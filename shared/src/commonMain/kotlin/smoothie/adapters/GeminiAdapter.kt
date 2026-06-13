@@ -44,7 +44,7 @@ class GeminiAdapter : AdapterParser {
     )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-    private val buffer = StringBuilder()
+    private val lineBuffer = LineByteBuffer()
 
     /// Captured the first time we see an `init` event. The macOS host can
     /// thread this back as `--resume <id>` once multi-turn lands.
@@ -52,13 +52,9 @@ class GeminiAdapter : AdapterParser {
         private set
 
     override fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
-        buffer.append(stdoutBytes.decodeToString())
         val events = mutableListOf<SmoothieEvent>()
-        while (true) {
-            val nl = buffer.indexOf('\n')
-            if (nl < 0) break
-            val line = buffer.substring(0, nl).trim()
-            buffer.deleteRange(0, nl + 1)
+        for (raw in lineBuffer.feed(stdoutBytes)) {
+            val line = raw.trim()
             if (line.isEmpty() || !line.startsWith("{")) continue
             parseLine(line)?.let { events += it }
         }

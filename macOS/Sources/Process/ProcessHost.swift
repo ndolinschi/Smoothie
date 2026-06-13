@@ -13,9 +13,8 @@ final class ProcessHost: SessionHost {
     private let stdoutPipe: Pipe
     private let stderrPipe: Pipe
 
-    private var stdoutBuffer = Data()
-    private var stderrBuffer = Data()
-    private let stderrCap = 8 * 1024
+    private var stdoutLines = StdoutLineBuffer()
+    private var stderr = BoundedStderr()
 
     init(
         session: Session,
@@ -52,7 +51,7 @@ final class ProcessHost: SessionHost {
     var pid: Int32 { process.processIdentifier }
 
     func start() throws {
-        let weakSelfRef = WeakBox(self)
+        let weakSelfRef = WeakHostRef(self)
         stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
             let data = fh.availableData
             if data.isEmpty { return }
@@ -130,16 +129,7 @@ final class ProcessHost: SessionHost {
     }
 
     func terminate() {
-        guard process.isRunning else { return }
-        process.terminate()
-        // SIGKILL grace
-        let p = process
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if p.isRunning {
-                kill(p.processIdentifier, SIGKILL)
-            }
-        }
+        SubprocessLifecycle.terminateWithGrace(process)
     }
 
     /// Try to interrupt the current turn without killing the session.
@@ -154,21 +144,18 @@ final class ProcessHost: SessionHost {
     // MARK: - Internals
 
     private func handleStdout(_ data: Data) async {
-        stdoutBuffer.append(data)
-        // Try to decode the whole buffer; if a multi-byte char straddles a
-        // chunk boundary, decoding fails and we leave it for the next chunk.
-        if let text = String(data: stdoutBuffer, encoding: .utf8) {
-            stdoutBuffer.removeAll(keepingCapacity: true)
-            _ = try? await session.ingestText(text: text)
-        }
+        // Feed bytes through the shared line buffer so a multi-byte UTF-8
+        // codepoint split across two pipe reads survives. We hand whole
+        // lines (rejoined with their newline) to the K/N parser, which
+        // re-splits — but only ever on complete codepoints now.
+        let lines = stdoutLines.feed(data)
+        guard !lines.isEmpty else { return }
+        let text = lines.map { $0 + "\n" }.joined()
+        _ = try? await session.ingestText(text: text)
     }
 
     private func handleStderr(_ data: Data) {
-        stderrBuffer.append(data)
-        if stderrBuffer.count > stderrCap {
-            let overflow = stderrBuffer.count - stderrCap
-            stderrBuffer.removeFirst(overflow)
-        }
+        stderr.append(data)
     }
 
     private func handleTermination(code: Int32) async {
@@ -177,23 +164,17 @@ final class ProcessHost: SessionHost {
         if !leftover.isEmpty {
             await handleStdout(leftover)
         }
+        if let tail = stdoutLines.drain(), !tail.isEmpty {
+            _ = try? await session.ingestText(text: tail + "\n")
+        }
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         stderrPipe.fileHandleForReading.readabilityHandler = nil
 
         if code == 0 {
             try? await session.markDone()
         } else {
-            let stderrText = String(data: stderrBuffer, encoding: .utf8) ?? ""
-            let detail = stderrText.isEmpty ? "" : "\n\(stderrText)"
+            let detail = stderr.text.isEmpty ? "" : "\n\(stderr.text)"
             try? await session.markError(message: "process exited with code \(code)\(detail)")
         }
     }
-}
-
-/// Small holder so `readabilityHandler` closures (non-isolated) can hop back
-/// to MainActor without retaining ProcessHost strongly.
-@MainActor
-private final class WeakBox {
-    weak var value: ProcessHost?
-    init(_ value: ProcessHost) { self.value = value }
 }

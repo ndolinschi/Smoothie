@@ -54,17 +54,16 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     var isRunning: Bool { process?.isRunning ?? false }
 
-    /// Assembled Smoothie safety/system prompt. The opencode server has
-    /// no per-session system-prompt parameter on the endpoints we drive,
-    /// so it's prepended to the first prompt's text instead.
-    private let systemPrompt: String?
-    private var sentSystemPrompt = false
+    /// The opencode server has no per-session system-prompt parameter on
+    /// the endpoints we drive, so the safety/system prompt is prepended to
+    /// the first prompt's text instead.
+    private var promptInjector: SystemPromptInjector
 
     init(session: Session, executable: String, cwd: String, systemPrompt: String? = nil) {
         self.session = session
         self.executable = executable
         self.cwd = cwd
-        self.systemPrompt = systemPrompt
+        self.promptInjector = SystemPromptInjector(prompt: systemPrompt)
         super.init()
     }
 
@@ -119,13 +118,7 @@ final class OpenCodeServeHost: NSObject, SessionHost {
 
     func write(_ content: String) async throws {
         try? await session.noteUserMessageSent()
-        var outgoing = content
-        if !sentSystemPrompt {
-            sentSystemPrompt = true
-            if let systemPrompt, !systemPrompt.isEmpty {
-                outgoing = systemPrompt + "\n\n---\n\n" + content
-            }
-        }
+        let outgoing = promptInjector.decorate(content)
         guard let port, let id = ocSessionId else {
             // Queue until the server is ready.
             pendingWrites.append(outgoing)
@@ -147,14 +140,8 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         sseTask = nil
         sseSession = nil
 
-        guard let proc = process, proc.isRunning else { return }
-        proc.terminate()
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            if proc.isRunning {
-                kill(proc.processIdentifier, SIGKILL)
-            }
-        }
+        guard let proc = process else { return }
+        SubprocessLifecycle.terminateWithGrace(proc)
     }
 
     /// Abort just the in-flight turn — opencode keeps its server up and the

@@ -35,7 +35,7 @@ class ClaudeAdapter : AdapterParser {
         ignoreUnknownKeys = true
         isLenient = true
     }
-    private val buffer = StringBuilder()
+    private val lineBuffer = LineByteBuffer()
 
     /// Captured from the first `system` event with `subtype = init`. The
     /// macOS host plumbs this through `Session.setProviderSessionId` so the
@@ -45,13 +45,9 @@ class ClaudeAdapter : AdapterParser {
         private set
 
     override fun ingest(stdoutBytes: ByteArray): List<SmoothieEvent> {
-        buffer.append(stdoutBytes.decodeToString())
         val events = mutableListOf<SmoothieEvent>()
-        while (true) {
-            val nl = buffer.indexOf('\n')
-            if (nl < 0) break
-            val line = buffer.substring(0, nl).trim()
-            buffer.deleteRange(0, nl + 1)
+        for (raw in lineBuffer.feed(stdoutBytes)) {
+            val line = raw.trim()
             if (line.isEmpty()) continue
             events += parseLine(line)
         }
