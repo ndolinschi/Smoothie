@@ -158,8 +158,10 @@ struct MessageInput: View {
                   !voice.isListening
             else { return }
             guard newText.count == oldText.count + 1, newText.hasSuffix("@") else { return }
-            let trailing = newText.index(newText.endIndex, offsetBy: -1)
-            let prefix = newText[..<trailing]
+            // Drop the "@" the user just typed; `dropLast()` is grapheme-
+            // cluster-aware so this is safe even when the preceding
+            // character is a multi-scalar emoji.
+            let prefix = newText.dropLast()
             if prefix.isEmpty || prefix.last?.isWhitespace == true {
                 text = String(prefix)
                 showingMention = true

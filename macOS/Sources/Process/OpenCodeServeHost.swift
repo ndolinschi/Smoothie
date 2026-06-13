@@ -236,10 +236,21 @@ final class OpenCodeServeHost: NSObject, SessionHost {
         subscribeSSE(port: port)
 
         // Flush any queued writes that came in before the server was ready.
+        // The first queued turn carries the prepended system prompt, so a
+        // silently-swallowed failure here would lose the safety rules for
+        // the whole session. Surface it instead of dropping it.
+        guard let sessionID = ocSessionId else { return }
         let queued = pendingWrites
         pendingWrites.removeAll()
         for content in queued {
-            try? await postPrompt(port: port, sessionID: ocSessionId!, content: content)
+            do {
+                try await postPrompt(port: port, sessionID: sessionID, content: content)
+            } catch {
+                try? await session.markError(
+                    message: "Couldn't send the first turn to OpenCode: \(error.localizedDescription)"
+                )
+                break
+            }
         }
     }
 

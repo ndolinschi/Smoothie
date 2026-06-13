@@ -129,8 +129,12 @@ final class SmoothieHTTPServer {
 
 struct BearerAuthMiddleware<Context: RequestContext>: RouterMiddleware {
     let token: String
-    /// Shared across all requests for the lifetime of the router so the
-    /// failure window survives between connections.
+    /// The throttle state lives in a *class* so it survives the struct's
+    /// value semantics: the middleware is built once (`buildRouter`), and
+    /// any per-request copy Hummingbird makes copies the *reference*, so
+    /// every request shares the one gate and the sliding window is global.
+    /// Do not flatten this into struct-stored fields — that would reset
+    /// the window per request and the throttle would never trigger.
     let failureGate = AuthFailureGate()
 
     func handle(

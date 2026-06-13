@@ -247,7 +247,15 @@ class Session(
             addToConversationIfContentful(event)
             snapshotForUpdate = contextTracker.snapshot()
         }
-        _live.emit(event)
+        // CONTEXT_UPDATE is a side-channel snapshot the SSE layer publishes
+        // itself via emitContextUpdateWithSnapshot below; emitting it on
+        // `_live` here too would double-fire it (iOS filters the visible
+        // ring on it, but the duplicate is still wasted work). No caller
+        // injects one today — this just keeps the side-channel invariant
+        // local to one place.
+        if (event.type != EventType.CONTEXT_UPDATE) {
+            _live.emit(event)
+        }
         emitContextUpdateWithSnapshot(snapshotForUpdate)
     }
 

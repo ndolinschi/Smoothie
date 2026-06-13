@@ -307,17 +307,23 @@ final class SessionLiveStore {
 
     /// Re-insert the locally-remembered user bubbles into the ring after a
     /// reconnect replay, keeping chronological order against the replayed
-    /// agent events. Skips any already present (the divider/echo dedupe is
-    /// by timestamp + content so a double-connect can't duplicate them).
+    /// agent events. Skips any already present (deduped by timestamp +
+    /// content so a double-connect can't duplicate them). Runs repeatedly
+    /// as the backlog streams in, so it's kept near-linear: a single Set
+    /// pass builds the "already present" keys instead of an O(n) scan per
+    /// message, which on a 2000-event replay × 500 local messages would
+    /// otherwise be ~1M comparisons on each ingest.
     private func remergeLocalUserMessages() {
         guard !localUserMessages.isEmpty else { return }
-        for msg in localUserMessages {
-            let already = events.contains {
-                $0.timestamp == msg.timestamp
-                    && $0.content == msg.content
-                    && $0.metadata?["role"]?.stringValue == "user"
+        let presentUserKeys = Set(
+            events.compactMap { event -> String? in
+                guard event.metadata?["role"]?.stringValue == "user" else { return nil }
+                return "\(event.timestamp)\u{1}\(event.content)"
             }
-            if already { continue }
+        )
+        for msg in localUserMessages {
+            let key = "\(msg.timestamp)\u{1}\(msg.content)"
+            if presentUserKeys.contains(key) { continue }
             // Insert before the first event with a later timestamp so the
             // bubble lands where the user actually sent it.
             if let idx = events.firstIndex(where: { $0.timestamp > msg.timestamp }) {
@@ -373,8 +379,12 @@ final class SessionLiveStore {
                 expandedCardIds.removeAll()
                 expandedResultIds.removeAll()
                 // The backlog replay (agent-only) is about to stream in;
-                // re-merge the user's own bubbles as it lands so the chat
-                // doesn't lose half the conversation.
+                // `pendingUserRemerge` keeps the user's bubbles threaded
+                // between agent events as `ingest` lands them. This eager
+                // call covers the empty-backlog case (a brand-new session
+                // with no agent output yet) where no ingest ever fires —
+                // it re-paints the user's messages straight back into the
+                // freshly-cleared ring.
                 pendingUserRemerge = true
                 remergeLocalUserMessages()
             }

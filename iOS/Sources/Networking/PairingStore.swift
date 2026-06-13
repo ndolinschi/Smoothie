@@ -147,6 +147,9 @@ final class PairingStore {
         pairings.removeAll { $0.id == id }
         if activeId == id {
             activeId = pairings.last?.id
+            // daemonVersion is per-Mac; drop it so Settings doesn't show
+            // the removed Mac's version until the next /health probe.
+            daemonVersion = nil
         }
         persist()
     }
@@ -154,7 +157,12 @@ final class PairingStore {
     /// Switch the active Mac without touching the list.
     func switchTo(id: String) {
         guard pairings.contains(where: { $0.id == id }) else { return }
+        guard id != activeId else { return }
         activeId = id
+        // daemonVersion is per-Mac state; clear the previous Mac's value so
+        // Settings/compatibilityWarning don't show stale info until the
+        // next /health probe of the newly-active pairing lands.
+        daemonVersion = nil
         persist()
     }
 
