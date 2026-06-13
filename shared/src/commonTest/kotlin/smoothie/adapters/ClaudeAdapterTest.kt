@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import smoothie.model.EventType
+import smoothie.model.SmoothieEvent
 
 /**
  * Parser tests against recorded shapes of Claude Code's stream-json

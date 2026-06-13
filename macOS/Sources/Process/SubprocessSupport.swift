@@ -11,7 +11,13 @@ import Foundation
 /// Holds a host weakly so a `Pipe.readabilityHandler` closure (which runs
 /// off the MainActor) can hop back without keeping the host alive past
 /// process exit. Replaces the six near-identical `WeakXxxBox` types.
-@MainActor
+///
+/// Deliberately NOT `@MainActor` and NOT `Sendable` — it mirrors the
+/// original per-host boxes exactly. The non-isolated readability-handler
+/// closure captures the box by reference and only ever reads `.value`
+/// from inside a `Task { @MainActor in … }` hop, so the weak host pointer
+/// is touched on the MainActor. A mutable `weak var` can't be `Sendable`;
+/// the reference capture is what the closure needs, and that's safe.
 final class WeakHostRef<T: AnyObject> {
     weak var value: T?
     init(_ value: T) { self.value = value }
@@ -33,12 +39,20 @@ struct StdoutLineBuffer {
         var lines: [String] = []
         var searchStart = bytes.startIndex
         while let nl = bytes[searchStart...].firstIndex(of: 0x0A) {
-            let lineData = bytes[searchStart..<nl]
-            lines.append(String(decoding: lineData, as: UTF8.self))
+            // Slice indices share the parent's index space, so `nl` is a
+            // valid index into `bytes`; the line is everything from the
+            // current start up to (not including) the newline.
+            lines.append(String(decoding: bytes[searchStart..<nl], as: UTF8.self))
             searchStart = bytes.index(after: nl)
         }
         if searchStart > bytes.startIndex {
             bytes.removeSubrange(bytes.startIndex..<searchStart)
+        }
+        // Re-base to a zero-based contiguous Data so a later `append` +
+        // `startIndex` read can't be confused by Data's non-zero slice
+        // indices after removeSubrange.
+        if bytes.startIndex != 0 {
+            bytes = Data(bytes)
         }
         return lines
     }
