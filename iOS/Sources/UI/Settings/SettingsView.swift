@@ -76,6 +76,14 @@ struct SettingsView: View {
                 Section("About") {
                     LabeledContent("Version", value: appVersion)
                     LabeledContent("Build", value: appBuild)
+                    if let daemon = pairing.daemonVersion {
+                        LabeledContent("Mac daemon", value: "v\(daemon)")
+                    }
+                    if let warning = pairing.compatibilityWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(SmoothieColor.statusWaiting)
+                    }
                 }
             }
             .navigationTitle("Settings")

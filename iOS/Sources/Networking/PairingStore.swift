@@ -78,6 +78,24 @@ final class PairingStore {
     private(set) var pairings: [Pairing] = []
     private(set) var activeId: String?
     private(set) var lastError: String?
+    /// Daemon version reported by the last successful `/health` probe of
+    /// the active pairing. `nil` until the first probe lands. Surfaced in
+    /// Settings and used by `compatibilityWarning` to flag a major-version
+    /// skew between this app and the Mac daemon (wire-protocol drift).
+    private(set) var daemonVersion: String?
+
+    /// Non-blocking warning when the daemon's major version differs from
+    /// the app's, which is where wire-format incompatibilities live. Nil
+    /// when versions match, are missing, or differ only in minor/patch.
+    var compatibilityWarning: String? {
+        guard let daemon = daemonVersion,
+              let app = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        else { return nil }
+        let daemonMajor = daemon.split(separator: ".").first.map(String.init)
+        let appMajor = app.split(separator: ".").first.map(String.init)
+        guard let dm = daemonMajor, let am = appMajor, dm != am else { return nil }
+        return "This app is v\(app) but the Mac daemon is v\(daemon). Update whichever is older — across a major version the two can speak different protocols and sessions may behave oddly."
+    }
 
     /// Derived single-pair view. APIClient + routing consume this.
     var current: Pairing? {
@@ -208,9 +226,15 @@ final class PairingStore {
         // HTTP = LAN/Tailscale: 12 s is plenty; failing fast is better UX.
         req.timeoutInterval = pairing.scheme == "https" ? 30 : 12
         do {
-            let (_, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await URLSession.shared.data(for: req)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                 lastError = nil
+                // Capture the daemon version so Settings can show it and
+                // compatibilityWarning can flag a major-version skew.
+                if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let v = obj["version"] as? String {
+                    daemonVersion = v
+                }
                 return true
             }
             lastError = "Server returned non-200"

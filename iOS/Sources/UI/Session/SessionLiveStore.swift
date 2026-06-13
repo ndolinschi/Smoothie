@@ -65,6 +65,17 @@ final class SessionLiveStore {
     /// the automatic one URLSession forces at the 10-minute resource
     /// timeout) appends a second copy of the entire history.
     private var hadConnection = false
+    /// True between a reconnect ring-clear and the moment we re-merge the
+    /// local user bubbles, so `ingest` keeps them threaded as the agent
+    /// backlog streams back in.
+    private var pendingUserRemerge = false
+    /// Local roster of the user's own outgoing messages, kept outside the
+    /// event ring so they survive the ring-clear on reconnect. The daemon
+    /// never echoes user turns back (CLIs read them on stdin), so its
+    /// backlog replay contains only agent output — without re-merging
+    /// these the user's own bubbles vanish on every reconnect. Keyed by
+    /// timestamp so re-merge stays ordered against replayed agent events.
+    private var localUserMessages: [SmoothieEventWire] = []
     let session: SessionDescriptorWire
 
     /// Convenience flag — true once the SSE handshake has completed.
@@ -163,6 +174,9 @@ final class SessionLiveStore {
             hasReceivedEvent = true
             return
         }
+        // During a reconnect replay, keep the user's local bubbles threaded
+        // between the agent events as they stream back in.
+        defer { if pendingUserRemerge { remergeLocalUserMessages() } }
         // Streaming text — opencode-style adapters emit a MESSAGE event
         // per delta tagged with the same `partId` metadata. Replace any
         // existing MESSAGE event with the same partId in place so the
@@ -209,10 +223,10 @@ final class SessionLiveStore {
         }
         let priorState = state
         switch event.type {
-        case .waiting:      state = .waiting
-        case .done:         state = .done
-        case .error:        state = .error
-        case .limitReached: state = .limitReached
+        case .waiting:      state = .waiting; pendingUserRemerge = false
+        case .done:         state = .done;    pendingUserRemerge = false
+        case .error:        state = .error;   pendingUserRemerge = false
+        case .limitReached: state = .limitReached; pendingUserRemerge = false
         case .message, .thinking, .toolUse, .toolResult, .fileEdit:
             state = .thinking
         case .contextUpdate:
@@ -280,6 +294,38 @@ final class SessionLiveStore {
             timestamp: Int64(Date.now.timeIntervalSince1970 * 1000)
         )
         events.append(event)
+        // Remember it outside the ring so a reconnect can re-merge it
+        // after the daemon's agent-only backlog replays. Capped so a
+        // marathon session doesn't grow this unbounded; the daemon ring
+        // is itself capped at 2000, so 500 user turns is plenty of
+        // history to re-thread.
+        localUserMessages.append(event)
+        if localUserMessages.count > 500 {
+            localUserMessages.removeFirst(localUserMessages.count - 500)
+        }
+    }
+
+    /// Re-insert the locally-remembered user bubbles into the ring after a
+    /// reconnect replay, keeping chronological order against the replayed
+    /// agent events. Skips any already present (the divider/echo dedupe is
+    /// by timestamp + content so a double-connect can't duplicate them).
+    private func remergeLocalUserMessages() {
+        guard !localUserMessages.isEmpty else { return }
+        for msg in localUserMessages {
+            let already = events.contains {
+                $0.timestamp == msg.timestamp
+                    && $0.content == msg.content
+                    && $0.metadata?["role"]?.stringValue == "user"
+            }
+            if already { continue }
+            // Insert before the first event with a later timestamp so the
+            // bubble lands where the user actually sent it.
+            if let idx = events.firstIndex(where: { $0.timestamp > msg.timestamp }) {
+                events.insert(msg, at: idx)
+            } else {
+                events.append(msg)
+            }
+        }
     }
 
     /// Called by SessionView's send path just before the user's text
@@ -326,6 +372,11 @@ final class SessionLiveStore {
                 events.removeAll()
                 expandedCardIds.removeAll()
                 expandedResultIds.removeAll()
+                // The backlog replay (agent-only) is about to stream in;
+                // re-merge the user's own bubbles as it lands so the chat
+                // doesn't lose half the conversation.
+                pendingUserRemerge = true
+                remergeLocalUserMessages()
             }
             hadConnection = true
         case .retrying(let s):      error = "Reconnecting in \(s)s…"
