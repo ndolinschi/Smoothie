@@ -159,9 +159,16 @@ enum SmoothieColor {
 }
 
 enum SmoothieMetrics {
+    // Corner radius scale. The named tiers cover every radius the app
+    // actually uses; the numeric aliases exist so the many `cornerRadius: 12`
+    // / `16` call sites map to a token without a behaviour change.
+    static let cornerXL: CGFloat = 22   // hero / large sheets
     static let cornerLg: CGFloat = 18
+    static let cornerCard: CGFloat = 16 // cards, panels, message blocks
     static let cornerMd: CGFloat = 14
+    static let cornerRow: CGFloat = 12  // list rows, picker rows
     static let cornerSm: CGFloat = 10
+    static let cornerChip: CGFloat = 8  // small inline tiles
     static let cornerXS: CGFloat = 6
 
     static let topCircle: CGFloat = 44
@@ -187,10 +194,76 @@ enum SmoothieMetrics {
     static let space4:  CGFloat = 4
     static let space6:  CGFloat = 6
     static let space8:  CGFloat = 8
+    static let space10: CGFloat = 10
     static let space12: CGFloat = 12
+    static let space14: CGFloat = 14
     static let space16: CGFloat = 16
     static let space20: CGFloat = 20
     static let space24: CGFloat = 24
+}
+
+// MARK: - Elevation (Claude-style soft shadows)
+
+/// Card elevation tiers. Claude's mobile surfaces sit on a soft, low,
+/// warm-tinted shadow rather than the flat hairline-only look we had.
+/// Black at low opacity reads correctly on both the cream and charcoal
+/// backgrounds; SwiftUI composites it under the rounded card shape.
+enum SmoothieShadow {
+    struct Spec {
+        let color: Color
+        let radius: CGFloat
+        let x: CGFloat
+        let y: CGFloat
+    }
+    /// Resting cards (stat tiles, tool cards, suggestion pills).
+    static let card  = Spec(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 3)
+    /// Raised / floating surfaces (jump-to-latest pill, popovers).
+    static let float = Spec(color: Color.black.opacity(0.16), radius: 14, x: 0, y: 6)
+}
+
+extension View {
+    /// Apply a named elevation shadow. Use `.card` for resting surfaces,
+    /// `.float` for things that hover above the content.
+    func smoothieShadow(_ spec: SmoothieShadow.Spec = SmoothieShadow.card) -> some View {
+        shadow(color: spec.color, radius: spec.radius, x: spec.x, y: spec.y)
+    }
+
+    /// Standard Smoothie card surface: rounded fill + hairline stroke +
+    /// soft elevation, so every card reads the same. Replaces the
+    /// `.background(bgCard, in: .rect(cornerRadius: 12/14/16))` +
+    /// `.overlay(RoundedRectangle…strokeBorder)` pair that was copy-pasted
+    /// across ~20 sites.
+    func smoothieCard(
+        cornerRadius: CGFloat = SmoothieMetrics.cornerCard,
+        fill: Color = SmoothieColor.bgCard,
+        stroke: Color = SmoothieColor.strokeSoft,
+        elevated: Bool = true
+    ) -> some View {
+        self
+            .background(fill, in: .rect(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(stroke, lineWidth: 0.5)
+            )
+            .smoothieShadow(elevated ? SmoothieShadow.card : SmoothieShadow.Spec(color: .clear, radius: 0, x: 0, y: 0))
+    }
+}
+
+// MARK: - Press feedback
+
+/// Tactile press feedback for tappable surfaces — a subtle scale + dim,
+/// matching the way Claude's controls respond. Apply via `.buttonStyle(.smoothiePress)`.
+struct SmoothiePressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == SmoothiePressStyle {
+    static var smoothiePress: SmoothiePressStyle { SmoothiePressStyle() }
 }
 
 extension Color {
