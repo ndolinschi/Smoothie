@@ -188,6 +188,11 @@ struct AgentStream: View {
                 jumpToLatestPill(proxy: proxy)
             }
             .onChange(of: scrollKey) { _, _ in
+                // Only follow new output if the user is already parked at
+                // the bottom. If they've scrolled up to read history, a new
+                // event must NOT yank them down — the jump-to-latest pill
+                // is their way back. Matches Claude's chat behaviour.
+                guard isAtBottom else { return }
                 // One runloop tick so LazyVStack lays out the new row before
                 // we ask the proxy to scroll. Without the delay the target
                 // index hasn't been registered yet and the scroll is a no-op.

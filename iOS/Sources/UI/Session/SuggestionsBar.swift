@@ -20,7 +20,7 @@ struct SuggestionsBar: View {
                     } label: {
                         suggestionPill(s)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.smoothiePress)
                 }
             }
         }
