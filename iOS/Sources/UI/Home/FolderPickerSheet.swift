@@ -385,7 +385,7 @@ struct FolderPickerSheet: View {
     }
 
     private func loadInitial() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             topProjects = try await api.projects()
         } catch {
@@ -394,7 +394,7 @@ struct FolderPickerSheet: View {
     }
 
     private func enterBrowseFromRoot() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         loading = true
         loadError = nil
         do {
@@ -413,7 +413,7 @@ struct FolderPickerSheet: View {
     }
 
     private func navigate(to path: String) async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         loading = true
         loadError = nil
         do {

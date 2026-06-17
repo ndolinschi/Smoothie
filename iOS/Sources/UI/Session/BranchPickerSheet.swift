@@ -209,7 +209,7 @@ struct BranchPickerSheet: View {
     private func load() async {
         loading = true
         loadError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             listing = try await api.branches(sessionId: session.id)
         } catch {
@@ -222,7 +222,7 @@ struct BranchPickerSheet: View {
         guard switching == nil, branch != listing?.current else { return }
         switching = branch
         switchError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let updated = try await api.switchBranch(sessionId: session.id, branch: branch)
             switching = nil

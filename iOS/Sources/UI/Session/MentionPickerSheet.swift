@@ -320,7 +320,7 @@ struct FilesAndFoldersPicker: View {
     }
 
     private func load() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         loading = true
         loadError = nil
         do {
@@ -332,7 +332,7 @@ struct FilesAndFoldersPicker: View {
     }
 
     private func pick(_ file: FileEntryWire) async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         fetching = file.fullPath
         defer { fetching = nil }
         do {

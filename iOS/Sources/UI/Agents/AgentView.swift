@@ -276,7 +276,7 @@ struct AgentView: View {
     }
 
     private func refresh() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             // Mirror HomeView's filter — agy is hidden across iOS until
             // its host story firms up; `.unknown` covers forward-compat

@@ -168,7 +168,7 @@ struct NewSessionView: View {
     }
 
     private func load() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         loading = true
         do {
             // Antigravity is hidden from the picker for now — the agy
@@ -199,7 +199,7 @@ struct NewSessionView: View {
 
     private func start() {
         guard let path = preselectedPath else { return }
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         starting = true
         Task {
             do {

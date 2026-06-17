@@ -103,6 +103,14 @@ final class PairingStore {
         return pairings.first { $0.id == activeId }
     }
 
+    /// Single construction point for the REST client. `APIClient` is a
+    /// value type holding only a reference to this store and reads the
+    /// host+token at request time, so handing out a fresh value here is
+    /// free — but routing every call site through `pairing.api` (instead
+    /// of 26 scattered `APIClient(store: pairing)` literals) gives one
+    /// place to evolve transport, logging, or test seams.
+    var api: APIClient { APIClient(store: self) }
+
     private let accountList = "pairing-list-v2"
     private let accountActive = "pairing-active-v2"
 

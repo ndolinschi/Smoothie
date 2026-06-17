@@ -246,7 +246,7 @@ struct PastChatsPickerSheet: View {
     private func load() async {
         loading = true
         loadError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             sessions = try await api.sessions()
         } catch {
@@ -259,7 +259,7 @@ struct PastChatsPickerSheet: View {
         guard fetching == nil else { return }
         fetching = session.id
         fetchError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let body = try await api.transcript(sessionId: session.id)
             let title = sessionMeta.displayName(for: session.id, fallback: session.projectName)

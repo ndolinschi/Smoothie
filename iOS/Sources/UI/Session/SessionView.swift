@@ -445,12 +445,12 @@ struct SessionView: View {
     private func connectStore() {
         guard store == nil else { return }
         let s = SessionLiveStore(session: currentSession)
-        s.connect(api: APIClient(store: pairing))
+        s.connect(api: pairing.api)
         store = s
     }
 
     private func loadFeatures() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let adapters = try await api.adapters()
             features = adapters.first { $0.cli == currentSession.cli }?.features
@@ -465,7 +465,7 @@ struct SessionView: View {
     /// availability doesn't shift under us within a session.
     private func loadPRReadiness() async {
         guard prReady == nil else { return }
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let result = try await api.prReady()
             prReady = result.ready
@@ -483,7 +483,7 @@ struct SessionView: View {
     /// the session shows up as `done` on the next refresh, and the user
     /// can resume from there.
     private func handoffToTerminal() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         store?.disconnect()
         do {
             _ = try await api.openTerminal(sessionId: currentSession.id)
@@ -537,7 +537,7 @@ struct SessionView: View {
     }
 
     private func sendMessage(_ content: String, images: [StagedImage] = []) async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         // If the user just toggled Plan/Code mode, the directive is
         // buffered in the live store. Prepend it to this outgoing turn
         // (separated by a blank line) so the agent sees the instruction
@@ -562,7 +562,7 @@ struct SessionView: View {
     }
 
     private func killSession() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         _ = try? await api.killSession(sessionId: currentSession.id)
         dismiss()
     }
@@ -577,7 +577,7 @@ struct SessionView: View {
     }
 
     private func abortTurn() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         _ = try? await api.abortSession(sessionId: currentSession.id)
     }
 
@@ -590,7 +590,7 @@ struct SessionView: View {
     /// the change feels instantaneous. Events from the old session stay
     /// visible until the new SSE stream takes over.
     private func applyRestart(_ target: SwitchTarget) async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
 
         let cli: CLIWire = {
             if case .provider(let c) = target { return c }

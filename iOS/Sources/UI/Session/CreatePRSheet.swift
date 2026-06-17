@@ -189,7 +189,7 @@ struct CreatePRSheet: View {
 
     private func submit() {
         guard canSubmit, !inflight else { return }
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         let request = CreatePRRequestWire(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             body: descriptionText,

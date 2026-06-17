@@ -274,7 +274,7 @@ struct HomeView: View {
             selectedSession = cached
             return
         }
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let list = try await api.sessions()
             if let descriptor = list.first(where: { $0.id == id }) {
@@ -663,7 +663,7 @@ struct HomeView: View {
     }
 
     private func refresh() async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         loading = true
         loadError = nil
         do {
@@ -699,7 +699,7 @@ struct HomeView: View {
     }
 
     private func deleteSession(_ s: SessionDescriptorWire) async {
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         _ = try? await api.killSession(sessionId: s.id)
         await refresh()
     }

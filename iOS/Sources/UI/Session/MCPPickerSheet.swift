@@ -220,7 +220,7 @@ struct MCPPickerSheet: View {
     private func load() async {
         loading = true
         loadError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             let fetched = try await api.mcpServers(sessionId: session.id)
             listing = fetched
@@ -247,7 +247,7 @@ struct MCPPickerSheet: View {
         }
         saving = true
         saveError = nil
-        let api = APIClient(store: pairing)
+        let api = pairing.api
         do {
             _ = try await api.setMCPEnabled(sessionId: session.id, enabled: Array(enabled))
             saving = false
