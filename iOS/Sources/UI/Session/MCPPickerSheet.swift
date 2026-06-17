@@ -122,14 +122,7 @@ struct MCPPickerSheet: View {
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(SmoothieColor.textTertiary)
-                .padding(.leading, 6)
-            content()
-        }
+        SheetSection(title: title, content: content)
     }
 
     private func row(_ server: MCPServerWire) -> some View {
@@ -186,25 +179,9 @@ struct MCPPickerSheet: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(SmoothieColor.statusErr)
-            Text("Couldn't load MCP servers")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(SmoothieColor.textPrimary)
-            Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(SmoothieColor.textSecondary)
-                .multilineTextAlignment(.center)
-            Button("Retry") {
-                Task { await load() }
-            }
-            .buttonStyle(.bordered)
-            .tint(SmoothieColor.accent)
+        SheetErrorState(title: "Couldn't load MCP servers", message: message) {
+            Task { await load() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
     }
 
     // MARK: - Actions

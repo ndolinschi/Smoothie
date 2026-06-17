@@ -82,17 +82,7 @@ struct BranchPickerSheet: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(SmoothieColor.textTertiary)
-            TextField("Search branches", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .foregroundStyle(SmoothieColor.textPrimary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
+        SheetSearchField(placeholder: "Search branches", query: $query)
     }
 
     private func section<C: View>(title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -177,25 +167,9 @@ struct BranchPickerSheet: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(SmoothieColor.statusErr)
-            Text("Couldn't list branches")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(SmoothieColor.textPrimary)
-            Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(SmoothieColor.textSecondary)
-                .multilineTextAlignment(.center)
-            Button("Retry") {
-                Task { await load() }
-            }
-            .buttonStyle(.bordered)
-            .tint(SmoothieColor.accent)
+        SheetErrorState(title: "Couldn't list branches", message: message) {
+            Task { await load() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
     }
 
     // MARK: - Filtering + actions

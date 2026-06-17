@@ -81,25 +81,11 @@ struct ModelPickerSheet: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(SmoothieColor.textTertiary)
-            TextField("Search models", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .foregroundStyle(SmoothieColor.textPrimary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
+        SheetSearchField(placeholder: "Search models", query: $query)
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 11, weight: .bold)).tracking(0.8)
-                .foregroundStyle(SmoothieColor.textTertiary).padding(.leading, 6)
-            content()
-        }
+        SheetSection(title: title, content: content)
     }
 
     private var effortRow: some View {
@@ -348,17 +334,7 @@ struct SlashCommandSheet: View {
                 SmoothieColor.bgPrimary.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(SmoothieColor.textTertiary)
-                            TextField("Search commands", text: $query)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .foregroundStyle(SmoothieColor.textPrimary)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
-                        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
+                        SheetSearchField(placeholder: "Search commands", query: $query)
 
                         VStack(spacing: 6) {
                             ForEach(filtered) { c in
