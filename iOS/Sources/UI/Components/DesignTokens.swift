@@ -228,16 +228,18 @@ extension View {
         shadow(color: spec.color, radius: spec.radius, x: spec.x, y: spec.y)
     }
 
-    /// Standard Smoothie card surface: rounded fill + hairline stroke +
-    /// soft elevation, so every card reads the same. Replaces the
+    /// Standard Smoothie card surface: rounded fill + hairline stroke,
+    /// so every card/row/input reads the same. Replaces the
     /// `.background(bgCard, in: .rect(cornerRadius: 12/14/16))` +
     /// `.overlay(RoundedRectangle…strokeBorder)` pair that was copy-pasted
-    /// across ~20 sites.
+    /// across ~20 sites. Flat by default (list rows and inputs sit flush,
+    /// the way Claude's do); pass `elevated: true` for genuinely floating
+    /// surfaces like the empty-stream placeholder or a callout panel.
     func smoothieCard(
         cornerRadius: CGFloat = SmoothieMetrics.cornerCard,
         fill: Color = SmoothieColor.bgCard,
         stroke: Color = SmoothieColor.strokeSoft,
-        elevated: Bool = true
+        elevated: Bool = false
     ) -> some View {
         self
             .background(fill, in: .rect(cornerRadius: cornerRadius))

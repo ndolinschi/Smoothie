@@ -313,7 +313,7 @@ private struct EmptyStreamPlaceholder: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .smoothieCard(cornerRadius: SmoothieMetrics.cornerCard)
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerCard, elevated: true)
     }
 
     @ViewBuilder
