@@ -330,8 +330,15 @@ struct MessageInput: View {
         .padding(.vertical, 14)
         .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerLg))
         .overlay(
+            // Animated focus ring — the stroke warms to the terracotta
+            // accent and thickens slightly when the field is active, the
+            // way Claude's composer signals focus.
             RoundedRectangle(cornerRadius: SmoothieMetrics.cornerLg)
-                .strokeBorder(SmoothieColor.stroke, lineWidth: 1)
+                .strokeBorder(
+                    focused ? SmoothieColor.accent : SmoothieColor.stroke,
+                    lineWidth: focused ? 1.5 : 1
+                )
+                .animation(.easeInOut(duration: 0.15), value: focused)
         )
     }
 
@@ -362,7 +369,7 @@ struct MessageInput: View {
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.smoothiePress)
             .accessibilityLabel("Attach or open menu")
 
             Button {
@@ -374,7 +381,7 @@ struct MessageInput: View {
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.smoothiePress)
 
             sendButton
         }
@@ -405,16 +412,20 @@ struct MessageInput: View {
                 // failed WCAG). Use a separate, less-translucent bg
                 // tint and keep the fg at full onAccent opacity so the
                 // glyph stays readable in both modes.
+                // Disabled state shifts to a neutral fill (not a faded
+                // accent) so it reads as clearly inactive, while the glyph
+                // dims to tertiary — matches how Claude greys out send.
                 Image(systemName: sending ? "ellipsis" : "arrow.up")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(SmoothieColor.onAccent)
+                    .foregroundStyle(canSend ? SmoothieColor.onAccent : SmoothieColor.textTertiary)
                     .frame(width: SmoothieMetrics.sendButton, height: SmoothieMetrics.sendButton)
                     .background(
-                        SmoothieColor.accent.opacity(canSend ? 1.0 : 0.55),
+                        canSend ? SmoothieColor.accent : SmoothieColor.bgChip,
                         in: .circle
                     )
+                    .animation(.easeOut(duration: 0.15), value: canSend)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.smoothiePress)
             .disabled(!canSend)
         }
     }
@@ -487,7 +498,7 @@ struct MessageInput: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: SmoothieMetrics.cornerXS))
             Text(i.name)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(SmoothieColor.textPrimary)

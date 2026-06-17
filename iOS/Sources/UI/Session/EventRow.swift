@@ -89,7 +89,7 @@ struct EventRow: View {
         case .error, .limitReached:
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(SmoothieColor.statusErr)
                 Text(event.content)
                     .font(.system(size: 13))
                     .foregroundStyle(SmoothieColor.statusErr)
@@ -97,9 +97,9 @@ struct EventRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                     .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
             )
         case .contextUpdate:

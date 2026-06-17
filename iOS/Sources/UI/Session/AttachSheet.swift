@@ -28,7 +28,7 @@ struct AttachSheet: View {
             }
             SheetRow(
                 glyph: "photo",
-                glyphColor: Color(hex: 0xFBBF24),
+                glyphColor: SmoothieColor.glyphAmber,
                 glyphBackground: Color(hex: 0x2A2415),
                 title: "Choose Photo",
                 subtitle: "Pick an image from your library"
@@ -60,7 +60,7 @@ struct AttachSheet: View {
             if let f = features, !f.slashCommands.isEmpty {
                 SheetRow(
                     glyph: "wand.and.stars",
-                    glyphColor: Color(hex: 0xFBBF24),
+                    glyphColor: SmoothieColor.glyphAmber,
                     glyphBackground: Color(hex: 0x2A2415),
                     title: "Commands",
                     subtitle: "Insert a slash command at the cursor"

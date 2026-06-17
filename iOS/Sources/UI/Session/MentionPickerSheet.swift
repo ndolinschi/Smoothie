@@ -163,7 +163,7 @@ struct MentionPickerSheet: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(enabled ? SmoothieColor.textPrimary : SmoothieColor.textTertiary)
                 .frame(width: SmoothieMetrics.glyphTile, height: SmoothieMetrics.glyphTile)
-                .background(SmoothieColor.bgGlyph, in: .rect(cornerRadius: 8))
+                .background(SmoothieColor.bgGlyph, in: .rect(cornerRadius: SmoothieMetrics.cornerChip))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
@@ -182,11 +182,7 @@ struct MentionPickerSheet: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
-        .overlay(
-            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
         .opacity(enabled ? 1.0 : 0.55)
     }
 }
@@ -228,11 +224,7 @@ struct FilesAndFoldersPicker: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
-                .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                )
+                .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -302,11 +294,7 @@ struct FilesAndFoldersPicker: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-            )
+            .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
         }
         .buttonStyle(.plain)
         .disabled(fetching != nil)

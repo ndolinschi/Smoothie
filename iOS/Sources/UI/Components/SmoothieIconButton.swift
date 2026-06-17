@@ -34,6 +34,6 @@ struct SmoothieIconButton: View {
                 .frame(width: size, height: size)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.smoothiePress)
     }
 }

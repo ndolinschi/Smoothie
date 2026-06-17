@@ -57,7 +57,7 @@ struct SmoothieChip: View {
 
         if let action {
             Button(action: action) { content }
-                .buttonStyle(.plain)
+                .buttonStyle(.smoothiePress)
         } else {
             content
         }

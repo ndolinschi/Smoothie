@@ -92,11 +92,7 @@ struct BranchPickerSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private func section<C: View>(title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -147,9 +143,9 @@ struct BranchPickerSheet: View {
                 Spacer()
             }
             .padding(12)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                     .strokeBorder(
                         current ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
                         lineWidth: current ? 1 : 0.5
@@ -173,9 +169,9 @@ struct BranchPickerSheet: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                 .strokeBorder(SmoothieColor.statusErr.opacity(0.4), lineWidth: 0.5)
         )
     }

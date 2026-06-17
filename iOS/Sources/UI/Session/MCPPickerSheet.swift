@@ -118,11 +118,7 @@ struct MCPPickerSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 30)
         .padding(.horizontal, 16)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -167,9 +163,9 @@ struct MCPPickerSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                     .strokeBorder(
                         isOn ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
                         lineWidth: isOn ? 1 : 0.5

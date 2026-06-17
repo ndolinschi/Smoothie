@@ -46,9 +46,9 @@ struct NewSessionView: View {
                             .foregroundStyle(SmoothieColor.statusErr)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: 12))
+                            .background(SmoothieColor.statusErr.opacity(0.12), in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                                     .strokeBorder(SmoothieColor.statusErr.opacity(0.35), lineWidth: 0.5)
                             )
                         }
@@ -119,11 +119,7 @@ struct NewSessionView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private func cliRow(_ a: AdapterInfoWire) -> some View {
@@ -152,9 +148,9 @@ struct NewSessionView: View {
                 }
             }
             .padding(14)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerMd))
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerMd)
                     .strokeBorder(
                         isSelected ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
                         lineWidth: isSelected ? 1 : 0.5

@@ -91,11 +91,7 @@ struct ModelPickerSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -193,9 +189,9 @@ struct ModelPickerSheet: View {
                 Spacer()
             }
             .padding(12)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
+            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: SmoothieMetrics.cornerRow))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: SmoothieMetrics.cornerRow)
                     .strokeBorder(
                         isCurrent ? SmoothieColor.linkBlue.opacity(0.6) : SmoothieColor.strokeSoft,
                         lineWidth: isCurrent ? 1 : 0.5
@@ -362,11 +358,7 @@ struct SlashCommandSheet: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 11)
-                        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                        )
+                        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
 
                         VStack(spacing: 6) {
                             ForEach(filtered) { c in
@@ -385,11 +377,7 @@ struct SlashCommandSheet: View {
                                             .lineLimit(1)
                                     }
                                     .padding(12)
-                                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                                    )
+                                    .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
                                 }
                                 .buttonStyle(.plain)
                             }

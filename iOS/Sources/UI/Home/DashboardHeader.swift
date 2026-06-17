@@ -122,7 +122,7 @@ struct DashboardHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(SmoothieColor.bgChip, in: .rect(cornerRadius: 10))
+        .background(SmoothieColor.bgChip, in: .rect(cornerRadius: SmoothieMetrics.cornerSm))
     }
 
     // MARK: - Stats computation

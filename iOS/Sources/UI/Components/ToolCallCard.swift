@@ -82,6 +82,7 @@ struct ToolCallCard: View {
                     lineWidth: emphasised ? 1 : 0.5
                 )
         )
+        .smoothieShadow()
     }
 
     /// P29 §5 — show the brand stripe while a tool is actively

@@ -57,7 +57,7 @@ struct SheetRow: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x2563EB))
+                        .foregroundStyle(SmoothieColor.linkBlue)
                 }
             }
             .padding(.horizontal, 4)

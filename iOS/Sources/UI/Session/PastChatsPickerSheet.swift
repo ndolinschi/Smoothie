@@ -96,11 +96,7 @@ struct PastChatsPickerSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private var emptyState: some View {
@@ -121,11 +117,7 @@ struct PastChatsPickerSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 30)
         .padding(.horizontal, 16)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerMd)
     }
 
     private func section<C: View>(title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -178,11 +170,7 @@ struct PastChatsPickerSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-            )
+            .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
         }
         .buttonStyle(.plain)
         .disabled(fetching != nil)

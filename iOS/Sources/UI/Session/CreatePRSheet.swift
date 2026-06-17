@@ -36,11 +36,7 @@ struct CreatePRSheet: View {
                             TextField("PR title", text: $title)
                                 .font(.system(size: 15, weight: .medium))
                                 .padding(12)
-                                .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                                )
+                                .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
                         }
 
                         section("Description") {
@@ -49,11 +45,7 @@ struct CreatePRSheet: View {
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 160)
                                 .padding(8)
-                                .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                                )
+                                .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
                         }
 
                         section("Branch") {
@@ -63,11 +55,7 @@ struct CreatePRSheet: View {
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
                                     .padding(12)
-                                    .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-                                    )
+                                    .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
                                     .disabled(useCurrentBranch)
                                     .opacity(useCurrentBranch ? 0.55 : 1)
                                 Toggle("Push to current branch instead", isOn: $useCurrentBranch)
@@ -100,7 +88,7 @@ struct CreatePRSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 SmoothieColor.statusErr.opacity(0.12),
-                                in: .rect(cornerRadius: 12)
+                                in: .rect(cornerRadius: SmoothieMetrics.cornerRow)
                             )
                         }
                     }
@@ -116,7 +104,7 @@ struct CreatePRSheet: View {
                             .foregroundStyle(.white)
                     }
                     .padding(28)
-                    .background(SmoothieColor.bgCard.opacity(0.96), in: .rect(cornerRadius: 16))
+                    .background(SmoothieColor.bgCard.opacity(0.96), in: .rect(cornerRadius: SmoothieMetrics.cornerCard))
                 }
             }
             .navigationTitle("Create PR")

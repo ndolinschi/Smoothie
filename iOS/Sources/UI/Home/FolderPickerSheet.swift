@@ -235,7 +235,7 @@ struct FolderPickerSheet: View {
                     if isActive {
                         Image(systemName: "checkmark")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color(hex: 0x2563EB))
+                            .foregroundStyle(SmoothieColor.linkBlue)
                     }
                 }
                 .padding(.vertical, 8)
@@ -307,11 +307,7 @@ struct FolderPickerSheet: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-            )
+            .smoothieCard(cornerRadius: SmoothieMetrics.cornerRow)
         }
         .buttonStyle(.plain)
     }

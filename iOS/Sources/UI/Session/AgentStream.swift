@@ -313,11 +313,7 @@ private struct EmptyStreamPlaceholder: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .background(SmoothieColor.bgCard, in: .rect(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(SmoothieColor.strokeSoft, lineWidth: 0.5)
-        )
+        .smoothieCard(cornerRadius: SmoothieMetrics.cornerCard)
     }
 
     @ViewBuilder
@@ -340,7 +336,7 @@ private struct EmptyStreamPlaceholder: View {
         case .connected:
             switch state {
             case .starting, .thinking:
-                ProgressView().controlSize(.regular).tint(.blue)
+                ProgressView().controlSize(.regular).tint(SmoothieColor.accent)
             case .waiting:
                 Image(systemName: "paperplane")
                     .font(.system(size: 22, weight: .semibold))
@@ -419,7 +415,7 @@ private struct ThinkingPulseRow: View {
                     let offset = Double(i) * 0.25
                     let pulse = (sin((t - offset) * 2.4) + 1) / 2
                     Circle()
-                        .fill(Color.blue)
+                        .fill(SmoothieColor.accent)
                         .frame(width: 6, height: 6)
                         .opacity(0.35 + pulse * 0.55)
                 }

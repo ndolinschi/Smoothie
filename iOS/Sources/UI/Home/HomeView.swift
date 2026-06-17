@@ -532,18 +532,31 @@ struct HomeView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SmoothieMetrics.space12) {
+            Image(systemName: emptyStateIcon)
+                .font(.system(size: 34, weight: .regular))
+                .foregroundStyle(SmoothieColor.accent.opacity(0.85))
             Text(emptyStateMessage)
                 .font(.system(size: 14))
                 .foregroundStyle(SmoothieColor.textSecondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, SmoothieMetrics.space24)
         .padding(.vertical, 60)
+    }
+
+    private var emptyStateIcon: String {
+        switch filter {
+        case .all:       return "sparkles"
+        case .completed: return "checkmark.circle"
+        case .archived:  return "archivebox"
+        }
     }
 
     private var emptyStateMessage: String {
         switch filter {
-        case .all:       return "Tap + to start."
+        case .all:       return "No sessions yet — tap + to start one."
         case .completed: return "No completed sessions yet."
         case .archived:  return "Archived sessions land here. Use the chat ‘…’ menu to archive one."
         }

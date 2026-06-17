@@ -83,7 +83,7 @@ struct RepoPickerSheet: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(SmoothieColor.textSecondary)
                     .frame(width: 24, height: 24)
-                    .background(SmoothieColor.surface2, in: .rect(cornerRadius: 6))
+                    .background(SmoothieColor.surface2, in: .rect(cornerRadius: SmoothieMetrics.cornerXS))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
