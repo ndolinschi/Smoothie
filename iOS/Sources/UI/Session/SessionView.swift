@@ -312,9 +312,7 @@ struct SessionView: View {
         .sheet(isPresented: $showingBudget) {
             if let store, let snap = store.contextSnapshot {
                 ContextBudgetPanel(snapshot: snap, onDismiss: { showingBudget = false })
-                    .presentationDetents([.medium, .large])
-                    .presentationBackground(.clear)
-                    .smoothieThemed()
+                    .smoothieSheetChrome()
             }
         }
         .sheet(isPresented: $showingModeSheet) {
@@ -324,10 +322,7 @@ struct SessionView: View {
                 onPick: { applyMode($0) },
                 onDismiss: { showingModeSheet = false }
             )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .smoothieThemed()
+            .smoothieSheetChrome()
         }
         .sheet(isPresented: $showingDiffSheet) {
             DiffSheet(
@@ -335,10 +330,7 @@ struct SessionView: View {
                 onSend: { body in await sendMessage(body) },
                 onDismiss: { showingDiffSheet = false }
             )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .smoothieThemed()
+            .smoothieSheetChrome(large: true)
         }
         .sheet(isPresented: $showingCreatePR) {
             CreatePRSheet(
@@ -346,10 +338,7 @@ struct SessionView: View {
                 events: store?.events ?? [],
                 onCreated: { _ in }
             )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .smoothieThemed()
+            .smoothieSheetChrome(large: true)
         }
         .sheet(isPresented: $showingModelSheet) {
             if let f = features {
@@ -361,9 +350,7 @@ struct SessionView: View {
                     onPickModel: { m in await applyRestart(.model(m)) },
                     onPickEffort: { e in await applyRestart(.effort(e)) }
                 )
-                .presentationDetents([.medium, .large])
-                .presentationBackground(.clear)
-                .smoothieThemed()
+                .smoothieSheetChrome()
             }
         }
         .sheet(isPresented: $showingRepoPicker) {
@@ -378,10 +365,7 @@ struct SessionView: View {
                 },
                 onDismiss: { showingRepoPicker = false }
             )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationCornerRadius(20)
-            .smoothieThemed()
+            .smoothieSheetChrome()
         }
         .onAppear {
             // Remember which pairing this session belongs to so we can

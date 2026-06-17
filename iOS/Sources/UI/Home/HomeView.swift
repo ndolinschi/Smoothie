@@ -197,10 +197,7 @@ struct HomeView: View {
                         presentingNew = true
                     }
                 }
-                .presentationDetents([.medium, .large])
-                .presentationBackground(.clear)
-                .presentationDragIndicator(.visible)
-                .smoothieThemed()
+                .smoothieSheetChrome()
             }
             .sheet(isPresented: $presentingNew) {
                 NewSessionView(preselectedPath: pendingPath) { new in
@@ -209,17 +206,13 @@ struct HomeView: View {
                     Task { await refresh() }
                     selectedSession = new
                 }
-                .presentationDetents([.large])
-                .presentationBackground(.clear)
-                .smoothieThemed()
+                .smoothieSheetChrome(large: true)
             }
             .sheet(isPresented: $presentingSettings) {
                 SettingsView(onAddPairing: {
                     presentingAddPair = true
                 })
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .smoothieThemed()
+                .smoothieSheetChrome(large: true)
             }
             .fullScreenCover(isPresented: $presentingAddPair) {
                 AddPairingCover(onDismiss: { presentingAddPair = false })
